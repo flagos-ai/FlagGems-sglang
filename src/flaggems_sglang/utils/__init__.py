@@ -1,14 +1,14 @@
-from flag_dnn.utils.libentry import libentry, libtuner
-from flag_dnn.utils.pointwise_dynamic import pointwise_dynamic
-from flag_dnn.utils.shape_utils import (
+from flaggems_sglang.utils.libentry import libentry, libtuner
+from flaggems_sglang.utils.pointwise_dynamic import pointwise_dynamic
+from flaggems_sglang.utils.shape_utils import (
     broadcastable,
     broadcastable_to,
     dim_compress,
     offsetCalculator,
     restride_dim,
 )
-from flag_dnn.utils.triton_driver_helper import get_device_properties
-from flag_dnn.utils.triton_lang_helper import tl_extra_shim
+from flaggems_sglang.utils.triton_driver_helper import get_device_properties
+from flaggems_sglang.utils.triton_lang_helper import tl_extra_shim
 
 __all__ = [
     "libentry",

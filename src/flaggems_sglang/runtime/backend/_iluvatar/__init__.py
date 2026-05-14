@@ -1,4 +1,4 @@
-from flag_dnn.runtime.backend.backend_utils import VendorInfoBase
+from flaggems_sglang.runtime.backend.backend_utils import VendorInfoBase
 
 vendor_info = VendorInfoBase(
     vendor_name="iluvatar", device_name="cuda", device_query_cmd="ixsmi"

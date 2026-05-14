@@ -7,8 +7,10 @@ import torch
 import triton
 import triton.language as tl
 
-from flag_dnn.utils import triton_lang_extension as tle
-from flag_dnn.utils.codegen_config_utils import get_heuristics_for_num_warps
+from flaggems_sglang.utils import triton_lang_extension as tle
+from flaggems_sglang.utils.codegen_config_utils import (
+    get_heuristics_for_num_warps,
+)
 
 Shape = Tuple[int]
 Stride = Tuple[int]

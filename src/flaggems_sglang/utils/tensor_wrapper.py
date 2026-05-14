@@ -2,7 +2,7 @@ import math
 
 import torch
 
-import flag_dnn
+import flaggems_sglang
 
 
 class TypedPtr:
@@ -77,7 +77,7 @@ class StridedBuffer:
             self._data_ptr = self._base.data_ptr()
         else:
             # TODO[kunlunxin]: we will upgrade torch version in 2025.04
-            if flag_dnn.vendor_name == "kunlunxin":
+            if flaggems_sglang.vendor_name == "kunlunxin":
 
                 def get_dtype_bytes(dtype):
                     if dtype.is_floating_point:

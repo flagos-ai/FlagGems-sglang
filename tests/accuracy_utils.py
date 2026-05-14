@@ -4,13 +4,13 @@ import random
 from typing import Literal, TypeAlias
 import numpy as np
 import torch
-import flag_dnn
+import flaggems_sglang
 from .conftest import QUICK_MODE, TO_CPU
 
 
-fp64_is_supported = flag_dnn.runtime.device.support_fp64
-bf16_is_supported = flag_dnn.runtime.device.support_bf16
-int64_is_supported = flag_dnn.runtime.device.support_int64
+fp64_is_supported = flaggems_sglang.runtime.device.support_fp64
+bf16_is_supported = flaggems_sglang.runtime.device.support_bf16
+int64_is_supported = flaggems_sglang.runtime.device.support_int64
 
 ReferenceKind = Literal["compute", "logical", None]
 Shape: TypeAlias = tuple[int, ...]
@@ -18,7 +18,7 @@ NormShape: TypeAlias = tuple[Shape, Shape]
 
 
 def TestForwardOnly():
-    return flag_dnn.vendor_name in []
+    return flaggems_sglang.vendor_name in []
 
 
 def SkipVersion(module_name, skip_pattern):
@@ -331,14 +331,14 @@ def gems_assert_close(
     res, ref, dtype, equal_nan=False, reduce_dim=1, atol=1e-4
 ):
     res = to_cpu(res, ref)
-    flag_dnn.testing.assert_close(
+    flaggems_sglang.testing.assert_close(
         res, ref, dtype, equal_nan=equal_nan, reduce_dim=reduce_dim, atol=atol
     )
 
 
 def gems_assert_equal(res, ref, equal_nan=False):
     res = to_cpu(res, ref)
-    flag_dnn.testing.assert_equal(res, ref, equal_nan=equal_nan)
+    flaggems_sglang.testing.assert_equal(res, ref, equal_nan=equal_nan)
 
 
 def unsqueeze_tuple(t, max_len):

@@ -7,7 +7,7 @@ import yaml  # type: ignore[import-untyped]
 # Optional imports used inside helper functions to avoid hard dependencies at
 # module import time.
 try:  # pragma: no cover - best effort fallback
-    from flag_dnn import runtime as _runtime
+    from flaggems_sglang import runtime as _runtime
 except Exception:  # noqa: BLE001
     _runtime = None
 
@@ -19,7 +19,7 @@ aten_patch_list = []
 os.environ["FLAGDNN_SOURCE_DIR"] = str(Path(__file__).parent.resolve())
 
 try:
-    from flag_dnn import c_operators  # type: ignore[attr-defined]
+    from flaggems_sglang import c_operators  # type: ignore[attr-defined]
 
     has_c_extension = True
 except ImportError:
@@ -30,14 +30,14 @@ except ImportError:
 use_env_c_extension = os.environ.get("USE_C_EXTENSION", "0") == "1"
 if use_env_c_extension and not has_c_extension:
     warnings.warn(
-        "[FlagDNN] USE_C_EXTENSION is set, but C extension is not available. "
-        "Falling back to pure Python implementation.",
+        "[FlagGems-sglang] USE_C_EXTENSION is set, but C extension "
+        "is not available. Falling back to pure Python implementation.",
         RuntimeWarning,
     )
 
 if has_c_extension and use_env_c_extension:
     try:
-        from flag_dnn import aten_patch  # type: ignore[attr-defined]
+        from flaggems_sglang import aten_patch  # type: ignore[attr-defined]
 
         aten_patch_list = aten_patch.get_registered_ops()
         use_c_extension = True

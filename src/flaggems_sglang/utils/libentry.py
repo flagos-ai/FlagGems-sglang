@@ -28,11 +28,11 @@ from typing import (
 
 import triton
 
-from flag_dnn import runtime
-from flag_dnn.runtime import torch_device_fn
-from flag_dnn.runtime.backend import vendor_module
-from flag_dnn.utils.code_cache import config_cache_dir
-from flag_dnn.utils.models import PersistantModel, SQLPersistantModel
+from flaggems_sglang import runtime
+from flaggems_sglang.runtime import torch_device_fn
+from flaggems_sglang.runtime.backend import vendor_module
+from flaggems_sglang.utils.code_cache import config_cache_dir
+from flaggems_sglang.utils.models import PersistantModel, SQLPersistantModel
 
 logger = logging.getLogger(__name__)
 

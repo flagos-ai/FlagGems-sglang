@@ -1,5 +1,5 @@
-from flag_dnn.runtime import backend
-from flag_dnn.runtime.backend.device import DeviceDetector
+from flaggems_sglang.runtime import backend
+from flaggems_sglang.runtime.backend.device import DeviceDetector
 
 """
     To be compatible with different versions of math libraries

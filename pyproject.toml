@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 
 [project]
-name = "flag_dnn"
+name = "flaggems_sglang"
 version = "0.1.0"
-description = "FlagDNN is a deep neural network function library written in Triton."
+description = "FlagGems-sglang is a deep neural network function library written in Triton."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.8.0"
 license = { text = "Apache Software License" }
@@ -36,7 +36,7 @@ test = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/flagos-ai/FlagDNN"
+Homepage = "https://github.com/flagos-ai/FlagGems-sglang"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
@@ -45,12 +45,12 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-"flag_dnn.runtime" = ["*/**/*.yaml"]
+"flaggems_sglang.runtime" = ["*/**/*.yaml"]
 
 [tool.scikit-build]
 build.verbose = true
 logging.level = "INFO"
-wheel.install-dir = "flag_dnn"
+wheel.install-dir = "flaggems_sglang"
 build-dir = "build/{cache_tag}"
 
 [tool.black]

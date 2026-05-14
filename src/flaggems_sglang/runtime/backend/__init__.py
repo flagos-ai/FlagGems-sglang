@@ -42,7 +42,7 @@ class BackendArchEvent:
         if self.has_arch:
             self.supported_archs = self._get_supported_archs()
             # current_arch_path is like
-            # FlagGems/src/flag_dnn/runtime/backend/_nvidia/hopper
+            # FlagGems/src/flaggems_sglang/runtime/backend/_nvidia/hopper
             self.current_arch_path = self.supported_archs.get(self.arch)
             self.arch_module = self.get_arch_module()
             self.autotune_configs = self.get_autotune_configs()

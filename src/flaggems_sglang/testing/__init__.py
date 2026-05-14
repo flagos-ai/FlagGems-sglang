@@ -1,7 +1,7 @@
 import torch
 
-from flag_dnn import runtime
-from flag_dnn.runtime import torch_device_fn
+from flaggems_sglang import runtime
+from flaggems_sglang.runtime import torch_device_fn
 
 if runtime.device.vendor_name == "kunlunxin":
     RESOLUTION = {

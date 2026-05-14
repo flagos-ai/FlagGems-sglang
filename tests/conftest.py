@@ -7,7 +7,7 @@ import pytest
 import torch
 import yaml  # type: ignore[import-untyped]
 
-import flag_dnn
+import flaggems_sglang
 
 BUILTIN_MARKS = {
     "parametrize",
@@ -27,14 +27,14 @@ RECORD_LOG = False
 TO_CPU = False
 QUICK_MODE = False
 
-device = flag_dnn.device
+device = flaggems_sglang.device
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 REPORT_DIR = "out_tests"
 REPORT_FILE = f"result_{TIMESTAMP}.json"
 MODE_OPTION = (
     "--fg_mode"
-    if flag_dnn.vendor_name == "kunlunxin" and torch.__version__ < "2.5"
+    if flaggems_sglang.vendor_name == "kunlunxin" and torch.__version__ < "2.5"
     else "--mode"
 )
 

@@ -5,7 +5,7 @@ import os
 import pytest
 import torch
 
-import flag_dnn
+import flaggems_sglang
 from benchmark.attri_util import (
     ALL_AVAILABLE_METRICS,
     BOOL_DTYPES,
@@ -18,11 +18,11 @@ from benchmark.attri_util import (
     OperationAttribute,
     get_recommended_shapes,
 )
-from flag_dnn.runtime import torch_device_fn
+from flaggems_sglang.runtime import torch_device_fn
 
-device = flag_dnn.device
-vendor_name = flag_dnn.vendor_name
-recordLogger = logging.getLogger("flag_dnn_benchmark")
+device = flaggems_sglang.device
+vendor_name = flaggems_sglang.vendor_name
+recordLogger = logging.getLogger("flaggems_sglang_benchmark")
 recordLogger.propagate = False
 
 

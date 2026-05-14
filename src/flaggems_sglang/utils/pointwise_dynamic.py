@@ -6,14 +6,14 @@ import torch
 import triton
 from triton.runtime.jit import JITFunction
 
-from flag_dnn.utils.code_cache import code_cache_dir
-from flag_dnn.utils.code_utils import IndentedBuffer, write_atomic
-from flag_dnn.utils.codegen_config_utils import (
+from flaggems_sglang.utils.code_cache import code_cache_dir
+from flaggems_sglang.utils.code_utils import IndentedBuffer, write_atomic
+from flaggems_sglang.utils.codegen_config_utils import (
     CodeGenConfig,
     get_codegen_config,
 )
-from flag_dnn.utils.device_info import get_device_capability
-from flag_dnn.utils.shape_utils import (
+from flaggems_sglang.utils.device_info import get_device_capability
+from flaggems_sglang.utils.shape_utils import (
     MemOverlap,
     all_c_contiguous,
     all_the_same_shape,
@@ -23,8 +23,8 @@ from flag_dnn.utils.shape_utils import (
     check_tensor_attributes,
     has_internal_overlapping,
 )
-from flag_dnn.utils.tensor_wrapper import StridedBuffer
-from flag_dnn.utils.type_utils import (
+from flaggems_sglang.utils.tensor_wrapper import StridedBuffer
+from flaggems_sglang.utils.type_utils import (
     ELEMENTWISE_TYPE_PROMOTION_KIND,
     type_promotion,
 )
@@ -1217,19 +1217,19 @@ class ModuleGenerator:
         code.writeline("import triton")
         code.writeline("from triton import language as tl")
         code.newline()
-        code.writeline("from flag_dnn.utils.shape_utils import (")
+        code.writeline("from flaggems_sglang.utils.shape_utils import (")
         code.writeline("    heuristics_for_tile_size,")
         code.writeline("    heuristics_for_num_warps,")
         code.writeline("    stride_order,")
         code.writeline(")")
         code.writeline(
-            "from flag_dnn.utils.tensor_wrapper import StridedBuffer"
+            "from flaggems_sglang.utils.tensor_wrapper import StridedBuffer"
         )
-        code.writeline("from flag_dnn.utils.libentry import libentry")
+        code.writeline("from flaggems_sglang.utils.libentry import libentry")
         code.writeline(
-            "from flag_dnn.utils import triton_lang_extension as tle"
+            "from flaggems_sglang.utils import triton_lang_extension as tle"
         )
-        code.writeline("from flag_dnn.runtime import torch_device_fn")
+        code.writeline("from flaggems_sglang.runtime import torch_device_fn")
         code.newline()
         code.newline()
         return code

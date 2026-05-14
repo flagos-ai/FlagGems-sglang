@@ -9,7 +9,7 @@ import torch
 import triton
 import yaml  # type: ignore[import-untyped]
 
-import flag_dnn
+import flaggems_sglang
 
 from .attri_util import (
     BOOL_DTYPES,
@@ -27,10 +27,10 @@ from .attri_util import (
 )
 from .conftest import Config, emit_record_logger
 
-torch_backend_device = flag_dnn.runtime.torch_backend_device
-torch_device_fn = flag_dnn.runtime.torch_device_fn
-device = flag_dnn.device
-vendor_name = flag_dnn.vendor_name
+torch_backend_device = flaggems_sglang.runtime.torch_backend_device
+torch_device_fn = flaggems_sglang.runtime.torch_device_fn
+device = flaggems_sglang.device
+vendor_name = flaggems_sglang.vendor_name
 if device == "musa":
     torch.backends.mudnn.allow_tf32 = False
 elif device == "npu":
@@ -305,10 +305,12 @@ class Benchmark:
         self.set_dtypes(Config.user_desired_dtypes)
         self.set_metrics(Config.user_desired_metrics)
         if vendor_name == "kunlunxin":
+            # Speed Up Benchmark Test, Big Shape Will Cause Timeout
             Config.shape_file = os.path.join(
                 os.path.dirname(__file__),
-                "../src/flag_dnn/runtime/backend/_kunlunxin/core_shapes.yaml",
-            )  # Speed Up Benchmark Test, Big Shape Will Cause Timeout
+                "../src/flaggems_sglang/runtime/backend/_kunlunxin/"
+                "core_shapes.yaml",
+            )
         self.set_shapes(Config.shape_file)
 
     def set_gems(self, gems_op):
@@ -459,7 +461,7 @@ class Benchmark:
                                 self.gems_op, *args, **kwargs
                             )
                         else:
-                            with flag_dnn.use_gems():
+                            with flaggems_sglang.use_gems():
                                 metric.latency = self.get_latency(
                                     self.torch_op, *args, **kwargs
                                 )

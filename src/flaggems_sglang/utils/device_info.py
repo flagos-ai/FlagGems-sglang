@@ -2,7 +2,7 @@ import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 
-from flag_dnn.runtime import torch_device_fn
+from flaggems_sglang.runtime import torch_device_fn
 
 
 @dataclass(frozen=True)

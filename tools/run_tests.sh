@@ -6,7 +6,7 @@ VENDOR=${1:?"Usage: bash tools/run_tests.sh <vendor>"}
 export DNN_VENDOR=$VENDOR
 
 echo "===================================================="
-echo "🚀 开始运行 FlagDNN 测试 | 硬件平台: $DNN_VENDOR"
+echo "🚀 开始运行 FlagGems-sglang 测试 | 硬件平台: $DNN_VENDOR"
 echo "===================================================="
 
 

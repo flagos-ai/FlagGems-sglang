@@ -3,9 +3,9 @@ from typing import Tuple
 
 import triton
 
-from flag_dnn.runtime import device
-from flag_dnn.runtime.backend import vendor_module
-from flag_dnn.runtime.common import vendors
+from flaggems_sglang.runtime import device
+from flaggems_sglang.runtime.backend import vendor_module
+from flaggems_sglang.runtime.common import vendors
 
 
 def default_heuristics_for_num_warps(tile_size):
