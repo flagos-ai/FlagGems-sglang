@@ -1,0 +1,32 @@
+# Build and Release Folders
+bin-debug/
+bin-release/
+[Oo]bj/
+[Bb]in/
+
+# Other files and folders
+.settings/
+__pycache__/
+.vscode/
+
+# Python venv directory
+.venv
+
+# Distribution files
+build/
+*.egg-info/
+.eggs/
+dist/
+
+# An auxiliary product of unittests
+tests/*.json
+
+# Executables
+*.swf
+*.air
+*.ipa
+*.apk
+
+# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
+# should NOT be excluded as they contain compiler settings and other important
+# information for Eclipse / Flash Builder.
