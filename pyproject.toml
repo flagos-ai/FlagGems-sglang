@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=64.0", "scikit-build-core>=0.11", "pybind11"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "flag_dnn"
+version = "0.1.0"
+description = "FlagDNN is a deep neural network function library written in Triton."
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">=3.8.0"
+license = { text = "Apache Software License" }
+authors = [
+    { name = "Bin Zhang", email = "842884726@qq.com" },
+    { name = "Bingjie Wang", email = "xxx@xxx.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "torch>=2.6.0",
+    "packaging",
+    "pybind11",
+    "PyYAML",
+    "sqlalchemy",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.1.0",
+    "numpy>=1.26",
+    "scipy>=1.14",
+    "cupy-cuda12x",
+]
+
+[project.urls]
+Homepage = "https://github.com/flagos-ai/FlagDNN"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"flag_dnn.runtime" = ["*/**/*.yaml"]
+
+[tool.scikit-build]
+build.verbose = true
+logging.level = "INFO"
+wheel.install-dir = "flag_dnn"
+build-dir = "build/{cache_tag}"
+
+[tool.black]
+line-length = 79
+
+[tool.flake8]
+max-line-length = 79

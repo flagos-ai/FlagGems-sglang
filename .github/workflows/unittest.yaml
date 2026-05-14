@@ -1,0 +1,20 @@
+name: CI Auto Test
+
+# 触发条件：向 main 分支 push 代码，或者提 PR 时触发
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-nvidia:
+    uses: ./.github/workflows/backend-test.yaml
+    with:
+      vendor: 'nvidia'
+      # label 必须与配置的自托管服务器标签一致！
+      runner_label: 'self-hosted-nvidia'
+      # GPU 检查脚本路径
+      gpu_check_script: 'tools/check_nvidia_gpu.sh'
+      # 实际测试脚本路径
+      test_script: 'tools/run_tests.sh'
