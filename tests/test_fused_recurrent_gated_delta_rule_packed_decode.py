@@ -1,15 +1,15 @@
 import pytest
 import torch
 
-import flaggems_sglang
-
-from . import accuracy_utils as utils
-from . import conftest as cfg
-
 # Reference: SGLang's compiled Triton kernel as correctness baseline.
 from sglang.srt.layers.attention.fla.fused_recurrent import (
     fused_recurrent_gated_delta_rule_packed_decode as _ref_fused_recurrent_gated_delta_rule_packed_decode,
 )
+
+import flaggems_sglang
+
+from . import accuracy_utils as utils
+from . import conftest as cfg
 
 if cfg.QUICK_MODE:
     FLOAT_DTYPES = [torch.float32]
@@ -116,4 +116,3 @@ def test_fused_recurrent_gated_delta_rule_packed_decode(shape, dtype):
     torch.testing.assert_close(
         state_res[indices], state_ref[indices], atol=atol, rtol=rtol
     )
-
