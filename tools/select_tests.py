@@ -25,6 +25,7 @@ EXPLICIT_SOURCE_TO_TESTS = {
 EXPLICIT_SOURCE_TO_BENCHMARKS = {
 }
 
+
 def normalize_path(path: str) -> str:
     return path.strip().replace("\\", "/")
 
