@@ -133,7 +133,7 @@ def _kernel_vtile_loop(
         b_o = tl.sum(b_h * b_q[None, :], 1)
 
         # Store output and updated state
-        tl.store(p_o + base_o + o_v, b_o.to(o.dtype.element_ty), mask=mask_v)
+        tl.store(o + base_o + o_v, b_o.to(o.dtype.element_ty), mask=mask_v)
         tl.store(
             ht + base_h + i_v * tile_stride + state_off,
             b_h.to(ht.dtype.element_ty),
