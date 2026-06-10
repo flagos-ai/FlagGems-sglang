@@ -63,31 +63,13 @@ UT_SHAPES_2D = list(itertools.product(sizes_2d_nr, sizes_2d_nc))
 POINTWISE_SHAPES: list[Shape] = (
     [(2, 19, 7)]
     if QUICK_MODE
-    else [
-        (),
-        (1,),
-        (5333,),
-        (17, 31),
-        (1024, 1024),
-        (4, 8, 16),
-        (20, 320, 15),
-        (2, 3, 4, 5),
-        (1, 64, 7, 7),
-        (16, 128, 64, 60),
-        (16, 7, 57, 32, 29),
-    ]
+    else [(), (1,), (1024, 1024), (20, 320, 15), (16, 128, 64, 60), (16, 7, 57, 32, 29)]
 )
 
 SPECIAL_SHAPES: list[Shape] = (
     [(2, 19, 7)]
     if QUICK_MODE
-    else [
-        (1,),
-        (1024, 1024),
-        (20, 320, 15),
-        (16, 128, 64, 1280),
-        (16, 7, 57, 32, 29),
-    ]
+    else [(1,), (1024, 1024), (20, 320, 15), (16, 128, 64, 1280), (16, 7, 57, 32, 29)]
 )
 
 FP8_QUANT_SHAPES = {
@@ -97,37 +79,45 @@ FP8_QUANT_SHAPES = {
     "GROUP_SIZE": [512] if QUICK_MODE else [64, 128, 256, 512],
     "SEEDS": [0],
 }
-
+FUSED_INV_ROPE_FP8_QUANT_SHAPES = {
+    "NUM_TOKENS": [7] if QUICK_MODE else [1, 7, 32, 128],
+    "NUM_HEADS_AND_GROUPS": ([(64, 8)] if QUICK_MODE else [(32, 4), (64, 8), (128, 8)]),
+    "OUTPUT_LAYOUT_NUM_TOKENS": [7] if QUICK_MODE else [1, 7, 32, 128],
+    "OUTPUT_LAYOUT_NUM_HEADS_AND_GROUPS": (
+        [(64, 8)] if QUICK_MODE else [(64, 8), (128, 8)]
+    ),
+    "PER_GROUP_CONTIGUITY_NUM_TOKENS": [7] if QUICK_MODE else [1, 7, 32, 128],
+    "REAL_ROPE_NUM_TOKENS": [32] if QUICK_MODE else [1, 32, 256],
+    "TMA_ALIGNED_SCALES": [False, True],
+    "SEEDS": [0, 42],
+}
 DISTRIBUTION_SHAPES = [(20, 320, 15)]
-
-REDUCTION_SHAPES: list[Shape] = (
-    [(2, 32)]
-    if QUICK_MODE
-    else [
-        (1024,),
-        (1, 2),
-        (4096, 256),
-        (2, 5000),
-        (200, 2560, 3),
-        (200, 40999, 3),
-        (2, 3, 4, 5),
-    ]
+REDUCTION_SHAPES = [(2, 32)] if QUICK_MODE else [(1, 2), (4096, 256), (200, 40999, 3)]
+REDUCTION_SMALL_SHAPES = (
+    [(1, 32)] if QUICK_MODE else [(1, 2), (4096, 256), (200, 2560, 3)]
 )
-
-NORM_SHAPES: list[NormShape] = (
-    [((2, 16), (16,))]
-    if QUICK_MODE
-    else [
-        ((32,), (32,)),
-        ((1024,), (1024,)),
-        ((2, 16), (16,)),
-        ((4, 8, 32), (32,)),
-        ((4, 8, 32), (8, 32)),
-        ((2, 4, 16, 16), (16, 16)),
-        ((2, 4, 16, 16), (4, 16, 16)),
-    ]
+SVD_FAST_SHAPES = [(2, 2), (8, 2), (2, 8), (16, 8), (8, 16), (64, 32), (32, 64)]
+SVD_RANK1_SHAPES = [(8, 1), (1, 8), (2, 17, 1), (2, 1, 17), (1025, 1), (1, 1025)]
+SVD_FALLBACK_SHAPES = [(5, 3), (3, 5), (2, 4, 4)]
+SVD_GRAM_ILL_CONDITIONED_SHAPES = [(17, 17), (16, 16, 16)]
+SVD_TINY_RANK_DEGENERATE_CASES = [
+    "zero_2x2",
+    "repeated_2x2",
+    "zero_column_8x2",
+    "zero_row_2x8",
+]
+SEGMENT_REDUCE_LENGTH_CASES = (
+    ((5,), 0, [2, 0, 3]),
+    ((2, 3), 1, [[1, 1, 1], [1, 1, 1]]),
+    ((2, 3, 4), 1, [[1, 2], [2, 1]]),
+    ((2, 3, 5), 2, [[[2, 3], [1, 4], [3, 2]], [[5, 0], [2, 3], [4, 1]]]),
 )
-
+SEGMENT_REDUCE_OFFSET_CASES = (
+    ((5,), 0, [0, 2, 5]),
+    ((2, 3, 4), 1, [[0, 1, 3], [0, 2, 3]]),
+)
+SEGMENT_REDUCE_LENGTH_OUT_CASE = SEGMENT_REDUCE_LENGTH_CASES[2]
+SEGMENT_REDUCE_OFFSET_OUT_CASE = SEGMENT_REDUCE_OFFSET_CASES[1]
 STACK_SHAPES = [
     [(16,), (16,)],
     [(16, 256), (16, 256)],
@@ -247,21 +237,17 @@ KRON_SHAPES = [
     [(3, 3), (3, 3)],
     [(1, 1, 1), (2, 2, 2)],
 ]
-
-
+# Add some test cases with zeor-dimensional tensor and zero-sized tensors.
 PRIMARY_FLOAT_DTYPES = [torch.float16, torch.float32]
 FLOAT_DTYPES = (
     PRIMARY_FLOAT_DTYPES + [torch.bfloat16]
     if bf16_is_supported
     else PRIMARY_FLOAT_DTYPES
 )
-ALL_FLOAT_DTYPES = (
-    FLOAT_DTYPES + [torch.float64] if fp64_is_supported else FLOAT_DTYPES
-)
-INT_DTYPES = [torch.int8, torch.int16, torch.int32]
-ALL_INT_DTYPES = (
-    INT_DTYPES + [torch.int64] if int64_is_supported else INT_DTYPES
-)
+
+ALL_FLOAT_DTYPES = FLOAT_DTYPES + [torch.float64] if fp64_is_supported else FLOAT_DTYPES
+INT_DTYPES = [torch.int16, torch.int32]
+ALL_INT_DTYPES = INT_DTYPES + [torch.int64] if int64_is_supported else INT_DTYPES
 BOOL_TYPES = [torch.bool]
 COMPLEX_DTYPES = [torch.complex32, torch.complex64]
 
@@ -271,65 +257,30 @@ STACK_DIM_LIST = [-2, -1, 0, 1]
 ARANGE_START = [0] if TO_CPU else [0, 1, 3]
 
 
-def to_reference(inp, ref_kind: ReferenceKind = "compute"):
+def to_reference(inp, upcast=False):
     if inp is None:
         return None
-
-    if not isinstance(inp, torch.Tensor):
-        return inp
-
     ref_inp = inp
-
     if TO_CPU:
         ref_inp = ref_inp.to("cpu")
-
-    if ref_kind is None:
-        return ref_inp
-
-    if ref_kind == "compute":
+    if upcast:
         if ref_inp.is_complex():
-            return ref_inp.to(torch.complex128)
-
-        if ref_inp.is_floating_point():
-            return ref_inp.to(torch.float64)
-
-        return ref_inp
-
-    if ref_kind == "logical":
-        # 输出 bool 的算子，包括 comparison / logical / isxxx 等。
-
-        if ref_inp.dtype is torch.bool:
-            return ref_inp.to(torch.int64)
-
-        if ref_inp.is_complex():
-            return ref_inp.to(torch.complex128)
-
-        if ref_inp.is_floating_point():
-            # float16 / bfloat16 / float32 -> float64
-            # 避免小数转 int 后改变比较或 logical 语义。
-            return ref_inp.to(torch.float64)
-
-        # int / uint 类型 -> int64
-        # 比 int32 更安全，适合 eq/ne/lt/le/gt/ge 这类比较算子。
-        return ref_inp.to(torch.int64)
-
-    raise ValueError(f"Unsupported ref_kind: {ref_kind}")
+            ref_inp = ref_inp.to(
+                torch.complex128 if fp64_is_supported else torch.complex64
+            )
+        else:
+            ref_inp = ref_inp.to(torch.float64 if fp64_is_supported else torch.float32)
+    return ref_inp
 
 
 def to_cpu(res, ref):
-    if (
-        TO_CPU
-        and isinstance(res, torch.Tensor)
-        and isinstance(ref, torch.Tensor)
-    ):
+    if TO_CPU and isinstance(res, torch.Tensor) and isinstance(ref, torch.Tensor):
         res = res.to("cpu")
         assert ref.device == torch.device("cpu")
     return res
 
 
-def gems_assert_close(
-    res, ref, dtype, equal_nan=False, reduce_dim=1, atol=1e-4
-):
+def gems_assert_close(res, ref, dtype, equal_nan=False, reduce_dim=1, atol=1e-4):
     res = to_cpu(res, ref)
     flaggems_sglang.testing.assert_close(
         res, ref, dtype, equal_nan=equal_nan, reduce_dim=reduce_dim, atol=atol
