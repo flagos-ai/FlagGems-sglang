@@ -29,6 +29,19 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (M, K, N, E, topk) tuples for FusedMoE benchmark.
+# Covers decode (small M) and prefill (large M) scenarios with
+# typical MoE dimensions from Mixtral/DeepSeek-class models.
+FUSED_MOE_BENCH_SHAPES = [
+    (1, 1280, 3072, 64, 8),
+    (4, 1280, 3072, 64, 8),
+    (17, 1280, 3072, 64, 8),
+    (64, 1280, 3072, 64, 8),
+    (1024, 1280, 3072, 64, 8),
+    (2048, 1280, 3072, 64, 8),
+    (4096, 1280, 3072, 64, 8),
+]
+
 
 def model_shapes():
     # batch sizes * seq lengths
@@ -84,9 +97,7 @@ class BenchmarkMetrics:
     error_msg: Optional[str] = None
 
 
-ALL_AVAILABLE_METRICS = set(
-    map(lambda x: x.name, fields(BenchmarkMetrics))
-) - {
+ALL_AVAILABLE_METRICS = set(map(lambda x: x.name, fields(BenchmarkMetrics))) - {
     "legacy_shape",
     "shape_detail",
 }
@@ -251,9 +262,7 @@ class BenchmarkResult:
         )
         if metrics.tflops and metrics.tflops != 0.0:
             tflops_str = (
-                f"{metrics.tflops:.3f}"
-                if metrics.tflops is not None
-                else "N/A"
+                f"{metrics.tflops:.3f}" if metrics.tflops is not None else "N/A"
             )
         shape_detail_str = (
             metrics.shape_detail if metrics.shape_detail is not None else "N/A"
