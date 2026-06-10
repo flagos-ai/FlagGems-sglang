@@ -19,11 +19,10 @@ NON_TEST_FILES = {
     "workflow.md",
 }
 
-EXPLICIT_SOURCE_TO_TESTS = {
-}
+EXPLICIT_SOURCE_TO_TESTS = {}
 
-EXPLICIT_SOURCE_TO_BENCHMARKS = {
-}
+EXPLICIT_SOURCE_TO_BENCHMARKS = {}
+
 
 def normalize_path(path: str) -> str:
     return path.strip().replace("\\", "/")
@@ -45,7 +44,9 @@ def existing_benchmarks(repo_root: Path) -> list[str]:
     )
 
 
-def add_target(targets: set[str], target: str, existing_targets: set[str]) -> None:
+def add_target(
+    targets: set[str], target: str, existing_targets: set[str]
+) -> None:
     normalized = normalize_path(target)
     if normalized in existing_targets:
         targets.add(normalized)
@@ -60,7 +61,9 @@ def source_name_variants(stem: str) -> list[str]:
     return list(dict.fromkeys(variants))
 
 
-def matching_targets_for_stem(stem: str, targets: set[str], root: str) -> list[str]:
+def matching_targets_for_stem(
+    stem: str, targets: set[str], root: str
+) -> list[str]:
     variants = source_name_variants(stem)
     exact_matches = []
     prefix_matches = []
@@ -86,9 +89,13 @@ def matching_targets_for_stem(stem: str, targets: set[str], root: str) -> list[s
 
 def tests_for_source(path: str, tests: set[str]) -> list[str]:
     if path in EXPLICIT_SOURCE_TO_TESTS:
-        return [test for test in EXPLICIT_SOURCE_TO_TESTS[path] if test in tests]
+        return [
+            test for test in EXPLICIT_SOURCE_TO_TESTS[path] if test in tests
+        ]
 
-    if not path.startswith("src/flaggems_sglang/ops/") or not path.endswith(".py"):
+    if not path.startswith("src/flaggems_sglang/ops/") or not path.endswith(
+        ".py"
+    ):
         return []
 
     stem = Path(path).stem
@@ -103,7 +110,9 @@ def benchmarks_for_source(path: str, benchmarks: set[str]) -> list[str]:
             if benchmark in benchmarks
         ]
 
-    if not path.startswith("src/flaggems_sglang/ops/") or not path.endswith(".py"):
+    if not path.startswith("src/flaggems_sglang/ops/") or not path.endswith(
+        ".py"
+    ):
         return []
 
     stem = Path(path).stem
@@ -164,7 +173,9 @@ def read_changed_files(path: str | None) -> list[str]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", default=".", help="repository root")
-    parser.add_argument("--changed-files", help="file containing changed file paths")
+    parser.add_argument(
+        "--changed-files", help="file containing changed file paths"
+    )
     parser.add_argument(
         "--format",
         choices=("shell", "list"),
