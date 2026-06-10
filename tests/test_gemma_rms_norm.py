@@ -65,7 +65,7 @@ def test_gemma_rms_norm(norm_shape, dtype):
 
 @pytest.mark.parametrize("norm_shape", utils.NORM_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-@pytest.mark.gemma_rms_norm
+@pytest.mark.gemma_rms_norm_res
 def test_gemma_rms_norm_with_residual(norm_shape, dtype):
     device = cfg.device
     x_shape, norm_shape_w = norm_shape
