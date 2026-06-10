@@ -34,7 +34,7 @@ def test_gemma_rms_norm(shape, dtype, benchmark):
 
 @pytest.mark.parametrize("shape", GEMMA_RMS_NORM_BENCH_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
-@pytest.mark.gemma_rms_norm
+@pytest.mark.gemma_rms_norm_res
 def test_gemma_rms_norm_with_residual(shape, dtype, benchmark):
     M, N = shape
     device = flaggems_sglang.device
