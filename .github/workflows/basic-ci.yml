@@ -1,0 +1,166 @@
+name: basic ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+
+jobs:
+  code-style:
+    name: code style
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: check out repository
+        uses: actions/checkout@v6
+
+      - name: set up python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: install style tools
+        shell: bash
+        run: python -m pip install pre-commit pre-commit-hooks==4.6.0 black==24.8.0 flake8==7.1.0 isort==5.12.0
+
+      - name: run pre-commit
+        shell: bash
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  select-targets:
+    name: select ci targets
+    needs: code-style
+    runs-on: h20
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
+      tests: ${{ steps.select.outputs.tests }}
+      benchmarks: ${{ steps.select.outputs.benchmarks }}
+    env:
+      VIRTUAL_ENV: /home/secure/venvs/flaggems-sglang-ci
+
+    steps:
+      - id: checkout-attempt-1
+        name: check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+        continue-on-error: true
+
+      - id: sleep-1
+        if: steps.checkout-attempt-1.outcome == 'failure'
+        shell: bash
+        run: sleep 30s
+
+      - id: checkout-attempt-2
+        name: retry checkout
+        if: steps.checkout-attempt-1.outcome == 'failure'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+        continue-on-error: true
+
+      - id: sleep-2
+        if: steps.checkout-attempt-2.outcome == 'failure'
+        shell: bash
+        run: sleep 30s
+
+      - id: checkout-attempt-3
+        name: retry checkout again
+        if: steps.checkout-attempt-2.outcome == 'failure'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: use preconfigured python environment
+        shell: bash
+        run: |
+          test -x "${VIRTUAL_ENV}/bin/python"
+          echo "${VIRTUAL_ENV}/bin" >> "$GITHUB_PATH"
+
+      - name: collect ci selection inputs
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+            git diff --name-only "${PR_BASE_SHA}" "${GITHUB_SHA}" > changed_files.txt
+          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+            git diff --name-only "${BEFORE_SHA}" "${GITHUB_SHA}" > changed_files.txt
+          else
+            git diff-tree --no-commit-id --name-only -r "${GITHUB_SHA}" > changed_files.txt
+          fi
+
+          echo "Changed files:"
+          cat changed_files.txt
+
+      - id: select
+        name: select tests and benchmarks
+        shell: bash
+        run: |
+          selection="$(python tools/select_tests.py \
+            --changed-files changed_files.txt \
+            --format shell)"
+          eval "${selection}"
+
+          echo "Test selection mode: ${TEST_SELECTION_MODE}"
+          if [[ -n "${SELECTED_TESTS}" ]]; then
+            echo "Selected tests: ${SELECTED_TESTS}"
+          fi
+          if [[ -n "${SELECTED_BENCHMARKS}" ]]; then
+            echo "Selected benchmarks: ${SELECTED_BENCHMARKS}"
+          fi
+
+          echo "mode=${TEST_SELECTION_MODE}" >> "${GITHUB_OUTPUT}"
+          echo "tests=${SELECTED_TESTS}" >> "${GITHUB_OUTPUT}"
+          echo "benchmarks=${SELECTED_BENCHMARKS}" >> "${GITHUB_OUTPUT}"
+
+  nvidia-tests:
+    name: nvidia tests and benchmarks
+    needs: select-targets
+    if: needs.select-targets.outputs.tests != '' || needs.select-targets.outputs.benchmarks != ''
+    runs-on: h20
+    timeout-minutes: 30
+    env:
+      DNN_VENDOR: nvidia
+      PYTHONPATH: ${{ github.workspace }}/src
+      VIRTUAL_ENV: /home/secure/venvs/flaggems-sglang-ci
+
+    steps:
+      - name: check out repository
+        uses: actions/checkout@v6
+
+      - name: show gpu
+        shell: bash
+        run: nvidia-smi
+
+      - name: use preconfigured python environment
+        shell: bash
+        run: |
+          test -x "${VIRTUAL_ENV}/bin/python"
+          echo "${VIRTUAL_ENV}/bin" >> "$GITHUB_PATH"
+          echo "/usr/local/cuda-12.8/bin" >> "$GITHUB_PATH"
+
+      - name: run selected unit tests
+        if: needs.select-targets.outputs.tests != ''
+        shell: bash
+        env:
+          SELECTED_TESTS: ${{ needs.select-targets.outputs.tests }}
+        run: |
+          echo "Selected tests: ${SELECTED_TESTS}"
+          pytest -q ${SELECTED_TESTS} --quick
+
+      - name: run selected benchmarks
+        if: needs.select-targets.outputs.benchmarks != ''
+        shell: bash
+        env:
+          SELECTED_BENCHMARKS: ${{ needs.select-targets.outputs.benchmarks }}
+        run: |
+          echo "Selected benchmarks: ${SELECTED_BENCHMARKS}"
+          pytest -q ${SELECTED_BENCHMARKS} --level core
