@@ -1,10 +1,9 @@
-import os
 import glob
+import json
+import os
 import subprocess
 import time
-import json
 from datetime import datetime
-
 
 # ================= 配置区 =================
 
