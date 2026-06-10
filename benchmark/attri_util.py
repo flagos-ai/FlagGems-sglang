@@ -29,6 +29,26 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (M, N) tuples for GemmaRMSNorm benchmark.  N values match Gemma model
+# hidden dimensions: 512 (2B), 1024, 2048 (7B), 3072, 4096, 5120, 8192.
+# Small batch sizes representative of decode serving scenarios.
+GEMMA_RMS_NORM_BENCH_SHAPES = [
+    (1, 512),
+    (4, 512),
+    (1, 1024),
+    (4, 1024),
+    (1, 2048),
+    (4, 2048),
+    (1, 3072),
+    (4, 3072),
+    (1, 4096),
+    (4, 4096),
+    (1, 5120),
+    (4, 5120),
+    (1, 8192),
+    (4, 8192),
+]
+
 
 def model_shapes():
     # batch sizes * seq lengths
