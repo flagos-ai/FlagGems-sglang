@@ -30,6 +30,22 @@ DEFAULT_SHAPES = [
 ]
 
 
+# (N, n_qh, n_kh, head_size, rotary_dim, is_neox, mrope_interleaved,
+#  mrope_interleaved_glm, section_t, section_h, section_w, label, weight%)
+# Bench shapes for mrotary_embedding kernel — Qwen3.6-style interleaved
+# neox (head_size=256, rotary_dim=64, section=[11,11,10]).
+# Weights reflect sglang-plugin-FL production call distribution.
+MROTARY_EMBEDDING_BENCH_SHAPES = [
+    (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1", 60.0),
+    (4, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-4", 5.0),
+    (17, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-17", 5.0),
+    (64, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-64", 5.0),
+    (1024, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-1k", 8.0),
+    (2048, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-2k", 8.0),
+    (4096, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-4k", 9.0),
+]
+
+
 def model_shapes():
     # batch sizes * seq lengths
     BS = [1, 2, 3, 4, 8, 98, 256, 8192]
