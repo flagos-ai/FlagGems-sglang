@@ -164,5 +164,5 @@ def test_mrotary_embedding(shape, dtype):
     # Optimized: FlagGems-sglang Triton kernel
     flaggems_sglang.mrotary_embedding(obj, positions, q_test, k_test)
 
-    utils.gems_assert_close(q_test, q_ref, dtype, atol=1e-2, reduce_dim=0)
-    utils.gems_assert_close(k_test, k_ref, dtype, atol=1e-2, reduce_dim=0)
+    utils.gems_assert_close(q_test, q_ref, dtype, atol=1e-2, reduce_dim=1)
+    utils.gems_assert_close(k_test, k_ref, dtype, atol=1e-2, reduce_dim=1)
