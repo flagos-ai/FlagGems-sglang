@@ -9,13 +9,10 @@ from sgl_kernel import gemma_rmsnorm as _sglang_gemma_rmsnorm  # noqa: E402
 
 import flaggems_sglang
 
-from . import accuracy_utils as utils
 from . import conftest as cfg
 
-if cfg.QUICK_MODE:
-    FLOAT_DTYPES = [torch.float32]
-else:
-    FLOAT_DTYPES = utils.FLOAT_DTYPES
+# sgl_kernel.gemma_rmsnorm only dispatches half-precision types (float16/bfloat16).
+FLOAT_DTYPES = [torch.float16, torch.bfloat16]
 
 
 # NORM_SHAPES: list of (M, N) tuples — M rows, N hidden dim.
