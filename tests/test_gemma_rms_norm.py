@@ -26,9 +26,11 @@ def _ref_gemma_rms_norm(x, weight, eps):
 
 def _ref_gemma_fused_add_rms_norm(x, residual, weight, eps):
     """Reference: delegate to SGLang's Triton gemma_fused_add_rmsnorm kernel.
-    Note: sgl_kernel modifies x and residual in-place and returns (x, residual).
+    Note: sgl_kernel modifies x and residual in-place and returns None.
+    After the call, x holds the normalized output and residual holds x+residual.
     """
-    return _sglang_gemma_fused_add_rmsnorm(x, residual, weight, eps)
+    _sglang_gemma_fused_add_rmsnorm(x, residual, weight, eps)
+    return x, residual
 
 
 @pytest.mark.parametrize("norm_shape", NORM_SHAPES)
