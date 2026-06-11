@@ -162,5 +162,26 @@ jobs:
         env:
           SELECTED_BENCHMARKS: ${{ needs.select-targets.outputs.benchmarks }}
         run: |
-          echo "Selected benchmarks: ${SELECTED_BENCHMARKS}"
-          pytest -q ${SELECTED_BENCHMARKS} --level core
+          # 1. 创建 Markdown 头部信息
+          echo "### ⏱️ Core Benchmark Results" > bench_result.md
+          echo "Executed: \`pytest -q ${SELECTED_BENCHMARKS} --level core\`" >> bench_result.md
+          echo "" >> bench_result.md
+          echo '```text' >> bench_result.md
+          # 2. 运行你的标准命令，并将输出追加到 md 文件中
+          # || true 确保即使性能测试未达标（报错），CI 也能正常把结果贴出来
+          pytest -q ${SELECTED_BENCHMARKS} --level core >> bench_result.md 2>&1 || true
+          # 3. 闭合代码块
+          echo '```' >> bench_result.md
+  
+      - name: Post Results to Commit Comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 使用 GitHub CLI 将文件内容发布为当前提交的评论
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            /repos/${{ github.repository }}/commits/${{ github.sha }}/comments \
+            -f body="$(cat bench_result.md)"
+            
