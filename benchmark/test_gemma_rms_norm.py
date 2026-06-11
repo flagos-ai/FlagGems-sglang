@@ -28,6 +28,8 @@ def test_gemma_rms_norm_with_residual(shape, dtype, benchmark):
     def run():
         x = torch.randn(M, N, dtype=dtype, device=device)
         residual = torch.randn(M, N, dtype=dtype, device=device)
-        return flaggems_sglang.gemma_rms_norm(x, weight, eps=1e-6, residual=residual)
+        return flaggems_sglang.gemma_rms_norm(
+            x, weight, eps=1e-6, residual=residual
+        )
 
     benchmark(run)

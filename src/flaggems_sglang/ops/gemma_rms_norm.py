@@ -226,7 +226,10 @@ def gemma_rms_norm(x, weight, eps=1e-6, residual=None):
             weight.size(),
         )
         assert residual.is_contiguous()
-        assert x.shape == residual.shape or residual.reshape(-1, N).shape == x.shape
+        assert (
+            x.shape == residual.shape
+            or residual.reshape(-1, N).shape == x.shape
+        )
         if residual.dim() != 2:
             residual = residual.reshape(-1, N)
 
