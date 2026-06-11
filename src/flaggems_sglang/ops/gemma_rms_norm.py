@@ -8,6 +8,7 @@ Key changes from v12:
 - Remove tiled 2-pass kernel (N=5120 regression: 42.6us vs single-pass 34.1us)
 - Fused kernel unchanged.
 """
+
 import torch
 import triton
 import triton.language as tl
@@ -39,14 +40,20 @@ def _gemma_rmsnorm_kernel(
     for r in tl.static_range(ROWS_PER_PROGRAM):
         row_idx = row_start + r
         if row_idx < M:
-            x = tl.load(X_ptr + row_idx * stride_x_row + cols, mask=mask, other=0.0)
+            x = tl.load(
+                X_ptr + row_idx * stride_x_row + cols, mask=mask, other=0.0
+            )
             x_fp32 = x.to(tl.float32)
 
             mean_sq = tl.sum(x_fp32 * x_fp32, axis=0) / N
             rrms = tl.rsqrt(mean_sq + eps)
 
             out = x_fp32 * rrms * scale
-            tl.store(Out_ptr + row_idx * stride_out_row + cols, out.to(x.dtype), mask=mask)
+            tl.store(
+                Out_ptr + row_idx * stride_out_row + cols,
+                out.to(x.dtype),
+                mask=mask,
+            )
 
 
 @triton.jit
@@ -79,21 +86,35 @@ def _gemma_fused_add_rmsnorm_kernel(
     for r in tl.static_range(ROWS_PER_PROGRAM):
         row_idx = row_start + r
         if row_idx < M:
-            x = tl.load(X_ptr + row_idx * stride_x_row + cols, mask=mask, other=0.0)
-            residual = tl.load(Residual_ptr + row_idx * stride_res_row + cols, mask=mask, other=0.0)
+            x = tl.load(
+                X_ptr + row_idx * stride_x_row + cols, mask=mask, other=0.0
+            )
+            residual = tl.load(
+                Residual_ptr + row_idx * stride_res_row + cols,
+                mask=mask,
+                other=0.0,
+            )
 
             x_fp32 = x.to(tl.float32)
             res_fp32 = residual.to(tl.float32)
 
             hidden = x_fp32 + res_fp32
 
-            tl.store(ResidualOut_ptr + row_idx * stride_resout_row + cols, hidden.to(x.dtype), mask=mask)
+            tl.store(
+                ResidualOut_ptr + row_idx * stride_resout_row + cols,
+                hidden.to(x.dtype),
+                mask=mask,
+            )
 
             mean_sq = tl.sum(hidden * hidden, axis=0) / N
             rrms = tl.rsqrt(mean_sq + eps)
 
             out = hidden * rrms * scale
-            tl.store(Out_ptr + row_idx * stride_out_row + cols, out.to(x.dtype), mask=mask)
+            tl.store(
+                Out_ptr + row_idx * stride_out_row + cols,
+                out.to(x.dtype),
+                mask=mask,
+            )
 
 
 def _cdiv(a, b):
@@ -117,19 +138,19 @@ def _get_rmsnorm_config(N):
     - Medium/large N: single-row with 8 warps for high occupancy.
     """
     if N <= 512:
-        return 512, 16, 8       # 512*16/256=32 elem/thd, grid=256, 16 warps/SM
+        return 512, 16, 8  # 512*16/256=32 elem/thd, grid=256, 16 warps/SM
     elif N <= 1024:
-        return 1024, 8, 8       # 1024*8/256=32 elem/thd, grid=512, 32 warps/SM
+        return 1024, 8, 8  # 1024*8/256=32 elem/thd, grid=512, 32 warps/SM
     elif N <= 2048:
-        return 2048, 4, 8       # 2048*4/256=32 elem/thd, grid=1024, 64 warps/SM
+        return 2048, 4, 8  # 2048*4/256=32 elem/thd, grid=1024, 64 warps/SM
     elif N <= 3072:
-        return 4096, 1, 8       # 4096/256=16 elem/thd (3072→4096 padded)
+        return 4096, 1, 8  # 4096/256=16 elem/thd (3072→4096 padded)
     elif N <= 4096:
-        return 4096, 1, 8       # 4096/256=16 elem/thd
+        return 4096, 1, 8  # 4096/256=16 elem/thd
     elif N <= 5120:
-        return 8192, 1, 8       # 8192/256=32 elem/thd (5120→8192 padded)
+        return 8192, 1, 8  # 8192/256=32 elem/thd (5120→8192 padded)
     else:
-        return 8192, 1, 8       # 8192/256=32 elem/thd
+        return 8192, 1, 8  # 8192/256=32 elem/thd
 
 
 def _get_fused_config(N):
@@ -145,7 +166,9 @@ def _get_fused_config(N):
         return BLOCK_N, 1, 16, 2
 
 
-def gemma_rmsnorm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+def gemma_rmsnorm(
+    x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6
+) -> torch.Tensor:
     assert x.is_contiguous()
     orig_shape = x.shape
     if x.dim() != 2:
@@ -157,9 +180,14 @@ def gemma_rmsnorm(x: torch.Tensor, weight: torch.Tensor, eps: float = 1e-6) -> t
 
     grid = _cdiv(M, ROWS_PER_PROGRAM)
     _gemma_rmsnorm_kernel[(grid,)](
-        x, weight, out,
-        x.stride(0), out.stride(0),
-        N, M, eps,
+        x,
+        weight,
+        out,
+        x.stride(0),
+        out.stride(0),
+        N,
+        M,
+        eps,
         BLOCK_N=BLOCK_N,
         ROWS_PER_PROGRAM=ROWS_PER_PROGRAM,
         num_warps=num_warps,
@@ -191,9 +219,18 @@ def gemma_fused_add_rmsnorm(
 
     grid = _cdiv(M, ROWS_PER_PROGRAM)
     _gemma_fused_add_rmsnorm_kernel[(grid,)](
-        x, residual, weight, out, residual_out,
-        x.stride(0), residual.stride(0), out.stride(0), residual_out.stride(0),
-        N, M, eps,
+        x,
+        residual,
+        weight,
+        out,
+        residual_out,
+        x.stride(0),
+        residual.stride(0),
+        out.stride(0),
+        residual_out.stride(0),
+        N,
+        M,
+        eps,
         BLOCK_N=BLOCK_N,
         ROWS_PER_PROGRAM=ROWS_PER_PROGRAM,
         num_warps=num_warps,
