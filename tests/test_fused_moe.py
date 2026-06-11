@@ -3,8 +3,8 @@ import torch
 from sglang.srt.layers.moe.fused_moe_triton.triton_kernels_moe import (
     triton_kernel_fused_experts as _sglang_fused_experts,
 )
-from triton_kernels.matmul_ogs import GatherIndx, RoutingData, ScatterIndx
-from triton_kernels.topk import topk as triton_kernels_topk
+from triton_kernels.matmul_ogs import GatherIndx, ScatterIndx
+from triton_kernels.routing import RoutingData, compute_expt_data_torch
 
 import flaggems_sglang
 
@@ -13,28 +13,37 @@ from . import conftest as cfg
 
 
 def _routing(logits, n_expts_act):
-    """Build routing data from logits using triton_kernels topk."""
-    from triton_kernels.tensor import make_ragged_tensor_metadata
+    """Build routing data from logits using standard topk conversion.
 
-    sparse_logits = triton_kernels_topk(
-        logits, n_expts_act, apply_softmax=True
-    )
-    dispatch_indx = sparse_logits.mask_metadata.row_sorted_indx
-    combine_indx = sparse_logits.mask_metadata.col_sorted_indx
-    ragged_metadata = make_ragged_tensor_metadata(
-        sparse_logits.mask_metadata.col_sum,
-        dispatch_indx.shape[0],
-    )
-    gate_scal = sparse_logits.vals.flatten()[combine_indx]
+    Uses the same approach as _standard_topk_to_triton_kernels in fused_moe.py
+    to remain compatible with the installed triton_kernels version.
+    """
+    n_tokens, n_expts_tot = logits.shape
+
+    # Compute topk weights and ids from logits
+    topk_weights = torch.softmax(logits, dim=-1)
+    topk_weights, topk_ids = torch.topk(topk_weights, k=n_expts_act, dim=-1)
+    # Normalize
+    topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
+
+    # Convert to triton_kernels routing format
+    n_gates_pad = n_tokens * n_expts_act
+    expt_indx_2d, sort_indices = torch.sort(topk_ids, dim=1)
+    expt_scal_2d = torch.gather(topk_weights, 1, sort_indices)
+    expt_scal = expt_scal_2d.reshape(-1)
+    expt_indx = expt_indx_2d.reshape(-1).to(torch.int32)
+    topk_indx = torch.argsort(expt_indx, stable=True).to(torch.int32)
+    gate_indx = torch.argsort(topk_indx, stable=True).to(torch.int32)
+    gate_scal = expt_scal[topk_indx]
+    hist = torch.histc(
+        expt_indx.float(), bins=n_expts_tot, max=n_expts_tot - 1
+    ).int()
+    expt_data = compute_expt_data_torch(hist, n_expts_tot, n_gates_pad)
     routing_data = RoutingData(
-        gate_scal,
-        ragged_metadata.slice_sizes,
-        logits.shape[-1],
-        n_expts_act,
-        ragged_metadata,
+        gate_scal, hist, n_expts_tot, n_expts_act, expt_data
     )
-    gather_indx = GatherIndx(combine_indx, dispatch_indx)
-    scatter_indx = ScatterIndx(dispatch_indx, combine_indx)
+    gather_indx = GatherIndx(src_indx=topk_indx, dst_indx=gate_indx)
+    scatter_indx = ScatterIndx(src_indx=gate_indx, dst_indx=topk_indx)
     return routing_data, gather_indx, scatter_indx
 
 
