@@ -13,7 +13,8 @@ from flaggems_sglang.ops.fused_recurrent_gated_delta_rule_packed_decode import (
 )
 from flaggems_sglang.ops.gemma_rms_norm import gemma_rms_norm  # noqa: F401
 from flaggems_sglang.ops.mrotary_embedding import (  # noqa: F401
-    mrotary_embedding,
+    _rope_1d,
+    triton_mrope_fused,
 )
 
 device = runtime.device.name
