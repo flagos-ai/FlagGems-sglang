@@ -131,6 +131,8 @@ jobs:
       DNN_VENDOR: nvidia
       PYTHONPATH: ${{ github.workspace }}/src
       VIRTUAL_ENV: /home/secure/venvs/flaggems-sglang-ci
+    permissions:
+      contents: write
 
     steps:
       - name: check out repository
