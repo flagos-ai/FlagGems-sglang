@@ -1,4 +1,4 @@
-[English|[中文版](./README_cn.md)]
+[English|[中文版](./README_cn.md)] [![basic ci](https://github.com/flagos-ai/FlagGems-sglang/actions/workflows/basic-ci.yml/badge.svg)](https://github.com/flagos-ai/FlagGems-sglang/actions/workflows/basic-ci.yml)
 
 ## Introduction
 
