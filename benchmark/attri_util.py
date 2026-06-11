@@ -40,6 +40,8 @@ FUSED_RECURRENT_BENCH_SHAPES = [
     (64, 8, 16, 128, 128, 128),
     (128, 8, 16, 128, 128, 256),
     (256, 8, 16, 128, 128, 512),
+]
+
 # (M, K, N, E, topk) tuples for FusedMoE benchmark.
 # Covers decode (small M) and prefill (large M) scenarios with
 # typical MoE dimensions from Mixtral/DeepSeek-class models.
