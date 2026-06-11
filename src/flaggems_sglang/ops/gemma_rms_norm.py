@@ -3,6 +3,10 @@
 Multi-row processing for small N hides memory latency by amortizing
 weight load and kernel launch overhead across multiple rows.
 8-warp configurations improve occupancy for memory-bound small-N kernels.
+
+Based on v13 kernel: 8 warps for small N rmsnorm to hide memory latency,
+single-pass for N=5120 (tiled read-twice was worse than padding),
+multi-row counts from v12 for weight amortization.
 """
 
 import logging
@@ -96,42 +100,33 @@ def _gemma_rms_norm_kernel(
 @libentry()
 @triton.autotune(
     configs=[
-        # Small N: aggressive multi-row for fused add+rmsnorm.
         triton.Config(
             {"BLOCK_N": 512, "ROWS_PER_PROGRAM": 8}, num_warps=8, num_stages=2
         ),
         triton.Config(
-            {"BLOCK_N": 512, "ROWS_PER_PROGRAM": 4}, num_warps=8, num_stages=2
+            {"BLOCK_N": 1024, "ROWS_PER_PROGRAM": 4},
+            num_warps=8,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_N": 1024, "ROWS_PER_PROGRAM": 4}, num_warps=8, num_stages=2
+            {"BLOCK_N": 2048, "ROWS_PER_PROGRAM": 2},
+            num_warps=8,
+            num_stages=2,
         ),
         triton.Config(
-            {"BLOCK_N": 1024, "ROWS_PER_PROGRAM": 2}, num_warps=8, num_stages=2
-        ),
-        # Medium N: moderate multi-row or single-row.
-        triton.Config(
-            {"BLOCK_N": 2048, "ROWS_PER_PROGRAM": 2}, num_warps=8, num_stages=2
-        ),
-        triton.Config(
-            {"BLOCK_N": 2048, "ROWS_PER_PROGRAM": 1}, num_warps=8, num_stages=2
-        ),
-        triton.Config(
-            {"BLOCK_N": 4096, "ROWS_PER_PROGRAM": 1}, num_warps=8, num_stages=2
+            {"BLOCK_N": 4096, "ROWS_PER_PROGRAM": 2},
+            num_warps=8,
+            num_stages=2,
         ),
         triton.Config(
             {"BLOCK_N": 4096, "ROWS_PER_PROGRAM": 1},
-            num_warps=16,
+            num_warps=8,
             num_stages=2,
         ),
-        # Large N: single-row, higher warp count for compute.
         triton.Config(
             {"BLOCK_N": 8192, "ROWS_PER_PROGRAM": 1},
             num_warps=16,
             num_stages=2,
-        ),
-        triton.Config(
-            {"BLOCK_N": 8192, "ROWS_PER_PROGRAM": 1}, num_warps=8, num_stages=2
         ),
     ],
     key=["N"],
@@ -154,7 +149,7 @@ def _gemma_fused_add_rms_norm_kernel(
     BLOCK_N: tl.constexpr,
     ROWS_PER_PROGRAM: tl.constexpr,
 ):
-    """Single-pass fused add+rmsnorm — writes both normalized and residual output."""
+    """Single-pass fused add+rmsnorm."""
     pid = tl.program_id(0)
     row_start = pid * ROWS_PER_PROGRAM
 
@@ -198,40 +193,46 @@ def _gemma_fused_add_rms_norm_kernel(
             )
 
 
-def gemma_rms_norm(module, x, residual=None):
+def gemma_rms_norm(x, weight, eps=1e-6, residual=None):
     """Optimized Gemma RMSNorm with optional fused residual addition.
 
     Args:
-        module: nn.Module with .weight (Tensor) and .variance_epsilon (float).
-        x: Input tensor of any shape where the last dimension is the feature dim.
+        x: Input tensor of any shape where the last dimension is the
+            feature dim.
+        weight: Weight tensor of shape (N,) for the normalized dimension.
+        eps: Epsilon for numerical stability (default: 1e-6).
         residual: Optional residual tensor of same shape as x for fused add.
 
     Returns:
         If residual is None: normalized output tensor.
         If residual is not None: (normalized_output, updated_residual) tuple.
     """
-    weight = module.weight.data
-    eps = module.variance_epsilon
-    normalized_shape = weight.shape
-    dim = x.ndim - len(normalized_shape)
-    M = math.prod(x.shape[:dim])
-    N = math.prod(normalized_shape)
+    assert x.is_contiguous()
+    orig_shape = x.shape
+    N = weight.shape[0]
+    M = math.prod(orig_shape[:-1]) if x.dim() > 1 else 1
 
-    x = x.contiguous()
+    if x.dim() != 2:
+        x = x.reshape(-1, N)
+
     weight = weight.contiguous()
 
     if residual is not None:
         logger.debug(
-            "FLAGGEMS_SGLANG GEMMA_RMS_NORM (fused add), [input shape]: %s, [residual shape]: %s, [weight shape]: %s",
+            "FLAGGEMS_SGLANG GEMMA_RMS_NORM (fused add), "
+            "[input shape]: %s, [residual shape]: %s, [weight shape]: %s",
             x.size(),
             residual.size(),
             weight.size(),
         )
-        residual = residual.contiguous()
+        assert residual.is_contiguous()
+        assert x.shape == residual.shape or residual.reshape(-1, N).shape == x.shape
+        if residual.dim() != 2:
+            residual = residual.reshape(-1, N)
+
         out = torch.empty_like(x)
         residual_out = torch.empty_like(x)
         with torch_device_fn.device(x.device):
-            # Stride between logical rows in the (M, N) flattened view.
             row_stride = N
             grid = lambda meta: (_cdiv(M, meta["ROWS_PER_PROGRAM"]),)
             _gemma_fused_add_rms_norm_kernel[grid](
@@ -248,6 +249,10 @@ def gemma_rms_norm(module, x, residual=None):
                 M,
                 eps,
             )
+
+        if len(orig_shape) != 2:
+            out = out.reshape(orig_shape)
+            residual_out = residual_out.reshape(orig_shape)
         return out, residual_out
     else:
         logger.debug(
@@ -257,7 +262,6 @@ def gemma_rms_norm(module, x, residual=None):
         )
         out = torch.empty_like(x)
         with torch_device_fn.device(x.device):
-            # Stride between logical rows in the (M, N) flattened view.
             row_stride = N
             grid = lambda meta: (_cdiv(M, meta["ROWS_PER_PROGRAM"]),)
             _gemma_rms_norm_kernel[grid](
@@ -270,4 +274,7 @@ def gemma_rms_norm(module, x, residual=None):
                 M,
                 eps,
             )
+
+        if len(orig_shape) != 2:
+            out = out.reshape(orig_shape)
         return out
