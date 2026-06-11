@@ -1,29 +1,14 @@
 repos:
-  - repo: local
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
-        name: trim trailing whitespace
-        entry: trailing-whitespace-fixer
-        language: system
-        types: [text]
-
       - id: end-of-file-fixer
-        name: fix end of files
-        entry: end-of-file-fixer
-        language: system
-        types: [text]
-
       - id: check-yaml
-        name: check yaml
-        entry: check-yaml
-        language: system
-        types: [yaml]
-
       - id: check-added-large-files
-        name: check for added large files
-        entry: check-added-large-files
-        language: system
 
+  - repo: local
+    hooks:
       - id: flake8
         name: flake8
         entry: flake8
@@ -36,7 +21,7 @@ repos:
         entry: isort
         language: system
         types: [python]
-        args: ["--profile", "black"]
+        args: ["--profile", "black", "--line-length", "80"]
 
       - id: black
         name: black

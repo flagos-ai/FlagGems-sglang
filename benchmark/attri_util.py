@@ -40,6 +40,53 @@ FUSED_RECURRENT_BENCH_SHAPES = [
     (64, 8, 16, 128, 128, 128),
     (128, 8, 16, 128, 128, 256),
     (256, 8, 16, 128, 128, 512),
+# (M, K, N, E, topk) tuples for FusedMoE benchmark.
+# Covers decode (small M) and prefill (large M) scenarios with
+# typical MoE dimensions from Mixtral/DeepSeek-class models.
+FUSED_MOE_BENCH_SHAPES = [
+    (1, 1280, 3072, 64, 8),
+    (4, 1280, 3072, 64, 8),
+    (17, 1280, 3072, 64, 8),
+    (64, 1280, 3072, 64, 8),
+    (1024, 1280, 3072, 64, 8),
+    (2048, 1280, 3072, 64, 8),
+    (4096, 1280, 3072, 64, 8),
+]
+
+# (M, N) tuples for GemmaRMSNorm benchmark.  N values match Gemma model
+# hidden dimensions: 512 (2B), 1024, 2048 (7B), 3072, 4096, 5120, 8192.
+# Small batch sizes representative of decode serving scenarios.
+GEMMA_RMS_NORM_BENCH_SHAPES = [
+    (1, 512),
+    (4, 512),
+    (1, 1024),
+    (4, 1024),
+    (1, 2048),
+    (4, 2048),
+    (1, 3072),
+    (4, 3072),
+    (1, 4096),
+    (4, 4096),
+    (1, 5120),
+    (4, 5120),
+    (1, 8192),
+    (4, 8192),
+]
+
+
+# (N, n_qh, n_kh, head_size, rotary_dim, is_neox, mrope_interleaved,
+#  mrope_interleaved_glm, section_t, section_h, section_w, label, weight%)
+# Bench shapes for mrotary_embedding kernel — Qwen3.6-style interleaved
+# neox (head_size=256, rotary_dim=64, section=[11,11,10]).
+# Weights reflect sglang-plugin-FL production call distribution.
+MROTARY_EMBEDDING_BENCH_SHAPES = [
+    (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1", 60.0),
+    (4, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-4", 5.0),
+    (17, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-17", 5.0),
+    (64, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-64", 5.0),
+    (1024, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-1k", 8.0),
+    (2048, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-2k", 8.0),
+    (4096, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-4k", 9.0),
 ]
 
 

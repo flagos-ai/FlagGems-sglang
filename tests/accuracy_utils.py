@@ -94,6 +94,35 @@ FP8_QUANT_SHAPES = {
     "GROUP_SIZE": [512] if QUICK_MODE else [64, 128, 256, 512],
     "SEEDS": [0],
 }
+
+# (M, K, N, E, topk) — num_tokens, hidden_size, intermediate_size,
+# num_experts, top_k
+FUSED_MOE_SHAPES_SMALL: list[tuple[int, ...]] = [
+    (1, 128, 256, 8, 2),
+    (7, 128, 256, 8, 2),
+    (33, 256, 512, 16, 4),
+]
+FUSED_MOE_SHAPES_LARGE: list[tuple[int, ...]] = (
+    []
+    if QUICK_MODE
+    else [
+        (1, 1280, 3072, 64, 8),
+        (4, 1280, 3072, 64, 8),
+        (17, 1280, 3072, 64, 8),
+        (64, 1280, 3072, 64, 8),
+        (1024, 1280, 3072, 64, 8),
+        (2048, 1280, 3072, 64, 8),
+        (4096, 1280, 3072, 64, 8),
+    ]
+)
+FUSED_MOE_SHAPES = FUSED_MOE_SHAPES_SMALL + FUSED_MOE_SHAPES_LARGE
+FUSED_MOE_SMALL_IDS = [
+    f"M{s[0]}_K{s[1]}_N{s[2]}_E{s[3]}_topk{s[4]}"
+    for s in FUSED_MOE_SHAPES_SMALL
+]
+FUSED_MOE_SHAPE_IDS = [
+    f"M{s[0]}_K{s[1]}_N{s[2]}_E{s[3]}_topk{s[4]}" for s in FUSED_MOE_SHAPES
+]
 FUSED_INV_ROPE_FP8_QUANT_SHAPES = {
     "NUM_TOKENS": [7] if QUICK_MODE else [1, 7, 32, 128],
     "NUM_HEADS_AND_GROUPS": (
@@ -258,6 +287,121 @@ FUSED_RECURRENT_SHAPES = (
         (64, 16, 32, 128, 128, 128),
     ]
 )
+# (N, n_qh, n_kh, head_size, rotary_dim, is_neox, mrope_interleaved,
+#  mrope_interleaved_glm, section_t, section_h, section_w, label)
+# Shapes cover Qwen3.6-27B/35B-A3B production configs and other
+# mrope variants for multimodal rotary embedding.
+MROTARY_EMBEDDING_SHAPES = (
+    [
+        (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1"),
+    ]
+    if QUICK_MODE
+    else [
+        # Qwen3.6-style interleaved neox (27B: n_qh=16, n_kh=2)
+        (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1"),
+        (4, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-4"),
+        (17, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-17"),
+        (64, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-64"),
+        (1024, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-1k"),
+        (2048, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-2k"),
+        (4096, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-4k"),
+        # Qwen3.6-style interleaved neox (35B-A3B: n_qh=24, n_kh=4)
+        (1, 24, 4, 256, 64, True, True, False, 11, 11, 10, "35B-decode-1"),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            True,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "35B-prefill-1k",
+        ),
+        (
+            4096,
+            24,
+            4,
+            256,
+            64,
+            True,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "35B-prefill-4k",
+        ),
+        # Non-interleaved neox (section=[16,8,8])
+        (1, 24, 4, 256, 64, True, False, False, 16, 8, 8, "non-il-decode-1"),
+        (
+            17,
+            24,
+            4,
+            256,
+            64,
+            True,
+            False,
+            False,
+            16,
+            8,
+            8,
+            "non-il-prefill-17",
+        ),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            True,
+            False,
+            False,
+            16,
+            8,
+            8,
+            "non-il-prefill-1k",
+        ),
+        # GLM-V interleaved (section=[8,12,12], mrope_interleaved_glm=True)
+        (1, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-decode-1"),
+        (17, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-prefill-17"),
+        (1024, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-prefill-1k"),
+        # GPT-J style (non-neox, interleaved)
+        (1, 24, 4, 256, 64, False, True, False, 11, 11, 10, "gptj-decode-1"),
+        (
+            17,
+            24,
+            4,
+            256,
+            64,
+            False,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "gptj-prefill-17",
+        ),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            False,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "gptj-prefill-1k",
+        ),
+    ]
+)
+NORM_SHAPES = [(1, 512), (4, 1024), (32, 2048), (64, 4096), (128, 8192)]
 
 KRON_SHAPES = [
     [(), (2, 3)],
