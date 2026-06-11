@@ -10,7 +10,9 @@ from .attri_util import FUSED_MOE_BENCH_SHAPES
 
 
 def _routing(logits, n_expts_act):
-    sparse_logits = triton_kernels_topk(logits, n_expts_act, apply_softmax=True)
+    sparse_logits = triton_kernels_topk(
+        logits, n_expts_act, apply_softmax=True
+    )
     dispatch_indx = sparse_logits.mask_metadata.row_sorted_indx
     combine_indx = sparse_logits.mask_metadata.col_sorted_indx
     ragged_metadata = make_ragged_tensor_metadata(

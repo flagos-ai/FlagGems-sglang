@@ -277,8 +277,12 @@ def triton_kernel_fused_experts_with_bias(
     else:
         clamp_data = None
 
-    pcg1 = w1_pcg if w1_pcg is not None else PrecisionConfig(w1.dtype, w1.dtype)
-    pcg2 = w2_pcg if w2_pcg is not None else PrecisionConfig(w2.dtype, w2.dtype)
+    pcg1 = (
+        w1_pcg if w1_pcg is not None else PrecisionConfig(w1.dtype, w1.dtype)
+    )
+    pcg2 = (
+        w2_pcg if w2_pcg is not None else PrecisionConfig(w2.dtype, w2.dtype)
+    )
 
     intermediate = matmul_ogs(
         hidden_states,
@@ -357,7 +361,9 @@ def fused_moe_flagos(
         global_num_experts=quant_info.global_num_experts,
     )
 
-    has_bias = quant_info.w13_bias is not None or quant_info.w2_bias is not None
+    has_bias = (
+        quant_info.w13_bias is not None or quant_info.w2_bias is not None
+    )
 
     if has_bias:
         assert (
