@@ -268,6 +268,122 @@ SWIGLU_SPECIAL_SHAPES = (
     ]
 )
 
+# (N, n_qh, n_kh, head_size, rotary_dim, is_neox, mrope_interleaved,
+#  mrope_interleaved_glm, section_t, section_h, section_w, label)
+# Shapes cover Qwen3.6-27B/35B-A3B production configs and other
+# mrope variants for multimodal rotary embedding.
+MROTARY_EMBEDDING_SHAPES = (
+    [
+        (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1"),
+    ]
+    if QUICK_MODE
+    else [
+        # Qwen3.6-style interleaved neox (27B: n_qh=16, n_kh=2)
+        (1, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-1"),
+        (4, 16, 2, 256, 64, True, True, False, 11, 11, 10, "decode-4"),
+        (17, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-17"),
+        (64, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-64"),
+        (1024, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-1k"),
+        (2048, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-2k"),
+        (4096, 16, 2, 256, 64, True, True, False, 11, 11, 10, "prefill-4k"),
+        # Qwen3.6-style interleaved neox (35B-A3B: n_qh=24, n_kh=4)
+        (1, 24, 4, 256, 64, True, True, False, 11, 11, 10, "35B-decode-1"),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            True,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "35B-prefill-1k",
+        ),
+        (
+            4096,
+            24,
+            4,
+            256,
+            64,
+            True,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "35B-prefill-4k",
+        ),
+        # Non-interleaved neox (section=[16,8,8])
+        (1, 24, 4, 256, 64, True, False, False, 16, 8, 8, "non-il-decode-1"),
+        (
+            17,
+            24,
+            4,
+            256,
+            64,
+            True,
+            False,
+            False,
+            16,
+            8,
+            8,
+            "non-il-prefill-17",
+        ),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            True,
+            False,
+            False,
+            16,
+            8,
+            8,
+            "non-il-prefill-1k",
+        ),
+        # GLM-V interleaved (section=[8,12,12], mrope_interleaved_glm=True)
+        (1, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-decode-1"),
+        (17, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-prefill-17"),
+        (1024, 24, 4, 256, 64, True, True, True, 8, 12, 12, "glm-prefill-1k"),
+        # GPT-J style (non-neox, interleaved)
+        (1, 24, 4, 256, 64, False, True, False, 11, 11, 10, "gptj-decode-1"),
+        (
+            17,
+            24,
+            4,
+            256,
+            64,
+            False,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "gptj-prefill-17",
+        ),
+        (
+            1024,
+            24,
+            4,
+            256,
+            64,
+            False,
+            True,
+            False,
+            11,
+            11,
+            10,
+            "gptj-prefill-1k",
+        ),
+    ]
+)
+NORM_SHAPES = [(1, 512), (4, 1024), (32, 2048), (64, 4096), (128, 8192)]
+
 KRON_SHAPES = [
     [(), (2, 3)],
     [(2, 3), ()],
