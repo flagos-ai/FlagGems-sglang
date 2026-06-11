@@ -353,6 +353,7 @@ MROTARY_EMBEDDING_SHAPES = (
         ),
     ]
 )
+NORM_SHAPES = [(1, 512), (4, 1024), (32, 2048), (64, 4096), (128, 8192)]
 
 KRON_SHAPES = [
     [(), (2, 3)],

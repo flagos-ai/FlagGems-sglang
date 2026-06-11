@@ -7,6 +7,7 @@ from flaggems_sglang import runtime
 from flaggems_sglang.ops.mrotary_embedding import (  # noqa: F401
     mrotary_embedding,
 )
+from flaggems_sglang.ops.gemma_rms_norm import gemma_rms_norm  # noqa: F401
 
 device = runtime.device.name
 vendor_name = runtime.device.vendor_name
