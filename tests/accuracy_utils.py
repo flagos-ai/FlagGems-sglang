@@ -94,6 +94,35 @@ FP8_QUANT_SHAPES = {
     "GROUP_SIZE": [512] if QUICK_MODE else [64, 128, 256, 512],
     "SEEDS": [0],
 }
+
+# (M, K, N, E, topk) — num_tokens, hidden_size, intermediate_size,
+# num_experts, top_k
+FUSED_MOE_SHAPES_SMALL: list[tuple[int, ...]] = [
+    (1, 128, 256, 8, 2),
+    (7, 128, 256, 8, 2),
+    (33, 256, 512, 16, 4),
+]
+FUSED_MOE_SHAPES_LARGE: list[tuple[int, ...]] = (
+    []
+    if QUICK_MODE
+    else [
+        (1, 1280, 3072, 64, 8),
+        (4, 1280, 3072, 64, 8),
+        (17, 1280, 3072, 64, 8),
+        (64, 1280, 3072, 64, 8),
+        (1024, 1280, 3072, 64, 8),
+        (2048, 1280, 3072, 64, 8),
+        (4096, 1280, 3072, 64, 8),
+    ]
+)
+FUSED_MOE_SHAPES = FUSED_MOE_SHAPES_SMALL + FUSED_MOE_SHAPES_LARGE
+FUSED_MOE_SMALL_IDS = [
+    f"M{s[0]}_K{s[1]}_N{s[2]}_E{s[3]}_topk{s[4]}"
+    for s in FUSED_MOE_SHAPES_SMALL
+]
+FUSED_MOE_SHAPE_IDS = [
+    f"M{s[0]}_K{s[1]}_N{s[2]}_E{s[3]}_topk{s[4]}" for s in FUSED_MOE_SHAPES
+]
 FUSED_INV_ROPE_FP8_QUANT_SHAPES = {
     "NUM_TOKENS": [7] if QUICK_MODE else [1, 7, 32, 128],
     "NUM_HEADS_AND_GROUPS": (

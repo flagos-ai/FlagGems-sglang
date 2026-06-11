@@ -29,6 +29,19 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (M, K, N, E, topk) tuples for FusedMoE benchmark.
+# Covers decode (small M) and prefill (large M) scenarios with
+# typical MoE dimensions from Mixtral/DeepSeek-class models.
+FUSED_MOE_BENCH_SHAPES = [
+    (1, 1280, 3072, 64, 8),
+    (4, 1280, 3072, 64, 8),
+    (17, 1280, 3072, 64, 8),
+    (64, 1280, 3072, 64, 8),
+    (1024, 1280, 3072, 64, 8),
+    (2048, 1280, 3072, 64, 8),
+    (4096, 1280, 3072, 64, 8),
+]
+
 # (M, N) tuples for GemmaRMSNorm benchmark.  N values match Gemma model
 # hidden dimensions: 512 (2B), 1024, 2048 (7B), 3072, 4096, 5120, 8192.
 # Small batch sizes representative of decode serving scenarios.
