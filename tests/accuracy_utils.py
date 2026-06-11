@@ -268,6 +268,25 @@ SWIGLU_SPECIAL_SHAPES = (
     ]
 )
 
+# (B, H, HV, K, V, pool_size) tuples for fused recurrent decode operators.
+# Shapes match Qwen3.5-35B-A3B deployment configs (TP=1 and TP=2).
+FUSED_RECURRENT_SHAPES = (
+    [(1, 8, 16, 128, 128, 32)]
+    if QUICK_MODE
+    else [
+        (1, 8, 16, 128, 128, 32),
+        (4, 8, 16, 128, 128, 32),
+        (8, 8, 16, 128, 128, 64),
+        (16, 8, 16, 128, 128, 64),
+        (32, 8, 16, 128, 128, 128),
+        (64, 8, 16, 128, 128, 128),
+        (128, 8, 16, 128, 128, 256),
+        (256, 8, 16, 128, 128, 512),
+        (1, 16, 32, 128, 128, 32),
+        (32, 16, 32, 128, 128, 128),
+        (64, 16, 32, 128, 128, 128),
+    ]
+)
 # (N, n_qh, n_kh, head_size, rotary_dim, is_neox, mrope_interleaved,
 #  mrope_interleaved_glm, section_t, section_h, section_w, label)
 # Shapes cover Qwen3.6-27B/35B-A3B production configs and other

@@ -29,6 +29,19 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (B, H, HV, K, V, pool_size) tuples for fused recurrent decode benchmarks.
+# Shapes match Qwen3.5-35B-A3B decode serving configurations.
+FUSED_RECURRENT_BENCH_SHAPES = [
+    (1, 8, 16, 128, 128, 32),
+    (4, 8, 16, 128, 128, 32),
+    (8, 8, 16, 128, 128, 64),
+    (16, 8, 16, 128, 128, 64),
+    (32, 8, 16, 128, 128, 128),
+    (64, 8, 16, 128, 128, 128),
+    (128, 8, 16, 128, 128, 256),
+    (256, 8, 16, 128, 128, 512),
+]
+
 # (M, K, N, E, topk) tuples for FusedMoE benchmark.
 # Covers decode (small M) and prefill (large M) scenarios with
 # typical MoE dimensions from Mixtral/DeepSeek-class models.
