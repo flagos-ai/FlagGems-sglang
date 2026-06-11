@@ -1,6 +1,5 @@
 import pytest
 import torch
-import torch.nn as nn
 
 # Reference: SGLang's compiled Triton kernel as correctness baseline.
 from sgl_kernel import (  # noqa: E402
@@ -10,27 +9,14 @@ from sgl_kernel import gemma_rmsnorm as _sglang_gemma_rmsnorm  # noqa: E402
 
 import flaggems_sglang
 
-from . import accuracy_utils as utils
 from . import conftest as cfg
 
-if cfg.QUICK_MODE:
-    FLOAT_DTYPES = [torch.float32]
-else:
-    FLOAT_DTYPES = utils.FLOAT_DTYPES
+# sgl_kernel.gemma_rmsnorm only dispatches half-precision types (float16/bfloat16).
+FLOAT_DTYPES = [torch.float16, torch.bfloat16]
 
 
-class _MockGemmaRMSNorm(nn.Module):
-    """Minimal mock of torch.nn.Module with the attributes expected by
-    our gemma_rms_norm API."""
-
-    def __init__(
-        self, normalized_shape, eps=1e-6, dtype=torch.float32, device="cpu"
-    ):
-        super().__init__()
-        self.weight = nn.Parameter(
-            torch.zeros(normalized_shape, dtype=dtype, device=device)
-        )
-        self.variance_epsilon = eps
+# NORM_SHAPES: list of (M, N) tuples — M rows, N hidden dim.
+NORM_SHAPES = [(1, 512), (4, 1024), (32, 2048), (64, 4096), (128, 8192)]
 
 
 def _ref_gemma_rms_norm(x, weight, eps):
@@ -40,49 +26,47 @@ def _ref_gemma_rms_norm(x, weight, eps):
 
 def _ref_gemma_fused_add_rms_norm(x, residual, weight, eps):
     """Reference: delegate to SGLang's Triton gemma_fused_add_rmsnorm kernel.
-    Note: sgl_kernel modifies x and residual in-place and returns (x, residual).
+    Note: sgl_kernel modifies x and residual in-place and returns None.
+    After the call, x holds the normalized output and residual holds x+residual.
     """
-    return _sglang_gemma_fused_add_rmsnorm(x, residual, weight, eps)
+    _sglang_gemma_fused_add_rmsnorm(x, residual, weight, eps)
+    return x, residual
 
 
-@pytest.mark.parametrize("norm_shape", utils.NORM_SHAPES)
+@pytest.mark.parametrize("norm_shape", NORM_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.gemma_rms_norm
 def test_gemma_rms_norm(norm_shape, dtype):
     device = cfg.device
-    x_shape, norm_shape_w = norm_shape
-    module = _MockGemmaRMSNorm(
-        norm_shape_w, eps=1e-6, dtype=dtype, device=device
-    )
-    x = torch.randn(x_shape, dtype=dtype, device=device)
+    M, N = norm_shape
+    weight = torch.zeros(N, dtype=dtype, device=device)
+    x = torch.randn(M, N, dtype=dtype, device=device)
 
-    ref = _ref_gemma_rms_norm(x, module.weight.data, module.variance_epsilon)
-    res = flaggems_sglang.gemma_rms_norm(module, x)
+    ref = _ref_gemma_rms_norm(x, weight, 1e-6)
+    res = flaggems_sglang.gemma_rms_norm(x, weight, eps=1e-6)
 
     atol = 1e-2 if dtype == torch.float16 else 5e-3
     torch.testing.assert_close(res, ref, atol=atol, rtol=1e-2)
 
 
-@pytest.mark.parametrize("norm_shape", utils.NORM_SHAPES)
+@pytest.mark.parametrize("norm_shape", NORM_SHAPES)
 @pytest.mark.parametrize("dtype", FLOAT_DTYPES)
 @pytest.mark.gemma_rms_norm_res
 def test_gemma_rms_norm_with_residual(norm_shape, dtype):
     device = cfg.device
-    x_shape, norm_shape_w = norm_shape
-    module = _MockGemmaRMSNorm(
-        norm_shape_w, eps=1e-6, dtype=dtype, device=device
-    )
-    x = torch.randn(x_shape, dtype=dtype, device=device)
-    residual = torch.randn(x_shape, dtype=dtype, device=device)
+    M, N = norm_shape
+    weight = torch.zeros(N, dtype=dtype, device=device)
+    x = torch.randn(M, N, dtype=dtype, device=device)
+    residual = torch.randn(M, N, dtype=dtype, device=device)
 
     x_ref = x.clone()
     res_ref = residual.clone()
     ref_out, ref_residual = _ref_gemma_fused_add_rms_norm(
-        x_ref, res_ref, module.weight.data, module.variance_epsilon
+        x_ref, res_ref, weight, 1e-6
     )
 
     out, res_out = flaggems_sglang.gemma_rms_norm(
-        module, x.clone(), residual.clone()
+        x.clone(), weight, eps=1e-6, residual=residual.clone()
     )
 
     atol = 1e-2 if dtype == torch.float16 else 5e-3
