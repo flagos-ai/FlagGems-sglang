@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import time
 
 import pytest
 import torch
@@ -254,32 +253,6 @@ def clear_function_cache():
 def clear_module_cache():
     yield
     torch_device_fn.empty_cache()
-
-
-@pytest.fixture()
-def benchmark():
-    """Simple benchmark fixture for CI environments without pytest-benchmark."""
-
-    def _run(func, *args, **kwargs):
-        # Warmup
-        for _ in range(Config.warm_up):
-            func(*args, **kwargs)
-        torch_device_fn.synchronize()
-
-        # Timed runs
-        times = []
-        for _ in range(Config.repetition):
-            torch_device_fn.synchronize()
-            start = time.perf_counter()
-            func(*args, **kwargs)
-            torch_device_fn.synchronize()
-            end = time.perf_counter()
-            times.append(end - start)
-
-        avg_ms = sum(times) / len(times) * 1000
-        print(f"  {avg_ms:.3f} ms (avg over {len(times)} runs)")
-
-    return _run
 
 
 @pytest.fixture()
