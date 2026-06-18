@@ -1,2 +1,3 @@
 include:
+- persistent_topk
 - relu

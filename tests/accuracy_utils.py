@@ -109,6 +109,24 @@ FUSED_INV_ROPE_FP8_QUANT_SHAPES = {
     "SEEDS": [0, 42],
 }
 DISTRIBUTION_SHAPES = [(20, 320, 15)]
+
+# (num_rows, seq_len, k) tuples for persistent top-k benchmarks.
+# Shapes simulate DeepSeek-V4 sparse attention inference patterns.
+PERSISTENT_TOPK_SHAPES = (
+    [(1, 1024, 1024)]
+    if QUICK_MODE
+    else [
+        (1, 1024, 1024),
+        (1, 2048, 1024),
+        (1, 4096, 1024),
+        (4, 4096, 1024),
+        (8, 8192, 1024),
+        (16, 16384, 1024),
+        (32, 32768, 1024),
+        (4, 4096, 512),
+        (4, 4096, 2048),
+    ]
+)
 REDUCTION_SHAPES = (
     [(2, 32)] if QUICK_MODE else [(1, 2), (4096, 256), (200, 40999, 3)]
 )

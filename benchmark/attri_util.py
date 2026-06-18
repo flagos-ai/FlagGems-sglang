@@ -29,6 +29,20 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (num_rows, seq_len, k) tuples for persistent top-k benchmarks.
+# Shapes simulate DeepSeek-V4 sparse attention decode/prefill patterns.
+PERSISTENT_TOPK_BENCH_SHAPES = [
+    (1, 1024, 1024),
+    (1, 2048, 1024),
+    (1, 4096, 1024),
+    (4, 4096, 1024),
+    (8, 8192, 1024),
+    (16, 16384, 1024),
+    (32, 32768, 1024),
+    (4, 4096, 512),
+    (4, 4096, 2048),
+]
+
 
 def model_shapes():
     # batch sizes * seq lengths
