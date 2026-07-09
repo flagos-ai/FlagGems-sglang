@@ -77,7 +77,9 @@ def topk_ascend(
         topk_ids = topk_ids.to(torch.int32)
         topk_weights = scores.gather(1, topk_ids)
         if renormalize:
-            topk_weights = topk_weights / topk_weights.sum(dim=-1, keepdim=True)
+            topk_weights = topk_weights / topk_weights.sum(
+                dim=-1, keepdim=True
+            )
         else:
             topk_weights = topk_weights * topk_config.routed_scaling_factor
         topk_weights = topk_weights.to(torch.float32)
@@ -97,7 +99,9 @@ def topk_ascend(
                 else None
             ),
             k_group=topk_config.topk_group if use_grouped_topk else 1,
-            group_count=topk_config.num_expert_group if use_grouped_topk else 1,
+            group_count=(
+                topk_config.num_expert_group if use_grouped_topk else 1
+            ),
             group_select_mode=(1 if use_grouped_topk else 0),
             renorm=0,
             norm_type=1,  # 1 = sigmoid, 0 = softmax
