@@ -17,6 +17,7 @@ import torch
 import torch.nn.functional as F
 
 import flaggems_sglang
+import flaggems_sglang.ops.context_attention as context_attention_module
 
 from . import conftest as cfg
 
@@ -26,6 +27,26 @@ CASES = [
     ([65, 7, 33], 4, 4, 96),
     ([1, 63], 8, 1, 128),
 ]
+
+
+def test_context_attention_launch_grid_is_bounded():
+    # Reproduce the official Ascend failure product: 2,112 * 32 = 67,584.
+    q_programs, batch_heads, batch_heads_per_launch = (
+        context_attention_module._launch_plan(
+            total_tokens=135168,
+            batch_size=1,
+            q_heads=32,
+            block_m=64,
+            max_input_len=135168,
+        )
+    )
+    assert q_programs == 2112
+    assert batch_heads == 32
+    assert (
+        q_programs * batch_heads_per_launch
+        <= context_attention_module._MAX_GRID_PROGRAMS
+    )
+    assert batch_heads_per_launch == 31
 
 
 def _reference(q, k, v, starts, lengths, is_causal):
