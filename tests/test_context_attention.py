@@ -47,6 +47,35 @@ def test_context_attention_launch_grid_is_bounded():
         <= context_attention_module._MAX_GRID_PROGRAMS
     )
     assert batch_heads_per_launch == 31
+    assert q_programs * batch_heads_per_launch == 65472
+
+
+def test_context_attention_launch_grid_uses_one_dimension(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (grid, kwargs["batch_head_start"], kwargs["q_programs"])
+                )
+                return None
+
+            return launch
+
+    monkeypatch.setattr(
+        context_attention_module, "_context_attention_kernel", FakeKernel()
+    )
+    q = torch.empty((1, 65536, 1))
+    k = torch.empty_like(q)
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([1], dtype=torch.int32)
+
+    context_attention_module._run_context_attention(
+        q, k, k, starts, lengths, 1, False
+    )
+
+    assert launches == [((65535,), 0, 1), ((1,), 65535, 1)]
 
 
 def _reference(q, k, v, starts, lengths, is_causal):

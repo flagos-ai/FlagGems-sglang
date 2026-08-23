@@ -49,6 +49,7 @@ def _context_attention_kernel(
     stride_start: tl.constexpr,
     stride_len: tl.constexpr,
     batch_head_start,
+    q_programs: tl.constexpr,
     q_heads: tl.constexpr,
     group_size: tl.constexpr,
     head_dim: tl.constexpr,
@@ -57,13 +58,17 @@ def _context_attention_kernel(
     BLOCK_D: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
 ):
-    batch_head_id = tl.program_id(1) + batch_head_start
+    # Flatten the logical (query block, batch-head) grid. Some backends cap
+    # grid.y at 255 even though they accept up to 65,535 total programs.
+    program_id = tl.program_id(0)
+    batch_head_offset = program_id // q_programs
+    batch_head_id = batch_head_offset + batch_head_start
     batch_id = batch_head_id // q_heads
     q_head_id = batch_head_id - batch_id * q_heads
     seq_len = tl.load(b_seq_len + batch_id * stride_len).to(tl.int32)
     seq_start = tl.load(b_start_loc + batch_id * stride_start).to(tl.int32)
     kv_head_id = q_head_id // group_size
-    q_block_id = tl.program_id(0)
+    q_block_id = program_id - batch_head_offset * q_programs
 
     # max_input_len controls launch parallelism only.  A grid-stride loop keeps
     # the result complete when that hint is smaller than the actual sequence.
@@ -156,7 +161,7 @@ def _context_attention_kernel(
             + offs_d[None, :] * stride_od
         )
         tl.store(out_ptrs, result, mask=mask_m[:, None] & mask_d[None, :])
-        q_block_id += tl.num_programs(0)
+        q_block_id += q_programs
 
 
 _MAX_GRID_PROGRAMS = 65535
@@ -215,7 +220,7 @@ def _run_context_attention(
         batch_head_count = min(
             batch_heads_per_launch, batch_heads - batch_head_start
         )
-        grid = (q_programs, batch_head_count)
+        grid = (q_programs * batch_head_count,)
         _context_attention_kernel[grid](
             q,
             k,
@@ -239,6 +244,7 @@ def _run_context_attention(
             stride_start=b_start_loc.stride(0),
             stride_len=b_seq_len.stride(0),
             batch_head_start=batch_head_start,
+            q_programs=q_programs,
             q_heads=q_heads,
             group_size=q_heads // kv_heads,
             head_dim=head_dim,
