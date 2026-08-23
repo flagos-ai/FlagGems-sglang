@@ -17,14 +17,12 @@ import torch
 
 import flaggems_sglang
 
-BENCHMARK_CASES = [
-    ([128, 128, 128, 128], 16, 64),
-    ([512, 512], 16, 64),
-    ([2048], 16, 128),
-]
+from .attri_util import CONTEXT_ATTENTION_BENCH_SHAPES
 
 
-@pytest.mark.parametrize("seq_lens,num_heads,head_dim", BENCHMARK_CASES)
+@pytest.mark.parametrize(
+    "seq_lens,num_heads,head_dim", CONTEXT_ATTENTION_BENCH_SHAPES
+)
 @pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16])
 @pytest.mark.parametrize("is_causal", [False, True])
 @pytest.mark.context_attention
