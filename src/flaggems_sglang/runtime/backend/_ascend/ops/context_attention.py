@@ -12,17 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Kunlunxin context attention with a static query-block kernel."""
+"""Ascend context attention with a bounded one-dimensional launch grid."""
 
 import torch
 import triton
 import triton.language as tl
 
-_MAX_GRID_PROGRAMS = 65535
+_BLOCK_M = 32
+_BLOCK_N = 32
+_MAX_GRID_PROGRAMS = 32768
 
 
 @triton.jit
-def _context_attention_static_q_kernel(
+def _context_attention_kernel(
     q,
     k,
     v,
@@ -55,20 +57,22 @@ def _context_attention_static_q_kernel(
     BLOCK_D: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
 ):
-    # One flat program owns one Q block: no outer grid-stride loop.
     program_id = tl.program_id(0)
     batch_head_offset = program_id // q_programs
     batch_head_id = batch_head_offset + batch_head_start
     batch_id = batch_head_id // q_heads
     q_head_id = batch_head_id - batch_id * q_heads
     q_block_id = q_block_start + program_id - batch_head_offset * q_programs
+
     seq_len = tl.load(b_seq_len + batch_id * stride_len).to(tl.int32)
     seq_start = tl.load(b_start_loc + batch_id * stride_start).to(tl.int32)
     kv_head_id = q_head_id // group_size
     offs_m = q_block_id * BLOCK_M + tl.arange(0, BLOCK_M)
     offs_n = tl.arange(0, BLOCK_N)
     offs_d = tl.arange(0, BLOCK_D)
-    mask_m, mask_d = offs_m < seq_len, offs_d < head_dim
+    mask_m = offs_m < seq_len
+    mask_d = offs_d < head_dim
+
     q_tile = tl.load(
         q
         + (seq_start + offs_m[:, None]) * stride_qt
@@ -86,9 +90,8 @@ def _context_attention_static_q_kernel(
         if IS_CAUSAL
         else seq_len
     )
-    # total_tokens is only a conservative host-side sequence bound. Empty
-    # ragged-tail programs must not scan the full K/V sequence.
     end_n = tl.where(q_block_id * BLOCK_M < seq_len, end_n, 0)
+
     for start_n in range(0, end_n, BLOCK_N):
         start_n = tl.multiple_of(start_n, BLOCK_N)
         key_pos = start_n + offs_n
@@ -121,6 +124,7 @@ def _context_attention_static_q_kernel(
         accumulator += tl.dot(probabilities.to(v_tile.dtype), v_tile)
         running_sum = running_sum * alpha + tl.sum(probabilities, axis=1)
         running_max = new_max
+
     tl.store(
         out
         + (seq_start + offs_m[:, None]) * stride_ot
@@ -134,19 +138,19 @@ def _context_attention_static_q_kernel(
 def context_attention(
     q, k, v, b_start_loc, b_seq_len, max_input_len, is_causal
 ):
-    """Run static Q blocks without truncating on a low max_input_len."""
-    del max_input_len
+    """Compute packed attention with every launch below Ascend's cap."""
     out = torch.empty(q.shape, device=q.device, dtype=torch.float32)
     batch_size = b_seq_len.numel()
     if batch_size == 0 or q.numel() == 0:
         return out
+
     q_heads, kv_heads, head_dim = q.shape[1], k.shape[1], q.shape[2]
     assert kv_heads == v.shape[1]
     assert q_heads % kv_heads == 0
     assert k.shape[2] == head_dim and v.shape[2] == head_dim
-    # q.shape[0] is host-visible and bounds every packed sequence; no metadata
-    # device-to-host read is needed to cover under-reported max_input_len.
-    total_q_programs = triton.cdiv(q.shape[0], 64)
+    del max_input_len
+
+    total_q_programs = triton.cdiv(q.shape[0], _BLOCK_M)
     batch_heads = batch_size * q_heads
     for q_block_start in range(0, total_q_programs, _MAX_GRID_PROGRAMS):
         q_programs = min(_MAX_GRID_PROGRAMS, total_q_programs - q_block_start)
@@ -155,9 +159,7 @@ def context_attention(
             batch_head_count = min(
                 batch_heads_per_launch, batch_heads - batch_head_start
             )
-            _context_attention_static_q_kernel[
-                (q_programs * batch_head_count,)
-            ](
+            _context_attention_kernel[(q_programs * batch_head_count,)](
                 q,
                 k,
                 v,
@@ -185,8 +187,8 @@ def context_attention(
                 q_heads=q_heads,
                 group_size=q_heads // kv_heads,
                 head_dim=head_dim,
-                BLOCK_M=64,
-                BLOCK_N=32,
+                BLOCK_M=_BLOCK_M,
+                BLOCK_N=_BLOCK_N,
                 BLOCK_D=triton.next_power_of_2(head_dim),
                 IS_CAUSAL=bool(is_causal),
                 num_warps=4,

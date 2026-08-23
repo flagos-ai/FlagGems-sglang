@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import importlib
+
 import pytest
 import torch
 import torch.nn.functional as F
@@ -20,6 +22,13 @@ import flaggems_sglang
 import flaggems_sglang.ops.context_attention as context_attention_module
 
 from . import conftest as cfg
+
+ascend_context_attention_module = importlib.import_module(
+    "flaggems_sglang.runtime.backend._ascend.ops.context_attention"
+)
+kunlun_context_attention_module = importlib.import_module(
+    "flaggems_sglang.runtime.backend._kunlunxin.ops.context_attention"
+)
 
 CASES = [
     ([1], 2, 2, 32),
@@ -76,6 +85,155 @@ def test_context_attention_launch_grid_uses_one_dimension(monkeypatch):
     )
 
     assert launches == [((65535,), 0, 1), ((1,), 65535, 1)]
+
+
+def test_ascend_context_attention_ignores_underreported_hint(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (grid, kwargs["q_block_start"], kwargs["q_programs"])
+                )
+
+            return launch
+
+    monkeypatch.setattr(
+        ascend_context_attention_module,
+        "_context_attention_kernel",
+        FakeKernel(),
+    )
+    q = torch.empty((4096, 2, 1), dtype=torch.uint8)
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([4096], dtype=torch.int32)
+
+    ascend_context_attention_module.context_attention(
+        q, q, q, starts, lengths, 1, False
+    )
+
+    assert launches == [((256,), 0, 128)]
+
+
+def test_ascend_context_attention_covers_non_aligned_length(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (grid, kwargs["q_block_start"], kwargs["q_programs"])
+                )
+
+            return launch
+
+    monkeypatch.setattr(
+        ascend_context_attention_module,
+        "_context_attention_kernel",
+        FakeKernel(),
+    )
+    q = torch.empty((4097, 2, 1), dtype=torch.uint8)
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([4097], dtype=torch.int32)
+
+    ascend_context_attention_module.context_attention(
+        q, q, q, starts, lengths, 1, False
+    )
+
+    assert launches == [((258,), 0, 129)]
+
+
+def test_ascend_long_grid_stays_below_observed_block_boundary(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (grid, kwargs["batch_head_start"], kwargs["q_programs"])
+                )
+
+            return launch
+
+    monkeypatch.setattr(
+        ascend_context_attention_module,
+        "_context_attention_kernel",
+        FakeKernel(),
+    )
+    q = torch.empty((135168, 8, 1), dtype=torch.uint8)
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([135168], dtype=torch.int32)
+
+    ascend_context_attention_module.context_attention(
+        q, q, q, starts, lengths, 135168, False
+    )
+
+    assert launches == [
+        ((29568,), 0, 4224),
+        ((4224,), 7, 4224),
+    ]
+    assert max(grid[0] for grid, _, _ in launches) <= 32768
+
+
+def test_kunlunxin_static_q_launch_covers_underreported_hint(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (
+                        grid,
+                        kwargs["q_block_start"],
+                        kwargs["q_programs"],
+                        kwargs["batch_head_start"],
+                    )
+                )
+
+            return launch
+
+    monkeypatch.setattr(
+        kunlun_context_attention_module,
+        "_context_attention_static_q_kernel",
+        FakeKernel(),
+    )
+    q = torch.empty((130, 2, 32))
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([130], dtype=torch.int32)
+
+    kunlun_context_attention_module.context_attention(
+        q, q, q, starts, lengths, 1, False
+    )
+
+    assert launches == [((6,), 0, 3, 0)]
+
+
+def test_kunlunxin_static_q_launch_shards_q_blocks(monkeypatch):
+    launches = []
+
+    class FakeKernel:
+        def __getitem__(self, grid):
+            def launch(*args, **kwargs):
+                launches.append(
+                    (grid, kwargs["q_block_start"], kwargs["q_programs"])
+                )
+
+            return launch
+
+    monkeypatch.setattr(
+        kunlun_context_attention_module,
+        "_context_attention_static_q_kernel",
+        FakeKernel(),
+    )
+    q = torch.empty((65536 * 64, 1, 1), dtype=torch.uint8)
+    starts = torch.tensor([0], dtype=torch.int32)
+    lengths = torch.tensor([1], dtype=torch.int32)
+
+    kunlun_context_attention_module.context_attention(
+        q, q, q, starts, lengths, 1, False
+    )
+
+    assert launches == [((65535,), 0, 65535), ((1,), 65535, 1)]
 
 
 def _reference(q, k, v, starts, lengths, is_causal):
