@@ -146,7 +146,7 @@ def context_attention(
     assert k.shape[2] == head_dim and v.shape[2] == head_dim
     # q.shape[0] is host-visible and bounds every packed sequence; no metadata
     # device-to-host read is needed to cover under-reported max_input_len.
-    total_q_programs = triton.cdiv(q.shape[0], 64)
+    total_q_programs = triton.cdiv(q.shape[0], 32)
     batch_heads = batch_size * q_heads
     for q_block_start in range(0, total_q_programs, _MAX_GRID_PROGRAMS):
         q_programs = min(_MAX_GRID_PROGRAMS, total_q_programs - q_block_start)
@@ -185,7 +185,7 @@ def context_attention(
                 q_heads=q_heads,
                 group_size=q_heads // kv_heads,
                 head_dim=head_dim,
-                BLOCK_M=64,
+                BLOCK_M=32,
                 BLOCK_N=32,
                 BLOCK_D=triton.next_power_of_2(head_dim),
                 IS_CAUSAL=bool(is_causal),
