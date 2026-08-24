@@ -46,7 +46,7 @@ def _context_attention_static_q_kernel(
     stride_len: tl.constexpr,
     batch_head_start,
     q_block_start,
-    q_programs: tl.constexpr,
+    q_programs,
     q_heads: tl.constexpr,
     group_size: tl.constexpr,
     head_dim: tl.constexpr,
