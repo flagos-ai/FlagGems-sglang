@@ -44,9 +44,8 @@ def _context_attention_static_q_kernel(
     stride_od: tl.constexpr,
     stride_start: tl.constexpr,
     stride_len: tl.constexpr,
-    batch_head_start,
+    batch_head_id,
     q_block_start,
-    q_programs,
     q_heads: tl.constexpr,
     group_size: tl.constexpr,
     head_dim: tl.constexpr,
@@ -55,13 +54,10 @@ def _context_attention_static_q_kernel(
     BLOCK_D: tl.constexpr,
     IS_CAUSAL: tl.constexpr,
 ):
-    # One flat program owns one Q block: no outer grid-stride loop.
-    program_id = tl.program_id(0)
-    batch_head_offset = program_id // q_programs
-    batch_head_id = batch_head_offset + batch_head_start
+    # Each launch owns one batch-head, so the sole program axis is the Q block.
+    q_block_id = q_block_start + tl.program_id(0)
     batch_id = batch_head_id // q_heads
     q_head_id = batch_head_id - batch_id * q_heads
-    q_block_id = q_block_start + program_id - batch_head_offset * q_programs
     seq_len = tl.load(b_seq_len + batch_id * stride_len).to(tl.int32)
     seq_start = tl.load(b_start_loc + batch_id * stride_start).to(tl.int32)
     kv_head_id = q_head_id // group_size
@@ -146,18 +142,16 @@ def context_attention(
     assert k.shape[2] == head_dim and v.shape[2] == head_dim
     # q.shape[0] is host-visible and bounds every packed sequence; no metadata
     # device-to-host read is needed to cover under-reported max_input_len.
-    total_q_programs = triton.cdiv(q.shape[0], 32)
+    total_q_programs = triton.cdiv(q.shape[0], 64)
     batch_heads = batch_size * q_heads
-    for q_block_start in range(0, total_q_programs, _MAX_GRID_PROGRAMS):
-        q_programs = min(_MAX_GRID_PROGRAMS, total_q_programs - q_block_start)
-        batch_heads_per_launch = max(1, _MAX_GRID_PROGRAMS // q_programs)
-        for batch_head_start in range(0, batch_heads, batch_heads_per_launch):
-            batch_head_count = min(
-                batch_heads_per_launch, batch_heads - batch_head_start
+    # Launch one batch-head at a time to keep the kernel's 1D program mapping
+    # direct. Q blocks are independently sharded to satisfy Kunlun's grid cap.
+    for batch_head_id in range(batch_heads):
+        for q_block_start in range(0, total_q_programs, _MAX_GRID_PROGRAMS):
+            q_programs = min(
+                _MAX_GRID_PROGRAMS, total_q_programs - q_block_start
             )
-            _context_attention_static_q_kernel[
-                (q_programs * batch_head_count,)
-            ](
+            _context_attention_static_q_kernel[(q_programs,)](
                 q,
                 k,
                 v,
@@ -179,13 +173,12 @@ def context_attention(
                 stride_od=out.stride(2),
                 stride_start=b_start_loc.stride(0),
                 stride_len=b_seq_len.stride(0),
-                batch_head_start=batch_head_start,
+                batch_head_id=batch_head_id,
                 q_block_start=q_block_start,
-                q_programs=q_programs,
                 q_heads=q_heads,
                 group_size=q_heads // kv_heads,
                 head_dim=head_dim,
-                BLOCK_M=32,
+                BLOCK_M=64,
                 BLOCK_N=32,
                 BLOCK_D=triton.next_power_of_2(head_dim),
                 IS_CAUSAL=bool(is_causal),
