@@ -107,6 +107,4 @@ def chunk_local_cumsum_scalar(g, chunk_size, reverse=False, scale=None):
     return launch(g, chunk_size, reverse, scale, *config)
 
 
-reference = chunk_local_cumsum_scalar
-
 __all__ = ["chunk_local_cumsum_scalar"]

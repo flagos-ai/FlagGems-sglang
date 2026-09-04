@@ -183,6 +183,4 @@ def chunk_local_cumsum_scalar(g, chunk_size, reverse=False, scale=None):
     return _launch_3d(g, chunk_size, reverse, scale, 16, 4)
 
 
-reference = chunk_local_cumsum_scalar
-
 __all__ = ["chunk_local_cumsum_scalar"]
