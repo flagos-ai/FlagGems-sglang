@@ -84,6 +84,4 @@ def merge_state(prefix_output, prefix_lse, suffix_output, suffix_lse):
     return output, output_lse
 
 
-reference = merge_state
-
 __all__ = ["merge_state"]
