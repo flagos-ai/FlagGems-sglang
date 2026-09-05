@@ -69,6 +69,17 @@ FUSED_MOE_BENCH_SHAPES = [
     (4096, 1280, 3072, 64, 8),
 ]
 
+# (num_tokens, top_k, hidden_dim) tuples for MoE output reduction.
+# The small token counts cover decode, while the larger counts cover prefill.
+MOE_SUM_REDUCE_BENCH_SHAPES = [
+    (1, 9, 4096),
+    (16, 9, 4096),
+    (64, 9, 4096),
+    (256, 9, 4096),
+    (1024, 9, 4096),
+    (4096, 9, 4096),
+]
+
 # (M, N) tuples for GemmaRMSNorm benchmark.  N values match Gemma model
 # hidden dimensions: 512 (2B), 1024, 2048 (7B), 3072, 4096, 5120, 8192.
 # Small batch sizes representative of decode serving scenarios.
