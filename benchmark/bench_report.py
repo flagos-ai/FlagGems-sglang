@@ -44,7 +44,6 @@ def do_bench_us(fn, warmup=25, rep=100) -> float:
     replays) instead of CPU wall-clock, which is inaccurate for async GPU
     kernels. ``warmup``/``rep`` are in milliseconds. Returns microseconds.
     """
-    device = flaggems_sglang.device
     _do_bench = triton.testing.do_bench
     return _do_bench(fn, warmup=warmup, rep=rep, return_mode="median") * 1e3
 
