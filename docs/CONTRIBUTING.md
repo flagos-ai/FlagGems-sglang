@@ -52,8 +52,8 @@ Use this decision tree:
   under `runtime/backend/_<vendor>/<arch>/ops/`.
 
 Routing is by **function name**, not import path. A vendor override for
-`gemma_rms_norm` simply defines `def gemma_rms_norm(...)` in
-`_<vendor>/ops/gemma_rms_norm.py` and re-exports it via that folder's
+an op simply defines `def my_op(...)` in
+`_<vendor>/ops/my_op.py` and re-exports it via that folder's
 `ops/__init__.py`. Missing operators fall back to the generic implementation
 automatically, so vendors only ship what they specialize.
 
@@ -137,7 +137,7 @@ print(flaggems_sglang.my_op.__module__)  # confirms which tier resolved
 Every new op needs a correctness test at `tests/test_my_op.py`. The filename
 must match the source stem so CI picks it up automatically.
 
-Skeleton — mirror an existing test like `tests/test_gemma_rms_norm.py`:
+Skeleton — mirror an existing test like `tests/test_silu_and_mul.py`:
 
 ```python
 # Copyright 2026 FlagOS Contributors
@@ -175,7 +175,7 @@ def test_my_op(shape, dtype):
 Guidelines:
 
 - **Reference correctness against an established implementation** — prefer
-  `sgl_kernel` when available (as `test_gemma_rms_norm.py` does), otherwise
+  `sgl_kernel` when available, otherwise
   a torch reference. Do not compare against your own kernel.
 - **Tag each test with `@pytest.mark.<op_name>`.** Markers are used to
   select subsets in CI and locally.
@@ -197,7 +197,7 @@ pytest -q tests/test_my_op.py --quick
 ## 4. Add a benchmark
 
 Every new op also gets a perf benchmark at `benchmark/test_my_op.py`. Mirror
-`benchmark/test_gemma_rms_norm.py`:
+`benchmark/test_silu_and_mul.py`:
 
 ```python
 # Copyright 2026 FlagOS Contributors

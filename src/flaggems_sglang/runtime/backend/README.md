@@ -165,9 +165,9 @@ on name collision:
 | 2        | `runtime/backend/_<vendor>/<arch>/ops` (e.g. `_nvidia/hopper/ops`) | Per-arch specialization     |
 
 Routing is driven by function **name**. A vendor override for
-`gemma_rms_norm` simply defines `def gemma_rms_norm(...)` in
-`_<vendor>/ops/gemma_rms_norm.py` with
-`__all__ = ["gemma_rms_norm"]` at the module level — the registrar
+an op simply defines `def my_op(...)` in
+`_<vendor>/ops/my_op.py` with
+`__all__ = ["my_op"]` at the module level — the registrar
 discovers it by walking the `ops/` package, no `ops/__init__.py`
 re-export required. Missing operators automatically fall back to the
 generic `flaggems_sglang.ops.*` implementation, so vendors only ship
@@ -180,9 +180,9 @@ routing result at runtime:
 ```python
 import flaggems_sglang
 
-flaggems_sglang.all_registered_ops()          # -> ['fused_recurrent_...', 'gemma_rms_norm', ...]
-flaggems_sglang.get_op("gemma_rms_norm")      # -> resolved callable for current device
-flaggems_sglang.gemma_rms_norm.__module__     # -> module the resolved impl came from
+flaggems_sglang.all_registered_ops()          # -> ['silu_and_mul', 'mrope_fused', ...]
+flaggems_sglang.get_op("silu_and_mul")        # -> resolved callable for current device
+flaggems_sglang.silu_and_mul.__module__       # -> module the resolved impl came from
 ```
 
 ## Adding operators to an existing backend

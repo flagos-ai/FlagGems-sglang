@@ -363,11 +363,7 @@ class Benchmark:
             end = time.time()
             latency = (end - start) / Config.repetition * 1000
         elif Config.mode == BenchMode.KERNEL:
-            do_bench = (
-                triton.musa_testing.do_bench
-                if device == "musa"
-                else triton.testing.do_bench
-            )
+            do_bench = triton.testing.do_bench
             latency = do_bench(
                 fn,
                 warmup=Config.warm_up,
