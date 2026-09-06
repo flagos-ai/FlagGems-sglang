@@ -17,8 +17,8 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("per_group_transpose")
 
@@ -36,11 +36,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -50,10 +58,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
 def _a(m, k, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(m, k, generator=g, device=flaggems_sglang.device, dtype=dtype).contiguous()
+    return torch.randn(
+        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
+    ).contiguous()
 
 
 def _offsets(counts):
@@ -88,8 +97,12 @@ BENCH_CASES = [
 @pytest.mark.per_group_transpose
 def test_per_group_transpose(case_idx):
     case = CORRECTNESS_CASES[case_idx]
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
-    kwargs = case if isinstance(case, dict) else {};
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
+    kwargs = case if isinstance(case, dict) else {}
 
     # Reference
     expected = reference(**kwargs)

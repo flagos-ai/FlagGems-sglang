@@ -22,14 +22,12 @@ Triton kernel and the pure-torch reference to compute speedup.
 import pytest
 import torch
 
+import flaggems_sglang
+from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.ops.mrope_fused import mrope_fused
 from flaggems_sglang.reference import get_reference
 
-from benchmark.bench_report import do_bench_us, record_case
-
 mrope_fused_ref = get_reference("mrope_fused")
-
-import flaggems_sglang
 
 # Bench shapes: (num_tokens, n_qh, n_kh, head_size, rotary_dim, mrope_section, max_pos)
 BENCH_CASES = [
@@ -39,15 +37,21 @@ BENCH_CASES = [
     (8192, 8, 2, 128, 128, [16, 24, 24], 4096),
 ]
 
-BENCH_IDS = [f"T{c[0]}_qh{c[1]}_kh{c[2]}_hd{c[3]}_rd{c[4]}" for c in BENCH_CASES]
+BENCH_IDS = [
+    f"T{c[0]}_qh{c[1]}_kh{c[2]}_hd{c[3]}_rd{c[4]}" for c in BENCH_CASES
+]
 
 
 def _make_inputs(case, device):
-    num_tokens, n_qh, n_kh, head_size, rotary_dim, mrope_section, max_pos = case
+    num_tokens, n_qh, n_kh, head_size, rotary_dim, mrope_section, max_pos = (
+        case
+    )
     dtype = torch.bfloat16
     q = torch.randn(num_tokens, n_qh * head_size, device=device, dtype=dtype)
     k = torch.randn(num_tokens, n_kh * head_size, device=device, dtype=dtype)
-    cos_sin_cache = torch.randn(max_pos, rotary_dim, device=device, dtype=dtype)
+    cos_sin_cache = torch.randn(
+        max_pos, rotary_dim, device=device, dtype=dtype
+    )
     positions = torch.randint(
         0, max_pos, (3, num_tokens), device=device, dtype=torch.int64
     )
@@ -66,12 +70,24 @@ def test_mrope_fused_perf(case_idx):
 
     def run_triton():
         return mrope_fused(
-            q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
+            q,
+            k,
+            cos_sin_cache,
+            positions,
+            mrope_section,
+            head_size,
+            rotary_dim,
         )
 
     def run_ref():
         return mrope_fused_ref(
-            q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
+            q,
+            k,
+            cos_sin_cache,
+            positions,
+            mrope_section,
+            head_size,
+            rotary_dim,
         )
 
     ref_us = do_bench_us(run_ref)

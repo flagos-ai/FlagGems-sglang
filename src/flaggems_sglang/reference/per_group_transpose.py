@@ -18,7 +18,6 @@ import torch
 def reference(a, expert_offsets, m_alignment=1):
     m, k = a.shape
     out = torch.empty_like(a)
-    flat_in = a.reshape(-1)
     flat_out = out.reshape(-1)
     num_experts = expert_offsets.numel() - 1
     for e in range(num_experts):

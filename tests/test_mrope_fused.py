@@ -23,11 +23,10 @@ import torch
 
 from flaggems_sglang.ops.mrope_fused import mrope_fused
 from flaggems_sglang.reference import get_reference
-import flaggems_sglang
-
-mrope_fused_ref = get_reference("mrope_fused")
 
 from . import conftest as cfg
+
+mrope_fused_ref = get_reference("mrope_fused")
 
 # ---------------------------------------------------------------------------
 # Test cases (from kernel-comp-baseline/problems/rope/mrope_fused/cases.py)
@@ -46,9 +45,7 @@ BENCH_CASES = [
 
 ALL_CASES = CORRECTNESS_CASES + BENCH_CASES
 
-CASE_IDS = [
-    f"T{c[0]}_qh{c[1]}_kh{c[2]}_hd{c[3]}_rd{c[4]}" for c in ALL_CASES
-]
+CASE_IDS = [f"T{c[0]}_qh{c[1]}_kh{c[2]}_hd{c[3]}_rd{c[4]}" for c in ALL_CASES]
 
 
 # ---------------------------------------------------------------------------
@@ -77,17 +74,34 @@ def test_mrope_fused(case):
         max_pos, rotary_dim, generator=g, device=device, dtype=dtype
     )
     positions = torch.randint(
-        0, max_pos, (3, num_tokens), generator=g, device=device, dtype=torch.int64
+        0,
+        max_pos,
+        (3, num_tokens),
+        generator=g,
+        device=device,
+        dtype=torch.int64,
     )
 
     # Reference (pure torch)
     q_ref, k_ref = mrope_fused_ref(
-        q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim,
+        q,
+        k,
+        cos_sin_cache,
+        positions,
+        mrope_section,
+        head_size,
+        rotary_dim,
     )
 
     # Operator under test
     q_out, k_out = mrope_fused(
-        q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim,
+        q,
+        k,
+        cos_sin_cache,
+        positions,
+        mrope_section,
+        head_size,
+        rotary_dim,
     )
 
     atol, rtol = 1.5e-2, 1.5e-2

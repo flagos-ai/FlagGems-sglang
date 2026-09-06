@@ -17,10 +17,9 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
-
 from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("merge_state")
 
@@ -38,11 +37,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -52,19 +59,36 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
-
-
 def _case(n_tokens, num_heads, head_size, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     prefix_output = torch.randn(
-        n_tokens, num_heads, head_size, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+        n_tokens,
+        num_heads,
+        head_size,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
     ).to(dtype)
     suffix_output = torch.randn(
-        n_tokens, num_heads, head_size, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+        n_tokens,
+        num_heads,
+        head_size,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
     ).to(dtype)
-    prefix_lse = torch.randn(n_tokens, num_heads, generator=g, device=flaggems_sglang.device) * 3
-    suffix_lse = torch.randn(n_tokens, num_heads, generator=g, device=flaggems_sglang.device) * 3
+    prefix_lse = (
+        torch.randn(
+            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
+        )
+        * 3
+    )
+    suffix_lse = (
+        torch.randn(
+            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
+        )
+        * 3
+    )
     return dict(
         prefix_output=prefix_output,
         prefix_lse=prefix_lse,
@@ -87,9 +111,7 @@ CORRECTNESS_CASES = [
     _case(3, 32, 512),
 ]
 
-BENCH_CASES = [
-    _case(n, 32, 128) for n in (1, 8, 64, 512, 4096)
-]
+BENCH_CASES = [_case(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +124,11 @@ BENCH_CASES = [
 def test_merge_state_perf(case_idx):
     """Benchmark triton kernel vs torch reference; record per-case speedup."""
     case = BENCH_CASES[case_idx]
-    kwargs = {k: v for k, v in case.items() if k != "check"} if isinstance(case, dict) else case
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
 
     try:
         from flaggems_sglang.ops.merge_state import merge_state

@@ -17,10 +17,9 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
-
 from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("silu_and_mul")
 
@@ -40,11 +39,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -54,14 +61,15 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
-
-
 def _x(bs, d, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(bs, 2 * d, dtype=torch.float32, device=flaggems_sglang.device, generator=g).to(
-        dtype
-    )
+    return torch.randn(
+        bs,
+        2 * d,
+        dtype=torch.float32,
+        device=flaggems_sglang.device,
+        generator=g,
+    ).to(dtype)
 
 
 def _check(actual, expected):
@@ -82,9 +90,7 @@ BENCH_CASES = [
 ]
 
 BENCH_IDS = [
-    f"bs{bs}_d{d}"
-    for bs in (1, 8, 64, 512, 4096)
-    for d in (1024, 4096, 8192)
+    f"bs{bs}_d{d}" for bs in (1, 8, 64, 512, 4096) for d in (1024, 4096, 8192)
 ]
 
 
@@ -103,7 +109,11 @@ def test_silu_and_mul_perf(case_idx):
     (format documented in ``docs/guide.md``).
     """
     case = BENCH_CASES[case_idx]
-    kwargs = {k: v for k, v in case.items() if k != "check"} if isinstance(case, dict) else case
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
 
     try:
         from flaggems_sglang.ops.silu_and_mul import silu_and_mul

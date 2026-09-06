@@ -17,10 +17,14 @@ import torch
 
 def reference(prefix_output, prefix_lse, suffix_output, suffix_lse):
     p_lse = torch.where(
-        prefix_lse == float("inf"), torch.full_like(prefix_lse, float("-inf")), prefix_lse
+        prefix_lse == float("inf"),
+        torch.full_like(prefix_lse, float("-inf")),
+        prefix_lse,
     ).float()
     s_lse = torch.where(
-        suffix_lse == float("inf"), torch.full_like(suffix_lse, float("-inf")), suffix_lse
+        suffix_lse == float("inf"),
+        torch.full_like(suffix_lse, float("-inf")),
+        suffix_lse,
     ).float()
 
     max_lse = torch.maximum(p_lse, s_lse)

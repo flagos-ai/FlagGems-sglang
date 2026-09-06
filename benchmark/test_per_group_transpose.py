@@ -17,10 +17,9 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
-
 from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("per_group_transpose")
 
@@ -38,11 +37,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -52,10 +59,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
 def _a(m, k, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(m, k, generator=g, device=flaggems_sglang.device, dtype=dtype).contiguous()
+    return torch.randn(
+        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
+    ).contiguous()
 
 
 def _offsets(counts):
@@ -91,7 +99,11 @@ BENCH_CASES = [
 def test_per_group_transpose_perf(case_idx):
     """Benchmark triton kernel vs torch reference; record per-case speedup."""
     case = BENCH_CASES[case_idx]
-    kwargs = {k: v for k, v in case.items() if k != "check"} if isinstance(case, dict) else case
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
 
     try:
         from flaggems_sglang.ops.per_group_transpose import per_group_transpose
@@ -107,4 +119,9 @@ def test_per_group_transpose_perf(case_idx):
 
     ref_us = do_bench_us(lambda: reference(**kwargs))
     triton_us = do_bench_us(lambda: per_group_transpose(**kwargs))
-    record_case("quantization/per_group_transpose", f"case{case_idx}", ref_us, triton_us)
+    record_case(
+        "quantization/per_group_transpose",
+        f"case{case_idx}",
+        ref_us,
+        triton_us,
+    )

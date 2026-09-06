@@ -17,10 +17,9 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
-
 from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("fused_moe_gemm")
 
@@ -38,11 +37,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -52,15 +59,34 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
-
-
 def _case(T, E, N, K, top_k, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    A = torch.randn(T, K, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
-    B = torch.randn(E, N, K, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
-    topk_ids = torch.randint(0, E, (T, top_k), dtype=torch.int32, device=flaggems_sglang.device, generator=g)
-    topk_weights = torch.rand(T, top_k, device=flaggems_sglang.device, generator=g, dtype=torch.float32)
+    A = torch.randn(
+        T, K, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    B = torch.randn(
+        E,
+        N,
+        K,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    topk_ids = torch.randint(
+        0,
+        E,
+        (T, top_k),
+        dtype=torch.int32,
+        device=flaggems_sglang.device,
+        generator=g,
+    )
+    topk_weights = torch.rand(
+        T,
+        top_k,
+        device=flaggems_sglang.device,
+        generator=g,
+        dtype=torch.float32,
+    )
 
     return dict(
         A=A,
@@ -82,9 +108,7 @@ CORRECTNESS_CASES = [
     _case(5, 4, 64, 128, 1),
 ]
 
-BENCH_CASES = [
-    _case(t, 8, 4096, 4096, 2) for t in (1, 8, 64, 512, 4096)
-]
+BENCH_CASES = [_case(t, 8, 4096, 4096, 2) for t in (1, 8, 64, 512, 4096)]
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +121,11 @@ BENCH_CASES = [
 def test_fused_moe_gemm_perf(case_idx):
     """Benchmark triton kernel vs torch reference; record per-case speedup."""
     case = BENCH_CASES[case_idx]
-    kwargs = {k: v for k, v in case.items() if k != "check"} if isinstance(case, dict) else case
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
 
     try:
         from flaggems_sglang.ops.fused_moe_gemm import fused_moe_gemm

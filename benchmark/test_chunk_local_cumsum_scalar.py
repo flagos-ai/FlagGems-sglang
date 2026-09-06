@@ -17,10 +17,9 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
-
 from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("chunk_local_cumsum_scalar")
 
@@ -38,11 +37,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -52,11 +59,26 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
-def _case(batch, nchunks, chunk_size, nheads, reverse=False, scale=None, dtype=torch.bfloat16, seed=0):
+def _case(
+    batch,
+    nchunks,
+    chunk_size,
+    nheads,
+    reverse=False,
+    scale=None,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     t = nchunks * chunk_size
-    x = torch.randn(batch, t, nheads, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
+    x = torch.randn(
+        batch,
+        t,
+        nheads,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
     return dict(g=x, chunk_size=chunk_size, reverse=reverse, scale=scale)
 
 
@@ -82,10 +104,16 @@ BENCH_CASES = [
 def test_chunk_local_cumsum_scalar_perf(case_idx):
     """Benchmark triton kernel vs torch reference; record per-case speedup."""
     case = BENCH_CASES[case_idx]
-    kwargs = {k: v for k, v in case.items() if k != "check"} if isinstance(case, dict) else case
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
 
     try:
-        from flaggems_sglang.ops.chunk_local_cumsum_scalar import chunk_local_cumsum_scalar
+        from flaggems_sglang.ops.chunk_local_cumsum_scalar import (
+            chunk_local_cumsum_scalar,
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/chunk_local_cumsum_scalar ops module not found")
         return
@@ -98,4 +126,6 @@ def test_chunk_local_cumsum_scalar_perf(case_idx):
 
     ref_us = do_bench_us(lambda: reference(**kwargs))
     triton_us = do_bench_us(lambda: chunk_local_cumsum_scalar(**kwargs))
-    record_case("fla/chunk_local_cumsum_scalar", f"case{case_idx}", ref_us, triton_us)
+    record_case(
+        "fla/chunk_local_cumsum_scalar", f"case{case_idx}", ref_us, triton_us
+    )

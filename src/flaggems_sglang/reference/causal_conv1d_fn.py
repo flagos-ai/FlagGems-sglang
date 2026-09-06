@@ -16,7 +16,9 @@ import torch
 import torch.nn.functional as F
 
 
-def reference(x, weight, bias, query_start_loc, seq_lens_cpu, activation="silu"):
+def reference(
+    x, weight, bias, query_start_loc, seq_lens_cpu, activation="silu"
+):
     dim, _ = x.shape
     width = weight.shape[1]
     out = torch.zeros_like(x)

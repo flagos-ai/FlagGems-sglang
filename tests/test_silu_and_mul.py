@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+
 from . import conftest as cfg
 
 reference = get_reference("silu_and_mul")
@@ -36,11 +37,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -50,15 +59,12 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
-
-
 def _x(bs, d, dtype=torch.bfloat16, seed=0):
     device = cfg.device
     g = torch.Generator(device=device).manual_seed(seed)
-    return torch.randn(bs, 2 * d, dtype=torch.float32, device=device, generator=g).to(
-        dtype
-    )
+    return torch.randn(
+        bs, 2 * d, dtype=torch.float32, device=device, generator=g
+    ).to(dtype)
 
 
 def _check(actual, expected):
@@ -88,8 +94,12 @@ BENCH_CASES = [
 @pytest.mark.silu_and_mul
 def test_silu_and_mul(case_idx):
     case = CORRECTNESS_CASES[case_idx]
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
-    kwargs = case if isinstance(case, dict) else {};
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
+    kwargs = case if isinstance(case, dict) else {}
 
     # Reference
     expected = reference(**kwargs)

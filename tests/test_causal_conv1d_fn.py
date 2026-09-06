@@ -17,8 +17,8 @@
 import pytest
 import torch
 
-from flaggems_sglang.reference import get_reference
 import flaggems_sglang
+from flaggems_sglang.reference import get_reference
 
 reference = get_reference("causal_conv1d_fn")
 
@@ -36,11 +36,19 @@ _DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
 
 
 def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(_TOLERANCES.get(dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE))
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
@@ -50,16 +58,34 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 
 
-
 def _case(seq_lens, dim, width=4, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     total = sum(seq_lens)
-    x = torch.randn(dim, total, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
-    weight = torch.randn(dim, width, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
-    bias = torch.randn(dim, generator=g, device=flaggems_sglang.device, dtype=torch.float32).to(dtype)
-    query_start_loc = torch.zeros(len(seq_lens) + 1, dtype=torch.int32, device=flaggems_sglang.device)
+    x = torch.randn(
+        dim,
+        total,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    weight = torch.randn(
+        dim,
+        width,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    bias = torch.randn(
+        dim, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    query_start_loc = torch.zeros(
+        len(seq_lens) + 1, dtype=torch.int32, device=flaggems_sglang.device
+    )
     query_start_loc[1:] = torch.cumsum(
-        torch.tensor(seq_lens, dtype=torch.int32, device=flaggems_sglang.device), dim=0
+        torch.tensor(
+            seq_lens, dtype=torch.int32, device=flaggems_sglang.device
+        ),
+        dim=0,
     )
     return dict(
         x=x,
@@ -91,8 +117,12 @@ BENCH_CASES = [
 @pytest.mark.causal_conv1d_fn
 def test_causal_conv1d_fn(case_idx):
     case = CORRECTNESS_CASES[case_idx]
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
-    kwargs = case if isinstance(case, dict) else {};
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
+    kwargs = case if isinstance(case, dict) else {}
 
     # Reference
     expected = reference(**kwargs)

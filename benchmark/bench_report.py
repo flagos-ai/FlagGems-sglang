@@ -53,7 +53,9 @@ def do_bench_us(fn, warmup=25, rep=100) -> float:
     return _do_bench(fn, warmup=warmup, rep=rep, return_mode="median") * 1e3
 
 
-def record_case(op_full_name: str, case_id: str, ref_us: float, triton_us: float) -> None:
+def record_case(
+    op_full_name: str, case_id: str, ref_us: float, triton_us: float
+) -> None:
     """Record one benchmarked case for later JSON export.
 
     Args:
@@ -95,27 +97,41 @@ def _machine_info() -> dict:
 def _commit_info() -> dict:
     repo_root = os.path.join(os.path.dirname(__file__), "..")
     try:
-        commit_id = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=repo_root, stderr=subprocess.DEVNULL
-        ).decode().strip()
-        branch = subprocess.check_output(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            cwd=repo_root,
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
+        commit_id = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo_root,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+        branch = (
+            subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=repo_root,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
         dirty = bool(
             subprocess.check_output(
                 ["git", "status", "--porcelain"],
                 cwd=repo_root,
                 stderr=subprocess.DEVNULL,
-            ).decode().strip()
+            )
+            .decode()
+            .strip()
         )
         return {"id": commit_id, "branch": branch, "dirty": dirty}
     except Exception:
         return {}
 
 
-def _resolve_output_path(rootpath: str, custom: str | None, op_short: str) -> str:
+def _resolve_output_path(
+    rootpath: str, custom: str | None, op_short: str
+) -> str:
     """Pick the JSON output path for one operator.
 
     - ``--bench-output`` ending in ``.json``  -> use it verbatim (single op).
@@ -129,7 +145,9 @@ def _resolve_output_path(rootpath: str, custom: str | None, op_short: str) -> st
     return os.path.join(str(rootpath), "out_benchmark", f"{op_short}.json")
 
 
-def write_reports(rootpath: str, custom_output: str | None = None) -> list[str]:
+def write_reports(
+    rootpath: str, custom_output: str | None = None
+) -> list[str]:
     """Write one JSON report per recorded operator. Returns paths written."""
     if not _RESULTS:
         return []
@@ -142,7 +160,9 @@ def write_reports(rootpath: str, custom_output: str | None = None) -> list[str]:
     for op_full_name, cases in _RESULTS.items():
         op_short = op_full_name.split("/")[-1]
         speedups = [c["speedup"] for c in cases if c["speedup"] is not None]
-        avg_speedup = round(sum(speedups) / len(speedups), 3) if speedups else None
+        avg_speedup = (
+            round(sum(speedups) / len(speedups), 3) if speedups else None
+        )
 
         report = {
             "machine_info": machine,

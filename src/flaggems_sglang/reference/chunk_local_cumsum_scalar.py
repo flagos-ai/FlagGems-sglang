@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 def reference(g, chunk_size, reverse=False, scale=None):
     B, T, H = g.shape
     BT = chunk_size

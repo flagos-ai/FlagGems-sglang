@@ -41,7 +41,9 @@ def _apply_rope(x, n_h, head_size, rotary_dim, cos, sin):
     return out.view(num_tokens, n_h * head_size)
 
 
-def reference(q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim):
+def reference(
+    q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
+):
     """Pure-torch mrope_fused: non-interleaved, neox-style, no axis map.
 
     Args:
