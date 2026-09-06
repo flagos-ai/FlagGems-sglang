@@ -21,8 +21,8 @@ follows the spec from kernel-comp-baseline/problems/rope/mrope_fused.
 import pytest
 import torch
 
-from flaggems_sglang.ops.mrope_fused import mrope_fused
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference.mrope_fused import reference as mrope_fused
 
 from . import conftest as cfg
 
