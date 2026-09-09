@@ -1,0 +1,112 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+ops:
+  - id: causal_conv1d_fn
+    description: |
+      Generic depthwise causal 1-D convolution over continuous-batched sequences.
+      Computes depthwise causal convolution with optional bias and SiLU activation.
+    for:
+      - causal_conv1d_fn
+    labels:
+      - fused
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunk_local_cumsum_scalar
+    description: |
+      Computes local cumulative sum over chunked sequences with optional scaling and reverse direction.
+      Supports both direct and transposed cumsum computation.
+    for:
+      - chunk_local_cumsum_scalar
+    labels:
+      - fused
+      - sglang
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: fused_moe_gemm
+    description: |
+      Fused Mixture-of-Experts GEMM operation that combines token routing and expert computation.
+      Performs weighted expert-specific matrix multiplication for MoE models.
+    for:
+      - fused_moe_gemm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: merge_state
+    description: |
+      Merges attention states from prefix and suffix sequences using log-sum-exp scaling.
+      Used for continuous batching and chunked attention computation.
+    for:
+      - merge_state
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: mrope_fused
+    description: |
+      Multi-dimensional Rotary Positional Embedding (mRoPE) for query and key tensors.
+      Applies position-dependent rotation across temporal, height, and width dimensions.
+    for:
+      - mrope_fused
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_group_transpose
+    description: |
+      Per-expert group transpose operation for MoE models.
+      Transposes tensor blocks grouped by expert assignment for efficient computation.
+    for:
+      - per_group_transpose
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: silu_and_mul
+    description: |
+      Fused SiLU gate and multiply operation. Computes silu(x[..., :d]) * x[..., d:] in a single pass.
+      Optimized for both decode and prefill phases with adaptive tiling strategies.
+    for:
+      - silu_and_mul
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
