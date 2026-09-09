@@ -1,0 +1,181 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Benchmark for moe/moe_fused_gate."""
+
+import pytest
+import torch
+
+import flaggems_sglang
+from benchmark.bench_report import do_bench_us, record_case
+from flaggems_sglang.reference import get_reference
+
+reference = get_reference("moe_fused_gate")
+
+device = flaggems_sglang.device
+
+
+# ---------------------------------------------------------------------------
+# Tolerance helper
+# ---------------------------------------------------------------------------
+
+_TOLERANCES = {
+    torch.float32: dict(atol=1e-4, rtol=1e-4),
+    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
+    torch.float16: dict(atol=1e-2, rtol=1e-2),
+}
+_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+
+
+def assert_close(actual, expected, *, dtype=None, **overrides):
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
+    tol.update(overrides)
+    torch.testing.assert_close(
+        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
+        **tol,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cases (from kernel-comp-baseline/problems/moe/moe_fused_gate/cases.py)
+# ---------------------------------------------------------------------------
+
+
+def _check(actual, expected):
+    aw, ai = actual
+    ew, ei = expected
+    assert_close(aw, ew, dtype=torch.float32)
+    assert torch.equal(ai, ei), "expert index mismatch"
+
+
+def _case(
+    m,
+    n,
+    topk,
+    scoring_func="sigmoid",
+    num_fused_shared_experts=0,
+    renormalize=True,
+    routed_scaling_factor=1.0,
+    apply_routed_scaling_factor_on_output=False,
+    moe_softcapping=0.0,
+    num_expert_group=1,
+    topk_group=1,
+    dtype=torch.bfloat16,
+    seed=0,
+):
+    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    scores = torch.randn(
+        m, n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    bias = 0.1 * torch.randn(
+        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    )
+
+    return dict(
+        scores=scores,
+        bias=bias,
+        topk=topk,
+        scoring_func=scoring_func,
+        num_fused_shared_experts=num_fused_shared_experts,
+        renormalize=renormalize,
+        routed_scaling_factor=routed_scaling_factor,
+        apply_routed_scaling_factor_on_output=apply_routed_scaling_factor_on_output,
+        moe_softcapping=moe_softcapping,
+        num_expert_group=num_expert_group,
+        topk_group=topk_group,
+        check=_check,
+    )
+
+
+CORRECTNESS_CASES = [
+    _case(1, 8, 2),
+    _case(
+        37,
+        256,
+        8,
+        num_fused_shared_experts=1,
+        routed_scaling_factor=2.5,
+        num_expert_group=8,
+        topk_group=4,
+    ),
+    _case(83, 64, 6, scoring_func="sqrtsoftplus"),
+    _case(
+        17,
+        32,
+        4,
+        scoring_func="softmax",
+        moe_softcapping=30.0,
+        renormalize=False,
+    ),
+    _case(
+        9,
+        128,
+        6,
+        apply_routed_scaling_factor_on_output=True,
+        routed_scaling_factor=1.7,
+        dtype=torch.float32,
+    ),
+]
+
+BENCH_CASES = [
+    _case(
+        m, 256, 8, num_fused_shared_experts=1, num_expert_group=8, topk_group=4
+    )
+    for m in (1, 8, 64, 512, 4096)
+]
+
+BENCH_IDS = [f"m{m}" for m in (1, 8, 64, 512, 4096)]
+
+
+# ---------------------------------------------------------------------------
+# Benchmark
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
+@pytest.mark.moe_fused_gate
+def test_moe_fused_gate_perf(case_idx):
+    """Benchmark triton kernel vs torch reference; record per-case speedup."""
+    case = BENCH_CASES[case_idx]
+    kwargs = (
+        {k: v for k, v in case.items() if k != "check"}
+        if isinstance(case, dict)
+        else case
+    )
+
+    try:
+        from flaggems_sglang.ops.moe_fused_gate import moe_fused_gate
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip("moe/moe_fused_gate ops module not found")
+        return
+
+    try:
+        moe_fused_gate(**kwargs)
+    except NotImplementedError:
+        pytest.skip("moe/moe_fused_gate not yet implemented")
+        return
+
+    ref_us = do_bench_us(lambda: reference(**kwargs))
+    triton_us = do_bench_us(lambda: moe_fused_gate(**kwargs))
+
+    record_case("moe/moe_fused_gate", BENCH_IDS[case_idx], ref_us, triton_us)
