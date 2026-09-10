@@ -69,6 +69,15 @@ FUSED_MOE_BENCH_SHAPES = [
     (4096, 1280, 3072, 64, 8),
 ]
 
+# (sequence length, mRoPE section sizes) for multimodal RoPE stream merging.
+INTERLEAVED_ROPE_BENCH_CASES = [
+    (65, [16, 8, 8]),
+    (127, [7, 17, 19]),
+    (2049, [32, 64, 32]),
+    (17, [128, 128, 128]),
+    (2, [342, 0, 0]),
+]
+
 # (M, N) tuples for GemmaRMSNorm benchmark.  N values match Gemma model
 # hidden dimensions: 512 (2B), 1024, 2048 (7B), 3072, 4096, 5120, 8192.
 # Small batch sizes representative of decode serving scenarios.
