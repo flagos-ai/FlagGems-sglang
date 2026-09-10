@@ -43,6 +43,14 @@ DEFAULT_SHAPES = [
     (1024, 1024, 1024),  # from perf
 ]
 
+# (sequence lengths, num_heads, head_dim) tuples for packed context attention.
+# Covers ragged short contexts plus medium and long single-sequence prefill.
+CONTEXT_ATTENTION_BENCH_SHAPES = [
+    ([128, 128, 128, 128], 16, 64),
+    ([512, 512], 16, 64),
+    ([2048], 16, 128),
+]
+
 # (B, H, HV, K, V, pool_size) tuples for fused recurrent decode benchmarks.
 # Shapes match Qwen3.5-35B-A3B decode serving configurations.
 FUSED_RECURRENT_BENCH_SHAPES = [
