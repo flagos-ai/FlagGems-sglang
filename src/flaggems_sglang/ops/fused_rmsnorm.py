@@ -21,9 +21,7 @@ def _fused_rmsnorm_kernel(
     x = tl.load(x_ptr + row_offsets, mask=mask, other=0.0).to(tl.float32)
     mean_square = tl.sum(x * x, axis=0) / row_width
     inv_rms = 1.0 / tl.sqrt(mean_square + eps)
-    weight = tl.load(weight_ptr + columns, mask=mask, other=0.0).to(
-        tl.float32
-    )
+    weight = tl.load(weight_ptr + columns, mask=mask, other=0.0).to(tl.float32)
     tl.store(out_ptr + row_offsets, x * inv_rms * weight, mask=mask)
 
 

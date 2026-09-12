@@ -23,9 +23,7 @@ from .attri_util import GEMMA_RMS_NORM_BENCH_SHAPES
 @pytest.mark.parametrize("shape", GEMMA_RMS_NORM_BENCH_SHAPES)
 @pytest.mark.fused_rmsnorm
 def test_fused_rmsnorm(shape, benchmark):
-    x = torch.randn(
-        shape, dtype=torch.bfloat16, device=flaggems_sglang.device
-    )
+    x = torch.randn(shape, dtype=torch.bfloat16, device=flaggems_sglang.device)
     weight = torch.randn(
         shape[-1], dtype=torch.bfloat16, device=flaggems_sglang.device
     )
