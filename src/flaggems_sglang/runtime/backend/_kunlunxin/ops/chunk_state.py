@@ -12,67 +12,6 @@
 # express or implied. See the License for the specific language
 # governing permissions and limitations under the License.
 
-"""chunk_state — Mamba2 SSM per-chunk hidden-state accumulation.
-
-Computes, for each (batch, chunk, head), the ``[headdim, dstate]`` state block
-
-    states[b, c, h, p, n] = sum_t  x[b, c, t, h, p] * B[b, c, t, g(h), n]
-                                   * exp(dA_last[b,h,c] - dA_cumsum[b,h,c,t])
-                                   * dt[b,h,c,t]
-
-i.e. the einsum ``bcthp,bcthn->bchpn`` of ``x_c`` with a decay/dt-scaled ``B``.
-
-Semantics (matches the PyTorch reference exactly):
-
-    batch, seqlen, nheads, headdim = x.shape
-    _, _, nchunks, chunk_size      = dt.shape
-    _, _, ngroups, dstate          = B.shape
-    ratio = nheads // ngroups
-
-    x_c  = x.reshape(batch, nchunks, chunk_size, nheads, headdim).float()
-    B_c  = B.reshape(batch, nchunks, chunk_size, ngroups, dstate).float()
-    B_c  = B_c.repeat_interleave(ratio, dim=3)
-    decay = exp(dA_cumsum[..., -1:] - dA_cumsum).float()
-    scale = (decay * dt.float()).permute(0, 2, 3, 1)      # [b, c, t, h]
-    Bs    = B_c * scale.unsqueeze(-1)
-    states = einsum("bcthp,bcthn->bchpn", x_c, Bs)
-
-Shapes:
-    B         : [batch, seqlen, ngroups, dstate]   (SSM state-projection matrix)
-    x         : [batch, seqlen, nheads, headdim]
-    dt        : [batch, nheads, nchunks, chunk_size]
-    dA_cumsum : [batch, nheads, nchunks, chunk_size]
-    states    : [batch, nchunks, nheads, headdim, dstate]  (output, float32)
-
-Scope:
-    - seqlen == nchunks * chunk_size (chunk_size a power of 2)
-    - head grouping: head h reads group  h // (nheads // ngroups)
-    - inputs may be float32 / bfloat16 / float16; accumulation and output float32
-
-This kernel is written in portable Triton only. It must NOT call any
-pre-compiled / vendor-specific cached operator (no torch.einsum, no
-``_compiled`` handles, no torch.ops.* fused matmul) — the whole contraction is
-done inside the Triton kernel so it is portable across supported chips.
-
-Kunlun P800 (昆仑芯 XPU) backend notes:
-    - XPU is exposed as CUDA devices (cc 8.6), triton 3.0.0 XPU backend.
-    - ``warp_size = 1`` (no warps): ``num_warps`` is ignored, so it is set to 1.
-    - ``tl.dot`` with fp32 operands (``allow_tf32=False``) works and is used for
-      the contraction; the fp16 SDNN path is not needed for correctness here.
-    - Two measured backend bugs this file works around:
-      1. A fp32 vector that is *computed in-kernel* (``tl.exp`` of dt/dA) and
-         then consumed by the 2D broadcast ``B * scale[:, None]`` corrupts
-         (relative error ~O(1) once the decay > 1); the same scale vector
-         *loaded from global memory* broadcasts bit-exactly.  The scale is
-         therefore computed by a separate 1D kernel into a scratch buffer and
-         the dot kernel loads it back.
-      2. Element-wise vector ops (notably ``tl.exp``) on <= 32-wide vectors
-         return wrong data for the tail lanes when multiple programs are in
-         flight, while >= 64-wide is bit-exact.  The scale kernel therefore
-         always works on a >= 64-lane tile (masked to ``chunk_size``), never on
-         a ``chunk_size``-wide tile when ``chunk_size`` is 16/32.
-"""
-
 import torch
 import triton
 import triton.language as tl
