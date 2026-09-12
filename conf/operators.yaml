@@ -53,20 +53,6 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
-  - id: interleaved_rope
-    description: |
-      Interleaves temporal, height, and width rotary-position streams.
-      Selects one of three input streams independently for each feature column.
-    for:
-      - interleaved_rope
-    labels:
-      - fused
-      - sglang
-      - RoPE
-    kind:
-      - NeuralNetwork
-    stages:
-      - stable: '1.0'
   - id: merge_state
     description: |
       Merges attention states from prefix and suffix sequences using log-sum-exp scaling.
