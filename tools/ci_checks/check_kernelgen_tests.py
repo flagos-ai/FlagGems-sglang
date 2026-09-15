@@ -102,8 +102,12 @@ def main():
         try:
             changed = json.loads(args.changed_files)
         except json.JSONDecodeError:
-            changed = [f.strip() for f in args.changed_files.split(",") if f.strip()]
-        test_files = [Path(f) for f in changed if re.match(r"tests/test_.+\.py$", f)]
+            changed = [
+                f.strip() for f in args.changed_files.split(",") if f.strip()
+            ]
+        test_files = [
+            Path(f) for f in changed if re.match(r"tests/test_.+\.py$", f)
+        ]
     elif args.operators:
         try:
             requested_ops = json.loads(args.operators)
@@ -111,7 +115,9 @@ def main():
             requested_ops = [
                 op.strip() for op in args.operators.split(",") if op.strip()
             ]
-        test_files = [TESTS_DIR / f"test_{op_id}.py" for op_id in requested_ops]
+        test_files = [
+            TESTS_DIR / f"test_{op_id}.py" for op_id in requested_ops
+        ]
     else:
         print(
             "No operators or files specified. Use --operators, --changed-files, or --all."
@@ -136,7 +142,9 @@ def main():
                 all_violations.append(msg)
 
     if all_violations:
-        print(f"\n❌ Found {len(all_violations)} forbidden use_gems() call(s):\n")
+        print(
+            f"\n❌ Found {len(all_violations)} forbidden use_gems() call(s):\n"
+        )
         for v in all_violations:
             print(f"::error::{v}")
             print(f"  • {v}")

@@ -168,7 +168,9 @@ def main():
     for r in rows:
         s = r["current_stage"]
         stage_counts[s] = stage_counts.get(s, 0) + 1
-    runs_stable_count = sum(1 for r in rows if r["runs_default(stable)"] == "YES")
+    runs_stable_count = sum(
+        1 for r in rows if r["runs_default(stable)"] == "YES"
+    )
     runs_all_count = sum(1 for r in rows if r["runs_all"] == "YES")
 
     # Field descriptions
@@ -181,7 +183,8 @@ def main():
         ),
         "kind": "Category: Math, Reduction, BLAS, Distribution, Memory",
         "current_stage": (
-            "Current stage (last key in stages list): " "alpha/beta/stable/removed"
+            "Current stage (last key in stages list): "
+            "alpha/beta/stable/removed"
         ),
         "current_version": "Version when entering current stage",
         "stage_history": "Full stage progression, e.g. beta:5.0 -> stable:5.3",
@@ -219,14 +222,18 @@ def main():
                             "stage_history": r["stage_history"],
                         }
                     )
-            print(f"Exported {len(not_running)} non-running ops to: " f"{args.output}")
+            print(
+                f"Exported {len(not_running)} non-running ops to: "
+                f"{args.output}"
+            )
             return
 
         # Terminal output
         print("=" * 100)
         print("Operators that will NOT run in default mode (--stages stable)")
         print(
-            "Rule: last key in operators.yaml stages list != 'stable' " "=> won't run"
+            "Rule: last key in operators.yaml stages list != 'stable' "
+            "=> won't run"
         )
         print("=" * 100)
         print()

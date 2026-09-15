@@ -39,7 +39,9 @@ class DecoratorFinder(ast.NodeVisitor):
                             "body": ast.unparse(node),
                         }
                     )
-                    logging.debug(ast.dump(decorator, annotate_fields=True, indent=4))
+                    logging.debug(
+                        ast.dump(decorator, annotate_fields=True, indent=4)
+                    )
 
             elif isinstance(decorator, ast.Call):
                 if (
@@ -56,7 +58,9 @@ class DecoratorFinder(ast.NodeVisitor):
                             "body": ast.unparse(node),
                         }
                     )
-                    logging.debug(ast.dump(decorator, annotate_fields=True, indent=4))
+                    logging.debug(
+                        ast.dump(decorator, annotate_fields=True, indent=4)
+                    )
         self.generic_visit(node)
 
     def get_end_line(self, node):
@@ -76,7 +80,9 @@ class DecoratorFinder(ast.NodeVisitor):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process a list of arguments.")
+    parser = argparse.ArgumentParser(
+        description="Process a list of arguments."
+    )
     parser.add_argument(
         "files", nargs="+", help="List of files or arguments to process"
     )

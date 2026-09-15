@@ -56,13 +56,21 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers()
 
     # Subparser for 'files' command
-    files_parser = subparsers.add_parser("files", help="List files in the pull request")
-    files_parser.add_argument("pull_id", type=int, help="ID of the pull request")
+    files_parser = subparsers.add_parser(
+        "files", help="List files in the pull request"
+    )
+    files_parser.add_argument(
+        "pull_id", type=int, help="ID of the pull request"
+    )
     files_parser.set_defaults(func=get_files)
 
     # Subparser for 'diff' command
-    diff_parser = subparsers.add_parser("diff", help="Show diff of the pull request")
-    diff_parser.add_argument("pull_id", type=int, help="ID of the pull request")
+    diff_parser = subparsers.add_parser(
+        "diff", help="Show diff of the pull request"
+    )
+    diff_parser.add_argument(
+        "pull_id", type=int, help="ID of the pull request"
+    )
     diff_parser.set_defaults(func=show_diff)
 
     # Parse and execute the command

@@ -80,7 +80,10 @@ def check_benchmark_content(filepath: Path) -> bool:
     for node in ast.walk(tree):
         # Look for .run() calls
         if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Attribute) and node.func.attr == "run":
+            if (
+                isinstance(node.func, ast.Attribute)
+                and node.func.attr == "run"
+            ):
                 return True
         # Look for class definitions (benchmark classes)
         if isinstance(node, ast.ClassDef):
@@ -126,7 +129,9 @@ def main():
         print("None of the specified operators found in registry.")
         sys.exit(0)
 
-    print(f"Checking benchmark coverage for {len(ops_to_check)} operator(s)...")
+    print(
+        f"Checking benchmark coverage for {len(ops_to_check)} operator(s)..."
+    )
     all_warnings = []
 
     for op_id in sorted(ops_to_check):

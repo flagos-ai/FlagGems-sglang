@@ -71,11 +71,15 @@ def select_best_dirs(raw_dir):
             existing_comp = platform_best[platform][1]
             if existing_comp != "flagtree" and comp == "flagtree":
                 platform_best[platform] = (d, comp, date)
-            elif existing_comp not in ("flagtree", "triton") and comp == "triton":
+            elif (
+                existing_comp not in ("flagtree", "triton")
+                and comp == "triton"
+            ):
                 platform_best[platform] = (d, comp, date)
 
     return [
-        (platform, d, comp) for platform, (d, comp, _) in sorted(platform_best.items())
+        (platform, d, comp)
+        for platform, (d, comp, _) in sorted(platform_best.items())
     ]
 
 

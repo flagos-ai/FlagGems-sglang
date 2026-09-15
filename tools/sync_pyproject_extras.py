@@ -135,7 +135,9 @@ def replace_generated_section(content: str, generated: str) -> str:
         return pattern.sub(replacement, content)
     else:
         # Find [project.optional-dependencies] and insert markers
-        section_pattern = re.compile(r"(\[project\.optional-dependencies\]\s*\n)")
+        section_pattern = re.compile(
+            r"(\[project\.optional-dependencies\]\s*\n)"
+        )
         match = section_pattern.search(content)
         if not match:
             print(
@@ -146,7 +148,9 @@ def replace_generated_section(content: str, generated: str) -> str:
 
         # Find the end of the section (next [section] or EOF)
         section_start = match.end()
-        next_section = re.search(r"\n\[(?!project\.optional)", content[section_start:])
+        next_section = re.search(
+            r"\n\[(?!project\.optional)", content[section_start:]
+        )
         if next_section:
             section_end = section_start + next_section.start()
         else:
@@ -169,7 +173,9 @@ def replace_generated_section(content: str, generated: str) -> str:
         if preserved_block:
             preserved_block = "\n" + preserved_block + "\n"
 
-        new_section = f"{BEGIN_MARKER}\n{generated}{END_MARKER}\n{preserved_block}"
+        new_section = (
+            f"{BEGIN_MARKER}\n{generated}{END_MARKER}\n{preserved_block}"
+        )
         return content[:section_start] + new_section + content[section_end:]
 
 
@@ -203,12 +209,16 @@ def main():
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        "--check", action="store_true", help="Check for drift (exit 1 if different)"
+        "--check",
+        action="store_true",
+        help="Check for drift (exit 1 if different)",
     )
     group.add_argument(
         "--write", action="store_true", help="Update pyproject.toml in-place"
     )
-    group.add_argument("--diff", action="store_true", help="Show what would change")
+    group.add_argument(
+        "--diff", action="store_true", help="Show what would change"
+    )
     args = parser.parse_args()
 
     backends = load_backends()
@@ -222,7 +232,9 @@ def main():
     if args.check:
         if diffs:
             print("ERROR: pyproject.toml extras drift detected!")
-            print("Run 'python3 tools/sync_pyproject_extras.py --write' to fix.\n")
+            print(
+                "Run 'python3 tools/sync_pyproject_extras.py --write' to fix.\n"
+            )
             print("\n".join(diffs))
             sys.exit(1)
         else:

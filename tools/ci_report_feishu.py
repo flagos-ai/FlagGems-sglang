@@ -30,7 +30,9 @@ from datetime import datetime
 
 def get_feishu_token(app_id: str, app_secret: str) -> str:
     """Get tenant_access_token from Feishu."""
-    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    url = (
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    )
     data = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode()
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"}
@@ -42,19 +44,25 @@ def get_feishu_token(app_id: str, app_secret: str) -> str:
     return result["tenant_access_token"]
 
 
-def feishu_request(method: str, url: str, token: str, data: dict | None = None) -> dict:
+def feishu_request(
+    method: str, url: str, token: str, data: dict | None = None
+) -> dict:
     """Make a Feishu API request."""
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
     }
     body = json.dumps(data).encode() if data else None
-    req = urllib.request.Request(url, data=body, headers=headers, method=method)
+    req = urllib.request.Request(
+        url, data=body, headers=headers, method=method
+    )
     with urllib.request.urlopen(req, timeout=60) as resp:
         return json.loads(resp.read())
 
 
-def get_existing_run_numbers(token: str, app_token: str, table_id: str) -> set[int]:
+def get_existing_run_numbers(
+    token: str, app_token: str, table_id: str
+) -> set[int]:
     """Get all run_numbers already in the Feishu table."""
     run_numbers: set[int] = set()
     page_token = None
@@ -123,7 +131,9 @@ def github_get(url: str, gh_token: str | None = None) -> dict:
         raise RuntimeError(f"GitHub API {e.code}: {body}") from e
 
 
-def get_workflow_id(repo: str, workflow_name: str, gh_token: str | None = None) -> int:
+def get_workflow_id(
+    repo: str, workflow_name: str, gh_token: str | None = None
+) -> int:
     """Find workflow ID by name."""
     url = f"https://api.github.com/repos/{repo}/actions/workflows?per_page=100"
     data = github_get(url, gh_token)
@@ -164,7 +174,9 @@ def get_workflow_runs(
     return runs
 
 
-def get_run_jobs(repo: str, run_id: int, gh_token: str | None = None) -> list[dict]:
+def get_run_jobs(
+    repo: str, run_id: int, gh_token: str | None = None
+) -> list[dict]:
     """Get jobs for a specific workflow run."""
     url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"
     data = github_get(url, gh_token)
@@ -243,11 +255,15 @@ def compute_duration(jobs: list[dict]) -> int | None:
     for job in jobs:
         if job.get("started_at"):
             starts.append(
-                datetime.fromisoformat(job["started_at"].replace("Z", "+00:00"))
+                datetime.fromisoformat(
+                    job["started_at"].replace("Z", "+00:00")
+                )
             )
         if job.get("completed_at"):
             ends.append(
-                datetime.fromisoformat(job["completed_at"].replace("Z", "+00:00"))
+                datetime.fromisoformat(
+                    job["completed_at"].replace("Z", "+00:00")
+                )
             )
     if starts and ends:
         return int((max(ends) - min(starts)).total_seconds())
@@ -294,7 +310,9 @@ def run_to_record(run: dict, jobs: list[dict], error_log: str = "") -> dict:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app-id", required=True, help="Feishu App ID")
-    parser.add_argument("--app-secret", required=True, help="Feishu App Secret")
+    parser.add_argument(
+        "--app-secret", required=True, help="Feishu App Secret"
+    )
     parser.add_argument(
         "--table-token",
         default="Asc0bBvQvaffmAsf6o2cr9Ksn71",
@@ -363,7 +381,10 @@ def main() -> int:
     # 4. Fetch runs from GitHub
     print(f"Fetching runs (run_number > {min_run_number})...")
     runs = get_workflow_runs(
-        args.repo, workflow_id, args.github_token, min_run_number=min_run_number
+        args.repo,
+        workflow_id,
+        args.github_token,
+        min_run_number=min_run_number,
     )
     print(f"  Found {len(runs)} new runs to sync.")
 
@@ -386,7 +407,9 @@ def main() -> int:
             error_parts = []
             for job in jobs:
                 if job.get("conclusion") == "failure":
-                    logs = get_job_logs(args.repo, job["id"], args.github_token)
+                    logs = get_job_logs(
+                        args.repo, job["id"], args.github_token
+                    )
                     errors = extract_error_lines(logs)
                     if errors:
                         error_parts.append(f"[{job['name']}]\n{errors}")

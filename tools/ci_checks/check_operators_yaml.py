@@ -54,13 +54,19 @@ def check_required_fields(ops: list[dict]) -> list[str]:
         # Validate field types
         if "id" in op:
             if not isinstance(op["id"], str) or not op["id"].strip():
-                errors.append(f"Entry #{i + 1}: 'id' must be a non-empty string")
+                errors.append(
+                    f"Entry #{i + 1}: 'id' must be a non-empty string"
+                )
         if "labels" in op:
             if not isinstance(op["labels"], list) or len(op["labels"]) == 0:
-                errors.append(f"Operator '{op_id}': 'labels' must be a non-empty list")
+                errors.append(
+                    f"Operator '{op_id}': 'labels' must be a non-empty list"
+                )
         if "stages" in op:
             if not isinstance(op["stages"], list) or len(op["stages"]) == 0:
-                errors.append(f"Operator '{op_id}': 'stages' must be a non-empty list")
+                errors.append(
+                    f"Operator '{op_id}': 'stages' must be a non-empty list"
+                )
     return errors
 
 
@@ -109,7 +115,9 @@ def check_sort_order(ops: list[dict]) -> list[str]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Check operators.yaml validity")
+    parser = argparse.ArgumentParser(
+        description="Check operators.yaml validity"
+    )
     parser.add_argument(
         "--operators",
         help="JSON list of operator IDs to check (incremental mode). "
@@ -131,12 +139,16 @@ def main():
         with open(OPERATORS_YAML) as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        print(f"::error::Failed to parse {OPERATORS_YAML}: {e}", file=sys.stderr)
+        print(
+            f"::error::Failed to parse {OPERATORS_YAML}: {e}", file=sys.stderr
+        )
         sys.exit(2)
 
     ops = data.get("ops", [])
     if not ops:
-        print(f"::error::No 'ops' key found in {OPERATORS_YAML}", file=sys.stderr)
+        print(
+            f"::error::No 'ops' key found in {OPERATORS_YAML}", file=sys.stderr
+        )
         sys.exit(2)
 
     print(f"Total operators in {OPERATORS_YAML}: {len(ops)}")
@@ -151,9 +163,13 @@ def main():
         try:
             changed_ids = json.loads(args.operators)
         except json.JSONDecodeError:
-            changed_ids = [op.strip() for op in args.operators.split(",") if op.strip()]
+            changed_ids = [
+                op.strip() for op in args.operators.split(",") if op.strip()
+            ]
         changed_ops = [op for op in ops if op.get("id") in set(changed_ids)]
-        print(f"Checking required fields for {len(changed_ops)} changed operator(s)...")
+        print(
+            f"Checking required fields for {len(changed_ops)} changed operator(s)..."
+        )
         all_errors.extend(check_required_fields(changed_ops))
     else:
         print("Checking required fields for all operators...")

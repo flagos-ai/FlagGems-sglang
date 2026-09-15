@@ -67,7 +67,9 @@ def collect_python_info() -> dict:
     for pkg in packages:
         try:
             mod = __import__(pkg)
-            pkg_versions[pkg] = getattr(mod, "__version__", "installed (no version)")
+            pkg_versions[pkg] = getattr(
+                mod, "__version__", "installed (no version)"
+            )
         except ImportError:
             pkg_versions[pkg] = "not installed"
         except Exception as e:
@@ -105,7 +107,9 @@ def collect_gpu_info() -> dict:
         info["nvcc_version"] = "(nvcc not found)"
 
     # CUDA visible devices
-    info["cuda_visible_devices"] = os.environ.get("CUDA_VISIBLE_DEVICES", "(not set)")
+    info["cuda_visible_devices"] = os.environ.get(
+        "CUDA_VISIBLE_DEVICES", "(not set)"
+    )
 
     return info
 
@@ -157,7 +161,9 @@ def collect_memory_info() -> dict:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Collect CI environment diagnostics")
+    parser = argparse.ArgumentParser(
+        description="Collect CI environment diagnostics"
+    )
     parser.add_argument(
         "--output",
         help="Path to write JSON report",

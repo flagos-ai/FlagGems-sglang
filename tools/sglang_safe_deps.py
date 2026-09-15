@@ -114,7 +114,10 @@ def fetch_requires_dist(package_spec: str) -> list[str]:
         with urllib.request.urlopen(url, timeout=30) as resp:
             data = json.loads(resp.read())
     except Exception as exc:
-        print(f"Error fetching metadata for {package_spec}: {exc}", file=sys.stderr)
+        print(
+            f"Error fetching metadata for {package_spec}: {exc}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     return data.get("info", {}).get("requires_dist") or []

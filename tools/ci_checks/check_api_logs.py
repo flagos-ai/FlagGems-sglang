@@ -146,7 +146,9 @@ def check_debug_calls(tree: ast.Module, op_id: str) -> list[str]:
                     # Check if the message starts with "GEMS"
                     if child.args:
                         arg = child.args[0]
-                        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                        if isinstance(arg, ast.Constant) and isinstance(
+                            arg.value, str
+                        ):
                             if arg.value.startswith("GEMS"):
                                 has_gems_log = True
                                 break

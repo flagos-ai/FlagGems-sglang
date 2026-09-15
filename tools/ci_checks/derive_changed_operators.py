@@ -98,7 +98,9 @@ def filename_to_operator_id(filename: str) -> str | None:
     return filename if filename else None
 
 
-def derive_operators(changed_files: list[str], all_operators: dict) -> list[str]:
+def derive_operators(
+    changed_files: list[str], all_operators: dict
+) -> list[str]:
     """Given changed files, derive which operator IDs are affected."""
     changed_ops = set()
 

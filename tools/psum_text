@@ -93,7 +93,9 @@ def parse_env():
         lines.append("")
         lines.append("| Env | Setting | Env | Setting |")
         lines.append("| --- | ------- | ----| --------|")
-        lines.append(f"| **Time** | `{timestamp}` | **FlagGems** | `{flaggems_ver}` |")
+        lines.append(
+            f"| **Time** | `{timestamp}` | **FlagGems** | `{flaggems_ver}` |"
+        )
         lines.append(f"| **Arch** | `{arch}` | **OS** | `{os}` |")
         lines.append(f"| **Python** | `{pyver}` | **Torch** | `{torch_ver}` |")
         lines.append(
@@ -167,8 +169,12 @@ def parse_single_accuracy():
     lines.append("#### Summary")
     lines.append("")
     if ARGS.compare:
-        line0 = "| Case | Status | Duration | Total | Passed | Skipped | Failed |"
-        line1 = "|------|--------|----------|-------|--------|---------|--------|"
+        line0 = (
+            "| Case | Status | Duration | Total | Passed | Skipped | Failed |"
+        )
+        line1 = (
+            "|------|--------|----------|-------|--------|---------|--------|"
+        )
     else:
         line0 = "| Status | Duration | Total | Passed | Skipped | Failed |"
         line1 = "|--------|----------|-------|--------|---------|--------|"
@@ -214,7 +220,11 @@ def parse_single_performance():
         duration = op_data.get("duration", 0)
         if status in ["Skipped", "Failed"]:
             reason = op_data.get("reason", "Unknown")
-            reason = "<blockquote>" + reason.replace("\n", "<br/>") + "</blockquote>"
+            reason = (
+                "<blockquote>"
+                + reason.replace("\n", "<br/>")
+                + "</blockquote>"
+            )
             if status == "Failed":
                 status = "<span style='color:Red'>Failed</span>"
             else:
@@ -240,7 +250,12 @@ def parse_single_performance():
         data2 = {}
 
     if not data1 and not data2:
-        return ["### Performance Result", "", "*No performance data collected!*", ""]
+        return [
+            "### Performance Result",
+            "",
+            "*No performance data collected!*",
+            "",
+        ]
 
     op = list(data1.keys())[0] if data1 else list(data2.keys())[0]
     op_data1 = data1.get(op, {}).get("performance", {})
@@ -492,7 +507,9 @@ def main():
     global ARGS
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("dir", default="result", help="the data directory to process")
+    parser.add_argument(
+        "dir", default="result", help="the data directory to process"
+    )
     parser.add_argument(
         "-f",
         "--format",

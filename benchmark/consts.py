@@ -51,8 +51,10 @@ DEFAULT_WARMUP_TIME = DEFAULT_WARMUP_COUNT
 DEFAULT_ITER_TIME = DEFAULT_ITER_COUNT
 
 # Upstream spellings of the legacy shape lists.
-from .attri_util import LEGACY_DNN_SHAPES as LEGACY_BLAS_SHAPES  # noqa: E402
-from .attri_util import (  # noqa: E402
+from .attri_util import (  # noqa: E402,F401
+    LEGACY_DNN_SHAPES as LEGACY_BLAS_SHAPES,
+)
+from .attri_util import (  # noqa: E402,F401
     LEGACY_NON_DNN_SHAPES as LEGACY_NON_BLAS_SHAPES,
 )
 

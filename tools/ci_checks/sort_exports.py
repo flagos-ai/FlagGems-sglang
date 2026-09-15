@@ -43,7 +43,9 @@ except ImportError:
     yaml = None
 
 
-def sort_python_all(file_path: Path, fix: bool = False, dry_run: bool = False) -> bool:
+def sort_python_all(
+    file_path: Path, fix: bool = False, dry_run: bool = False
+) -> bool:
     """
     Sort __all__ list in a Python file by casefold.
 
@@ -76,7 +78,9 @@ def sort_python_all(file_path: Path, fix: bool = False, dry_run: bool = False) -
         node
         for node in tree.body
         if isinstance(node, ast.Assign)
-        and any(isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets)
+        and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets
+        )
         and isinstance(node.value, ast.List)
     ]
 
@@ -135,9 +139,13 @@ def sort_python_all(file_path: Path, fix: bool = False, dry_run: bool = False) -
                 f"   Found {len(duplicates)} duplicate(s): {', '.join(set(duplicates))}"
             )
         # Show first mismatch
-        for i, (actual, expected) in enumerate(zip(unique_items, sorted_items)):
+        for i, (actual, expected) in enumerate(
+            zip(unique_items, sorted_items)
+        ):
             if actual != expected:
-                print(f"   Position {i}: got '{actual}', expected '{expected}'")
+                print(
+                    f"   Position {i}: got '{actual}', expected '{expected}'"
+                )
                 break
         return False
 
@@ -146,7 +154,9 @@ def sort_python_all(file_path: Path, fix: bool = False, dry_run: bool = False) -
         # Show first mismatch
         for i, (actual, expected) in enumerate(zip(items, sorted_items)):
             if actual != expected:
-                print(f"   Position {i}: got '{actual}', expected '{expected}'")
+                print(
+                    f"   Position {i}: got '{actual}', expected '{expected}'"
+                )
                 break
         return False
 
@@ -168,7 +178,9 @@ def sort_python_all(file_path: Path, fix: bool = False, dry_run: bool = False) -
     # Rebuild only the `__all__ = [ ... ]` statement, replacing it in place by
     # line range so nothing outside the assignment can be touched.
     new_block = [prefix]
-    new_block += [f"{indent_str}{quote}{item}{quote}," for item in sorted_items]
+    new_block += [
+        f"{indent_str}{quote}{item}{quote}," for item in sorted_items
+    ]
     new_block.append(suffix)
 
     new_source = "\n".join(
@@ -236,7 +248,9 @@ def sort_operators_yaml(
         # Show first mismatch
         for i, (actual, expected) in enumerate(zip(ids, sorted_ids)):
             if actual != expected:
-                print(f"   Position {i}: got '{actual}', expected '{expected}'")
+                print(
+                    f"   Position {i}: got '{actual}', expected '{expected}'"
+                )
                 break
         return False
 
@@ -261,7 +275,9 @@ def sort_operators_yaml(
             break
 
     if ops_line_idx is None:
-        print(f"Error: Cannot find 'ops:' line in {file_path}", file=sys.stderr)
+        print(
+            f"Error: Cannot find 'ops:' line in {file_path}", file=sys.stderr
+        )
         return False
 
     # Preserve header (copyright + "ops:")
@@ -293,7 +309,9 @@ def sort_operators_yaml(
     return False
 
 
-def sort_full_config(file_path: Path, fix: bool = False, dry_run: bool = False) -> bool:
+def sort_full_config(
+    file_path: Path, fix: bool = False, dry_run: bool = False
+) -> bool:
     """Sort _FULL_CONFIG tuple in __init__.py by key (casefold).
 
     Args:
@@ -315,7 +333,10 @@ def sort_full_config(file_path: Path, fix: bool = False, dry_run: bool = False) 
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "_FULL_CONFIG":
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == "_FULL_CONFIG"
+                ):
                     config_node = node
                     break
 
@@ -329,7 +350,9 @@ def sort_full_config(file_path: Path, fix: bool = False, dry_run: bool = False) 
     for elt in config_node.value.elts:
         if isinstance(elt, ast.Tuple) and len(elt.elts) >= 2:
             key_node = elt.elts[0]
-            if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+            if isinstance(key_node, ast.Constant) and isinstance(
+                key_node.value, str
+            ):
                 key = key_node.value
                 # Get the full source text for this tuple (may span multiple lines)
                 start_line = elt.lineno - 1  # 0-indexed
@@ -361,12 +384,16 @@ def sort_full_config(file_path: Path, fix: bool = False, dry_run: bool = False) 
         print(f"❌ {file_path}: _FULL_CONFIG is not sorted by key.casefold()")
         for i, (actual, expected) in enumerate(zip(keys, sorted_keys)):
             if actual != expected:
-                print(f"   Position {i}: got '{actual}', expected '{expected}'")
+                print(
+                    f"   Position {i}: got '{actual}', expected '{expected}'"
+                )
                 break
         return False
 
     if dry_run:
-        print(f"Would sort {file_path}: _FULL_CONFIG with {len(entries)} entries")
+        print(
+            f"Would sort {file_path}: _FULL_CONFIG with {len(entries)} entries"
+        )
         return False
 
     # Sort entries by key
@@ -487,7 +514,9 @@ def main():
             )
         else:
             # Sort __all__
-            sorted_ok = sort_python_all(file_path, fix=args.fix, dry_run=args.dry_run)
+            sorted_ok = sort_python_all(
+                file_path, fix=args.fix, dry_run=args.dry_run
+            )
             # Also sort _FULL_CONFIG if this is the main __init__.py
             if str(file_path) == "src/flaggems_sglang/__init__.py":
                 config_sorted = sort_full_config(

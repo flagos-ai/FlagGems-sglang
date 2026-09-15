@@ -179,7 +179,9 @@ def _render_log_tabs(summary_text, log_files, uid):
         uid: Unique ID prefix for this tab group.
     """
     parts = []
-    parts.append(f"<details><summary>{html_module.escape(summary_text)}</summary>")
+    parts.append(
+        f"<details><summary>{html_module.escape(summary_text)}</summary>"
+    )
     parts.append(f'<div class="log-tabs" id="tabs-{uid}">')
 
     # Tab buttons
@@ -233,8 +235,12 @@ def parse_env():
     lines.append(f"<tr><td>FlagTree</td><td><tt>{flagtree_ver}</tt></td></tr>")
     lines.append(f"<tr><td>Triton</td><td><tt>{triton_ver}</tt></td></tr>")
     lines.append(f"<tr><td>FlagGems</td><td><tt>{flaggems_ver}</tt></td></tr>")
-    lines.append(f"<tr><td>Vendor</td><td><tt>{flaggems_vendor}</tt></td></tr>")
-    lines.append(f"<tr><td>Device</td><td><tt>{flaggems_device}</tt></td></tr>")
+    lines.append(
+        f"<tr><td>Vendor</td><td><tt>{flaggems_vendor}</tt></td></tr>"
+    )
+    lines.append(
+        f"<tr><td>Device</td><td><tt>{flaggems_device}</tt></td></tr>"
+    )
     lines.append("</tbody>")
     lines.append("</table>")
 
@@ -415,7 +421,9 @@ def main():
     global DATA_DIR
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("dir", default="result", help="the data directory to process")
+    parser.add_argument(
+        "dir", default="result", help="the data directory to process"
+    )
     parser.add_argument(
         "-o", "--output", default="<stdout>", help="path to the output file."
     )

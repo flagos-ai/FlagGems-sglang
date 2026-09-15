@@ -43,7 +43,9 @@ ATEN_ALLOWLIST_FILE = Path("conf/aten_op_allowlist.txt")
 
 # Pattern for valid aten operator names
 # Allows: word chars, dots for overloads, leading underscores
-ATEN_NAME_PATTERN = re.compile(r"^_?[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)?$")
+ATEN_NAME_PATTERN = re.compile(
+    r"^_?[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)?$"
+)
 
 
 def load_operators_yaml() -> dict[str, dict]:
@@ -64,7 +66,11 @@ def load_allowlist() -> set[str] | None:
     if not ATEN_ALLOWLIST_FILE.exists():
         return None
     with open(ATEN_ALLOWLIST_FILE) as f:
-        return {line.strip() for line in f if line.strip() and not line.startswith("#")}
+        return {
+            line.strip()
+            for line in f
+            if line.strip() and not line.startswith("#")
+        }
 
 
 def check_aten_names(
@@ -125,7 +131,9 @@ def check_aten_names(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Check aten operator name validity")
+    parser = argparse.ArgumentParser(
+        description="Check aten operator name validity"
+    )
     parser.add_argument(
         "--operators",
         help="JSON list of operator IDs to check (incremental mode)",
@@ -163,7 +171,9 @@ def main():
     all_errors = []
 
     for op_id in sorted(ops_to_check):
-        all_errors.extend(check_aten_names(op_id, all_operators[op_id], allowlist))
+        all_errors.extend(
+            check_aten_names(op_id, all_operators[op_id], allowlist)
+        )
 
     if all_errors:
         print(f"\n❌ Found {len(all_errors)} issue(s):\n")

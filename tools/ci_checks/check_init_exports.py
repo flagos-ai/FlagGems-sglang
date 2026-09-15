@@ -110,15 +110,21 @@ def extract_full_config_keys(source: str) -> list[tuple[str, int]]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:
-                if isinstance(target, ast.Name) and target.id == "_FULL_CONFIG":
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == "_FULL_CONFIG"
+                ):
                     # _FULL_CONFIG is a tuple of tuples
                     if isinstance(node.value, ast.Tuple):
                         for elt in node.value.elts:
-                            if isinstance(elt, ast.Tuple) and len(elt.elts) >= 2:
+                            if (
+                                isinstance(elt, ast.Tuple)
+                                and len(elt.elts) >= 2
+                            ):
                                 first = elt.elts[0]
-                                if isinstance(first, ast.Constant) and isinstance(
-                                    first.value, str
-                                ):
+                                if isinstance(
+                                    first, ast.Constant
+                                ) and isinstance(first.value, str):
                                     keys.append((first.value, first.lineno))
     return keys
 
@@ -276,7 +282,9 @@ def main():
                 file_errors.extend(check_config_duplicates(config_keys))
                 file_errors.extend(check_config_sorted(config_keys))
             else:
-                print("  _FULL_CONFIG not found or empty (skipping registry checks)")
+                print(
+                    "  _FULL_CONFIG not found or empty (skipping registry checks)"
+                )
 
         if file_errors:
             all_errors_by_file[init_file] = file_errors
