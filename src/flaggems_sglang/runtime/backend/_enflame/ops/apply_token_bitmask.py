@@ -74,6 +74,4 @@ def apply_token_bitmask(logits, bitmask):
     return out
 
 
-reference = apply_token_bitmask
-
 __all__ = ["apply_token_bitmask"]
