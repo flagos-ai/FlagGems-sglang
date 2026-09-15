@@ -72,20 +72,20 @@ def parse_env():
     torch_ver = torch_obj.get("version", "?")
     flagtree_ver = env.get("flagtree", "?")
     triton_ver = env.get("triton", {}).get("version", "?")
-    flaggems_vendor = env.get("flag_gems", {}).get("vendor", "?")
-    flaggems_device = env.get("flag_gems", {}).get("device", "?")
+    flaggems_vendor = env.get("flaggems_sglang", {}).get("vendor", "?")
+    flaggems_device = env.get("flaggems_sglang", {}).get("device", "?")
     if ARGS.compare:
         ts1 = DATA["before"].get("timestamp", "?")
         ts2 = DATA["after"].get("timestamp", "?")
         timestamp = f"{ts1} -> {ts2}"
         env1 = env
         env2 = DATA["after"].get("env", {})
-        ver1 = env1.get("flag_gems", {}).get("version", "?")
-        ver2 = env2.get("flag_gems", {}).get("version", "?")
+        ver1 = env1.get("flaggems_sglang", {}).get("version", "?")
+        ver2 = env2.get("flaggems_sglang", {}).get("version", "?")
         flaggems_ver = f"{ver1} -> {ver2}"
     else:
         timestamp = DATA.get("timestamp", "?")
-        flaggems_ver = env.get("flag_gems", {}).get("version", "?")
+        flaggems_ver = env.get("flaggems_sglang", {}).get("version", "?")
 
     lines = []
     if ARGS.format == "markdown":

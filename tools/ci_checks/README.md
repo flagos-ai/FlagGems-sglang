@@ -44,7 +44,7 @@ python tools/ci_checks/check_operators_yaml.py --all
 
 Two checks run as local pre-commit hooks:
 
-- **check-init-exports**: triggers when `src/flag_gems/__init__.py` is modified
+- **check-init-exports**: triggers when `src/flaggems_sglang/__init__.py` is modified
 - **check-operators-yaml**: triggers when `conf/operators.yaml` is modified
 
 These run automatically on `git commit`. To install:
@@ -69,7 +69,7 @@ pre-commit install
 ### check_kernelgen_tests.py (blocking)
 
 - Test files for KernelGen operators must NOT call `use_gems()`
-- KernelGen tests should use `flag_gems.enable()` or direct kernel calls
+- KernelGen tests should use `flaggems_sglang.enable()` or direct kernel calls
 
 ### check_operator_markers.py (blocking)
 

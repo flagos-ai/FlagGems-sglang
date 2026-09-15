@@ -62,7 +62,7 @@ def collect_python_info() -> dict:
     }
 
     # Check key packages
-    packages = ["torch", "triton", "flag_gems", "pytest"]
+    packages = ["torch", "triton", "flaggems_sglang", "pytest"]
     pkg_versions = {}
     for pkg in packages:
         try:
@@ -70,6 +70,10 @@ def collect_python_info() -> dict:
             pkg_versions[pkg] = getattr(mod, "__version__", "installed (no version)")
         except ImportError:
             pkg_versions[pkg] = "not installed"
+        except Exception as e:
+            # flaggems_sglang runs device detection at import time and
+            # raises when no supported device is present.
+            pkg_versions[pkg] = f"import failed ({type(e).__name__})"
     info["packages"] = pkg_versions
 
     return info
@@ -182,7 +186,7 @@ def main():
         pkgs = report["python"]["packages"]
         print(f"PyTorch: {pkgs.get('torch', '?')}")
         print(f"Triton: {pkgs.get('triton', '?')}")
-        print(f"FlagGems: {pkgs.get('flag_gems', '?')}")
+        print(f"FlagGems: {pkgs.get('flaggems_sglang', '?')}")
         print(f"GPU: {report['gpu'].get('nvidia_smi', '?')}")
         print(
             f"Disk: {report['disk'].get('free_gb', '?')}GB free "

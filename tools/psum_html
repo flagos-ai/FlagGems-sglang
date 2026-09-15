@@ -216,9 +216,9 @@ def parse_env():
     torch_ver = torch_obj.get("version", "?")
     flagtree_ver = env.get("flagtree", "?")
     triton_ver = env.get("triton", {}).get("version", "?")
-    flaggems_ver = env.get("flag_gems", {}).get("version", "?")
-    flaggems_vendor = env.get("flag_gems", {}).get("vendor", "?")
-    flaggems_device = env.get("flag_gems", {}).get("device", "?")
+    flaggems_ver = env.get("flaggems_sglang", {}).get("version", "?")
+    flaggems_vendor = env.get("flaggems_sglang", {}).get("vendor", "?")
+    flaggems_device = env.get("flaggems_sglang", {}).get("device", "?")
 
     lines = []
     lines.append("<h3>Test Environment</h3>")

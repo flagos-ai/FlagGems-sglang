@@ -36,13 +36,13 @@ def discover_init_files() -> list[Path]:
     """Discover all __init__.py files that should be checked.
 
     Returns __init__.py files from:
-      - Main package: src/flag_gems/__init__.py
-      - Backend ops: src/flag_gems/runtime/backend/*/*/ops/__init__.py
+      - Main package: src/flaggems_sglang/__init__.py
+      - Backend ops: src/flaggems_sglang/runtime/backend/*/*/ops/__init__.py
 
     Excludes utility/helper packages (utils, fused, etc.) since they typically
     don't export operators with the same naming conventions.
     """
-    root = Path("src/flag_gems")
+    root = Path("src/flaggems_sglang")
     if not root.exists():
         return []
 
@@ -54,8 +54,9 @@ def discover_init_files() -> list[Path]:
         files.append(main_init)
 
     # 2. All backend ops __init__.py files
-    # Pattern: src/flag_gems/runtime/backend/_<vendor>/ops/__init__.py
-    # Pattern: src/flag_gems/runtime/backend/_<vendor>/<arch>/ops/__init__.py
+    # Pattern: src/flaggems_sglang/runtime/backend/_<vendor>/ops/__init__.py
+    # Pattern:
+    #   src/flaggems_sglang/runtime/backend/_<vendor>/<arch>/ops/__init__.py
     backend_root = root / "runtime" / "backend"
     if backend_root.exists():
         for vendor_dir in backend_root.iterdir():
@@ -268,7 +269,7 @@ def main():
             print("  __all__ not found (skipping __all__ checks)")
 
         # Check _FULL_CONFIG (only in main package __init__.py)
-        if str(init_file) == "src/flag_gems/__init__.py":
+        if str(init_file) == "src/flaggems_sglang/__init__.py":
             config_keys = extract_full_config_keys(source)
             if config_keys:
                 print(f"  _FULL_CONFIG has {len(config_keys)} entries")

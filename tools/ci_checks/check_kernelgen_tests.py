@@ -16,8 +16,8 @@
 """Check test files for forbidden use_gems() calls.
 
 Rules:
-  1. Test files must NOT call flag_gems.use_gems() or use_gems() directly,
-     as this bypasses reference implementation comparison.
+  1. Test files must NOT call flaggems_sglang.use_gems() or use_gems()
+     directly, as this bypasses reference implementation comparison.
   2. In incremental mode (default in CI), only PR-changed test files are checked.
 
 Exit codes:
@@ -53,7 +53,7 @@ def find_use_gems_calls(filepath: Path) -> list[tuple[int, str]]:
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
-            # Check for use_gems() or flag_gems.use_gems()
+            # Check for use_gems() or flaggems_sglang.use_gems()
             func = node.func
             if isinstance(func, ast.Name) and func.id == "use_gems":
                 line = (
@@ -63,7 +63,7 @@ def find_use_gems_calls(filepath: Path) -> list[tuple[int, str]]:
                 )
                 violations.append((node.lineno, line))
             elif isinstance(func, ast.Attribute) and func.attr == "use_gems":
-                # e.g., flag_gems.use_gems()
+                # e.g., flaggems_sglang.use_gems()
                 line = (
                     source_lines[node.lineno - 1].strip()
                     if node.lineno <= len(source_lines)

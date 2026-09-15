@@ -14,19 +14,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Extract vllm's pip-installable dependencies, excluding packages that
+"""Extract sglang's pip-installable dependencies, excluding packages that
 conflict with the FlagOS runtime (torch, triton, nvidia-*, flashinfer, …).
 
 Usage
 -----
     # Print safe dependency specs, one per line:
-    python tools/vllm_safe_deps.py vllm==0.21.0
+    python tools/sglang_safe_deps.py sglang==0.5.19
 
     # Use with pip/uv:
-    python tools/vllm_safe_deps.py vllm==0.21.0 | xargs uv pip install
+    python tools/sglang_safe_deps.py sglang==0.5.19 | xargs uv pip install
 
     # Custom blacklist (extend the built-in one):
-    python tools/vllm_safe_deps.py vllm==0.21.0 --exclude numba --exclude xgrammar
+    python tools/sglang_safe_deps.py sglang==0.5.19 \
+        --exclude numba --exclude xgrammar
 
 The script fetches metadata from PyPI (no download/install), filters out
 hardware-specific packages, and prints one safe dependency per line.
@@ -41,7 +42,7 @@ import sys
 import urllib.request
 
 # ── Packages provided by the FlagOS runtime layer ──────────────
-# These must NOT be installed/upgraded when adding vllm on top.
+# These must NOT be installed/upgraded when adding sglang on top.
 BUILTIN_BLACKLIST: set[str] = {
     # torch ecosystem — provided by vendor base image + FlagOS runtime
     "torch",
@@ -97,7 +98,7 @@ def _strip_version(spec: str) -> str:
 
 def fetch_requires_dist(package_spec: str) -> list[str]:
     """Fetch requires_dist from PyPI JSON API."""
-    # "vllm==0.21.0" → name="vllm", version="0.21.0"
+    # "sglang==0.5.19" → name="sglang", version="0.5.19"
     if "==" in package_spec:
         name, version = package_spec.split("==", 1)
     else:
@@ -143,11 +144,11 @@ def filter_safe_deps(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Extract safe vllm deps for FlagOS environments",
+        description="Extract safe sglang deps for FlagOS environments",
     )
     parser.add_argument(
         "package",
-        help='Package spec, e.g. "vllm==0.21.0"',
+        help='Package spec, e.g. "sglang==0.5.19"',
     )
     parser.add_argument(
         "--exclude",

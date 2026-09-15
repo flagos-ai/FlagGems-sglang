@@ -21,14 +21,14 @@ import sys
 
 
 def get_discard_file_lines(discard_file):
-    flag_gems_root = os.environ.get("FlagGemsROOT")
+    flaggems_root = os.environ.get("FlagGemsROOT")
     dicard_file_lines = {}
     with open(discard_file) as f:
         for line in f:
             line = line.strip()
 
-            if line.startswith(flag_gems_root + "/"):
-                current_file = line[len(flag_gems_root) + 1 :]
+            if line.startswith(flaggems_root + "/"):
+                current_file = line[len(flaggems_root) + 1 :]
                 dicard_file_lines[current_file] = []
                 continue
 

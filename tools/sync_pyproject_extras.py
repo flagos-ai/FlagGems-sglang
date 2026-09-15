@@ -38,7 +38,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKENDS_YAML = ROOT / "src" / "flag_gems" / "backends.yaml"
+BACKENDS_YAML = ROOT / "src" / "flaggems_sglang" / "backends.yaml"
 PYPROJECT_TOML = ROOT / "pyproject.toml"
 
 # Extras not generated from backends.yaml — preserved as-is

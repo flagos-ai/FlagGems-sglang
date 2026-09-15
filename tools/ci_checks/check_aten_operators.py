@@ -21,7 +21,8 @@ Rules:
      - Simple: <op_name> (e.g., "abs", "_reshape_alias")
      - Overloaded: <op_name>.<overload> (e.g., "div.Scalar_mode")
   3. If a static allowlist is available, validate names against it
-  4. Non-aten operators (fused, vLLM, etc.) with 'for' set to 'None' string are acceptable
+  4. Non-aten operators (fused, SGLang, etc.) with 'for' set to 'None' string
+     are acceptable
 
 Exit codes:
   0 - all checks pass

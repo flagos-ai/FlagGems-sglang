@@ -20,7 +20,7 @@ set -eo pipefail
 
 CUDA_VISIBLE_DEVICES=6
 
-source_dir="src/flag_gems/experimental_ops"
+source_dir="src/flaggems_sglang/experimental_ops"
 unit_test_dir="experimental_tests/unit"
 performance_test_dir="experimental_tests/performance"
 

@@ -37,12 +37,12 @@ import yaml
 
 # Paths relative to repo root
 OPERATORS_YAML = "conf/operators.yaml"
-OPS_DIR = "src/flag_gems/ops"
+OPS_DIR = "src/flaggems_sglang/ops"
 TESTS_DIR = "tests"
-INIT_FILE = "src/flag_gems/__init__.py"
+INIT_FILE = "src/flaggems_sglang/__init__.py"
 
 # Patterns that map file paths to operator IDs
-OPS_FILE_RE = re.compile(r"^src/flag_gems/ops/(.+)\.py$")
+OPS_FILE_RE = re.compile(r"^src/flaggems_sglang/ops/(.+)\.py$")
 TEST_FILE_RE = re.compile(r"^tests/test_(.+)\.py$")
 
 

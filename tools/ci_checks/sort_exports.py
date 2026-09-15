@@ -25,7 +25,8 @@ Usage:
     python tools/ci_checks/sort_exports.py --fix
 
     # Fix specific files only
-    python tools/ci_checks/sort_exports.py --fix --files src/flag_gems/__init__.py
+    python tools/ci_checks/sort_exports.py --fix \
+        --files src/flaggems_sglang/__init__.py
 
     # Dry run (show what would be changed)
     python tools/ci_checks/sort_exports.py --fix --dry-run
@@ -400,7 +401,7 @@ def discover_init_files() -> list[Path]:
 
     Same logic as check_init_exports.py for consistency.
     """
-    root = Path("src/flag_gems")
+    root = Path("src/flaggems_sglang")
     if not root.exists():
         return []
 
@@ -488,7 +489,7 @@ def main():
             # Sort __all__
             sorted_ok = sort_python_all(file_path, fix=args.fix, dry_run=args.dry_run)
             # Also sort _FULL_CONFIG if this is the main __init__.py
-            if str(file_path) == "src/flag_gems/__init__.py":
+            if str(file_path) == "src/flaggems_sglang/__init__.py":
                 config_sorted = sort_full_config(
                     file_path, fix=args.fix, dry_run=args.dry_run
                 )

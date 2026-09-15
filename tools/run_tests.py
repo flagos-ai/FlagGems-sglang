@@ -418,21 +418,19 @@ def _probe_flaggems():
         sys.exit(-1)
 
 
-def _probe_vllm():
+def _probe_sglang():
     try:
-        import vllm
+        import sglang
 
-        version = vllm.__version__
-        ENV_INFO["vllm"] = {"version": version}
-        pinfo(f"vllm detected ... {version}")
+        version = sglang.__version__
+        ENV_INFO["sglang"] = {"version": version}
+        pinfo(f"sglang detected ... {version}")
     except ImportError:
-        ENV_INFO["vllm"] = {"version": None}
-        pwarn(
-            "vllm is NOT installed (some ops like grouped_topk/topk_softmax may skip)"
-        )
+        ENV_INFO["sglang"] = {"version": None}
+        pwarn("sglang is NOT installed (ops using it as reference may skip)")
     except Exception as e:
-        ENV_INFO["vllm"] = {"version": None}
-        pwarn(f"vllm detection failed: {e}")
+        ENV_INFO["sglang"] = {"version": None}
+        pwarn(f"sglang detection failed: {e}")
 
 
 def probe_env():
@@ -444,7 +442,7 @@ def probe_env():
     _probe_torch()
     _probe_triton()
     _probe_flaggems()
-    _probe_vllm()
+    _probe_sglang()
 
 
 def get_env(gpu_ids):

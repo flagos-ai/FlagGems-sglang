@@ -133,7 +133,7 @@ def main():
         op_info = all_operators[op_id]
         labels = op_info.get("labels", [])
 
-        # Skip fused/vLLM operators - they often have different benchmark patterns
+        # Skip fused/SGLang ops - they often have different benchmark patterns
         if "fused" in labels and "aten" not in labels:
             continue
 

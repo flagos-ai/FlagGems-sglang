@@ -15,7 +15,7 @@
 2. **正常开发和提交**：
    ```bash
    # 修改 __init__.py 或 operators.yaml
-   git add src/flag_gems/ops/__init__.py conf/operators.yaml
+   git add src/flaggems_sglang/ops/__init__.py conf/operators.yaml
    git commit -m "feat: add new operator"
    # pre-commit hook 会自动排序
    ```
@@ -40,7 +40,7 @@ python tools/ci_checks/sort_exports.py --fix
 python tools/ci_checks/sort_exports.py --fix --dry-run
 
 # 只修复特定文件
-python tools/ci_checks/sort_exports.py --fix --files src/flag_gems/__init__.py
+python tools/ci_checks/sort_exports.py --fix --files src/flaggems_sglang/__init__.py
 ```
 
 ### PR merge 后排序乱了？
@@ -104,8 +104,8 @@ sorted(items, key=str.casefold)
 
 ## 排序的文件
 
-1. **`src/flag_gems/__init__.py`** 的 `__all__` 列表（6 项）
-2. **`src/flag_gems/ops/__init__.py`** 的 `__all__` 列表（1029 项）
+1. **`src/flaggems_sglang/__init__.py`** 的 `__all__` 列表（6 项）
+2. **`src/flaggems_sglang/ops/__init__.py`** 的 `__all__` 列表（1029 项）
 3. **`conf/operators.yaml`** 的 `ops` 列表（1096 项）
 
 ---
@@ -119,12 +119,12 @@ CI 跑 `check_init_exports.py` 和 `check_operators_yaml.py`：
 - ✅ **排序正确** → 检查通过
 - ❌ **排序错误** → 检查失败，输出：
   ```
-  ❌ src/flag_gems/ops/__init__.py: __all__ is not sorted by casefold
+  ❌ src/flaggems_sglang/ops/__init__.py: __all__ is not sorted by casefold
      Position 0: got '_nested_sum_backward', expected '__ilshift__'
 
   💡 To fix sorting issues, run:
      python tools/ci_checks/sort_exports.py --fix
-     git add src/flag_gems/ops/__init__.py
+     git add src/flaggems_sglang/ops/__init__.py
      git commit -m 'fix: sort __all__ exports'
   ```
 
@@ -171,8 +171,8 @@ A: 不会。Python 的 `__all__` 和 YAML 列表的顺序不影响功能，只�
 ### 添加新算子
 
 ```python
-# 1. 在 src/flag_gems/ops/__init__.py 添加导入
-from flag_gems.ops.new_op import new_op
+# 1. 在 src/flaggems_sglang/ops/__init__.py 添加导入
+from flaggems_sglang.ops.new_op import new_op
 
 # 2. 在 __all__ 列表里随便插入一个位置（不用管排序）
 __all__ = [
@@ -183,7 +183,7 @@ __all__ = [
 ]
 
 # 3. 提交时 pre-commit hook 会自动排序
-git add src/flag_gems/ops/__init__.py
+git add src/flaggems_sglang/ops/__init__.py
 git commit -m "feat: add new_op"
 ```
 

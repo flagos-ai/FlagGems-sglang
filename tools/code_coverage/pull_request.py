@@ -36,9 +36,9 @@ def get_pull(pull_id):
 
 def get_files(args):
     pull = get_pull(args.pull_id)
-    flag_gems_root = os.environ.get("FlagGemsROOT")
+    flaggems_root = os.environ.get("FlagGemsROOT")
     for file in pull.get_files():
-        print(f"{flag_gems_root}/{file.filename}")
+        print(f"{flaggems_root}/{file.filename}")
 
 
 def show_diff(args):

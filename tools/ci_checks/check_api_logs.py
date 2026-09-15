@@ -40,7 +40,7 @@ from pathlib import Path
 import yaml
 
 OPERATORS_YAML = Path("conf/operators.yaml")
-OPS_DIR = Path("src/flag_gems/ops")
+OPS_DIR = Path("src/flaggems_sglang/ops")
 
 
 def load_operators_yaml() -> dict[str, dict]:
