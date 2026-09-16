@@ -12,84 +12,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Benchmark for mrope_fused operator.
-
-Uses the same shape grid as kernel-comp-baseline/problems/rope/mrope_fused
-so speedup numbers are directly comparable. Benchmarks both the optimized
-Triton kernel and the pure-torch reference to compute speedup.
-"""
+"""Benchmark for rope/mrope_fused."""
 
 import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
-from flaggems_sglang.reference.mrope_fused import reference as mrope_fused
 
-mrope_fused_ref = get_reference("mrope_fused")
+from .op_benchmark import OpBenchmark
 
-# Bench shapes: (num_tokens, n_qh, n_kh, head_size, rotary_dim, mrope_section, max_pos)
-BENCH_CASES = [
-    (1, 8, 2, 128, 128, [16, 24, 24], 4096),
-    (128, 8, 2, 128, 128, [16, 24, 24], 4096),
-    (2048, 8, 2, 128, 128, [16, 24, 24], 4096),
-    (8192, 8, 2, 128, 128, [16, 24, 24], 4096),
-]
+reference = get_reference("mrope_fused")
 
-BENCH_IDS = [
-    f"T{c[0]}_qh{c[1]}_kh{c[2]}_hd{c[3]}_rd{c[4]}" for c in BENCH_CASES
-]
+MROPE_SECTION = [16, 24, 24]
+MAX_POSITION = 4096
 
 
-def _make_inputs(case, device):
-    num_tokens, n_qh, n_kh, head_size, rotary_dim, mrope_section, max_pos = (
-        case
-    )
-    dtype = torch.bfloat16
-    q = torch.randn(num_tokens, n_qh * head_size, device=device, dtype=dtype)
-    k = torch.randn(num_tokens, n_kh * head_size, device=device, dtype=dtype)
-    cos_sin_cache = torch.randn(
-        max_pos, rotary_dim, device=device, dtype=dtype
-    )
-    positions = torch.randint(
-        0, max_pos, (3, num_tokens), device=device, dtype=torch.int64
-    )
-    return q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
+class MropeFusedBenchmark(OpBenchmark):
+    DEFAULT_DTYPES = [torch.bfloat16]
+    DEFAULT_SHAPE_DESC = "num_tokens, n_qh, n_kh, head_size, rotary_dim"
+    # Shapes match kernel-comp-baseline/problems/rope/mrope_fused.
+    CORE_SHAPES = [
+        (1, 8, 2, 128, 128),
+        (128, 8, 2, 128, 128),
+        (2048, 8, 2, 128, 128),
+        (8192, 8, 2, 128, 128),
+    ]
+
+    def get_input_iter(self, cur_dtype):
+        for num_tokens, n_qh, n_kh, head_size, rotary_dim in self.shapes:
+            q = torch.randn(
+                num_tokens,
+                n_qh * head_size,
+                device=self.device,
+                dtype=cur_dtype,
+            )
+            k = torch.randn(
+                num_tokens,
+                n_kh * head_size,
+                device=self.device,
+                dtype=cur_dtype,
+            )
+            cos_sin_cache = torch.randn(
+                MAX_POSITION, rotary_dim, device=self.device, dtype=cur_dtype
+            )
+            positions = torch.randint(
+                0,
+                MAX_POSITION,
+                (3, num_tokens),
+                device=self.device,
+                dtype=torch.int64,
+            )
+            yield (
+                q,
+                k,
+                cos_sin_cache,
+                positions,
+                MROPE_SECTION,
+                head_size,
+                rotary_dim,
+            )
 
 
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.mrope_fused
-def test_mrope_fused_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    device = flaggems_sglang.device
-    case = BENCH_CASES[case_idx]
-    q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim = (
-        _make_inputs(case, device)
+def test_perf_mrope_fused():
+    bench = MropeFusedBenchmark(
+        op_name="mrope_fused",
+        torch_op=reference,
     )
-
-    def run_triton():
-        return mrope_fused(
-            q,
-            k,
-            cos_sin_cache,
-            positions,
-            mrope_section,
-            head_size,
-            rotary_dim,
-        )
-
-    def run_ref():
-        return mrope_fused_ref(
-            q,
-            k,
-            cos_sin_cache,
-            positions,
-            mrope_section,
-            head_size,
-            rotary_dim,
-        )
-
-    ref_us = do_bench_us(run_ref)
-    triton_us = do_bench_us(run_triton)
-    record_case("rope/mrope_fused", BENCH_IDS[case_idx], ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.mrope_fused)
+    bench.run()

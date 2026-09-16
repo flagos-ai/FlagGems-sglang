@@ -207,28 +207,53 @@ import pytest
 import torch
 
 import flaggems_sglang
-from .attri_util import FLOAT_DTYPES, MY_OP_BENCH_SHAPES
+from flaggems_sglang.reference import get_reference
+
+from .op_benchmark import OpBenchmark
+
+reference = get_reference("my_op")
 
 
-@pytest.mark.parametrize("shape", MY_OP_BENCH_SHAPES)
-@pytest.mark.parametrize("dtype", FLOAT_DTYPES)
+class MyOpBenchmark(OpBenchmark):
+    DEFAULT_DTYPES = [torch.bfloat16]
+    DEFAULT_SHAPE_DESC = "M, N"
+    CORE_SHAPES = [(1024, 4096), (4096, 4096)]
+    MORE_SHAPES = [(17, 31)]
+
+    def get_input_iter(self, cur_dtype):
+        for M, N in self.shapes:
+            yield (
+                torch.randn(M, N, dtype=cur_dtype, device=self.device),
+            )
+
+
 @pytest.mark.my_op
-def test_my_op(shape, dtype, benchmark):
-    device = flaggems_sglang.device
-    x = torch.randn(*shape, dtype=dtype, device=device)
-    benchmark(flaggems_sglang.my_op, x)
+def test_perf_my_op():
+    bench = MyOpBenchmark(op_name="my_op", torch_op=reference)
+    bench.set_gems(flaggems_sglang.my_op)
+    bench.run()
 ```
 
-Add your shape list (`MY_OP_BENCH_SHAPES`) to `benchmark/attri_util.py`, next
-to the existing per-op shape constants. Pick shapes representative of the
-serving scenarios the op is designed for (decode vs. prefill, typical hidden
-dims for target models).
+Each tuple yielded by `get_input_iter` is unpacked into the positional
+arguments of both `torch_op` (the pure-torch reference, used as the speedup
+baseline) and the kernel registered via `set_gems`, so the two must accept the
+same signature. `Benchmark.run` handles warmup, timing, and the
+`Operator: ... Performance Test` report table.
+
+Declare shapes on the benchmark class: `CORE_SHAPES` always runs, and
+`MORE_SHAPES` is added at the default `--level comprehensive`. Pick shapes
+representative of the serving scenarios the op is designed for (decode vs.
+prefill, typical hidden dims for target models). `benchmark/core_shapes.yaml`
+is vendored from upstream FlagGems and has no entries for this repository's
+ops — don't edit it.
 
 Run locally:
 
 ```shell
 pytest -q benchmark/test_my_op.py --level core --iter 1 --warmup 1
 ```
+
+Correctness assertions live in `tests/`, not here; a benchmark only measures.
 
 ---
 

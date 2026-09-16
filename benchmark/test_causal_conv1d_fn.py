@@ -18,125 +18,65 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
+
+from .op_benchmark import OpBenchmark
 
 reference = get_reference("causal_conv1d_fn")
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
+class CausalConv1dFnBenchmark(OpBenchmark):
+    DEFAULT_DTYPES = [torch.bfloat16]
+    DEFAULT_SHAPE_DESC = "num_seqs, seq_len, dim, width"
+    # Shapes match kernel-comp-baseline/problems/mamba/causal_conv1d_fn.
+    CORE_SHAPES = [
+        (8, 2048, 4096, 4),
+        (32, 512, 2048, 4),
+    ]
+    MORE_SHAPES = [
+        (1, 7, 16, 4),
+        (4, 1, 8, 3),
+    ]
 
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/mamba/causal_conv1d_fn/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(seq_lens, dim, width=4, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    total = sum(seq_lens)
-    x = torch.randn(
-        dim,
-        total,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
-    weight = torch.randn(
-        dim,
-        width,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
-    bias = torch.randn(
-        dim, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
-    query_start_loc = torch.zeros(
-        len(seq_lens) + 1, dtype=torch.int32, device=flaggems_sglang.device
-    )
-    query_start_loc[1:] = torch.cumsum(
-        torch.tensor(
-            seq_lens, dtype=torch.int32, device=flaggems_sglang.device
-        ),
-        dim=0,
-    )
-    return dict(
-        x=x,
-        weight=weight,
-        bias=bias,
-        query_start_loc=query_start_loc,
-        seq_lens_cpu=list(seq_lens),
-    )
+    def get_input_iter(self, cur_dtype):
+        for num_seqs, seq_len, dim, width in self.shapes:
+            g = torch.Generator(device=self.device).manual_seed(0)
+            seq_lens = [seq_len] * num_seqs
+            total = sum(seq_lens)
+            x = torch.randn(
+                dim,
+                total,
+                generator=g,
+                device=self.device,
+                dtype=torch.float32,
+            ).to(cur_dtype)
+            weight = torch.randn(
+                dim,
+                width,
+                generator=g,
+                device=self.device,
+                dtype=torch.float32,
+            ).to(cur_dtype)
+            bias = torch.randn(
+                dim, generator=g, device=self.device, dtype=torch.float32
+            ).to(cur_dtype)
+            query_start_loc = torch.zeros(
+                num_seqs + 1, dtype=torch.int32, device=self.device
+            )
+            query_start_loc[1:] = torch.cumsum(
+                torch.tensor(seq_lens, dtype=torch.int32, device=self.device),
+                dim=0,
+            )
+            # ``activation`` keeps its "silu" default: the vendored
+            # unpack_to_args_kwargs drops bare str positionals.
+            yield x, weight, bias, query_start_loc, seq_lens
 
 
-CORRECTNESS_CASES = [
-    _case([7], 16),
-    _case([5, 9, 3], 32, width=4),
-    _case([1, 1, 1, 1], 8, width=3),
-]
-
-BENCH_CASES = [
-    _case([2048] * 8, 4096),
-    _case([512] * 32, 2048),
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.causal_conv1d_fn
-def test_causal_conv1d_fn_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_causal_conv1d_fn():
+    bench = CausalConv1dFnBenchmark(
+        op_name="causal_conv1d_fn",
+        torch_op=reference,
     )
-
-    try:
-        from flaggems_sglang.ops.causal_conv1d_fn import causal_conv1d_fn
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("mamba/causal_conv1d_fn ops module not found")
-        return
-
-    try:
-        causal_conv1d_fn(**kwargs)
-    except NotImplementedError:
-        pytest.skip("mamba/causal_conv1d_fn not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: causal_conv1d_fn(**kwargs))
-    record_case("mamba/causal_conv1d_fn", f"case{case_idx}", ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.causal_conv1d_fn)
+    bench.run()
