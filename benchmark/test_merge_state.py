@@ -22,56 +22,50 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-reference = get_reference("merge_state")
+# Shapes match kernel-comp-baseline/problems/attention/merge_state.
+SHAPES = [(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
+MORE_SHAPES = [(7, 4, 64), (83, 16, 128), (3, 32, 512)]
 
 
-class MergeStateBenchmark(OpBenchmark):
-    DEFAULT_DTYPES = [torch.bfloat16]
-    DEFAULT_SHAPE_DESC = "n_tokens, num_heads, head_size"
-    # Shapes match kernel-comp-baseline/problems/attention/merge_state.
-    CORE_SHAPES = [(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
-    MORE_SHAPES = [(7, 4, 64), (83, 16, 128), (3, 32, 512)]
-
-    def get_input_iter(self, cur_dtype):
-        for n_tokens, num_heads, head_size in self.shapes:
-            g = torch.Generator(device=self.device).manual_seed(0)
-            prefix_output = torch.randn(
-                n_tokens,
-                num_heads,
-                head_size,
-                generator=g,
-                device=self.device,
-                dtype=torch.float32,
-            ).to(cur_dtype)
-            suffix_output = torch.randn(
-                n_tokens,
-                num_heads,
-                head_size,
-                generator=g,
-                device=self.device,
-                dtype=torch.float32,
-            ).to(cur_dtype)
-            # lse stays fp32; scaled up to exercise the max-subtraction path.
-            prefix_lse = (
-                torch.randn(
-                    n_tokens, num_heads, generator=g, device=self.device
-                )
-                * 3
-            )
-            suffix_lse = (
-                torch.randn(
-                    n_tokens, num_heads, generator=g, device=self.device
-                )
-                * 3
-            )
-            yield prefix_output, prefix_lse, suffix_output, suffix_lse
+def _input_fn(shape, cur_dtype, device):
+    n_tokens, num_heads, head_size = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    prefix_output = torch.randn(
+        n_tokens,
+        num_heads,
+        head_size,
+        generator=g,
+        device=device,
+        dtype=torch.float32,
+    ).to(cur_dtype)
+    suffix_output = torch.randn(
+        n_tokens,
+        num_heads,
+        head_size,
+        generator=g,
+        device=device,
+        dtype=torch.float32,
+    ).to(cur_dtype)
+    # lse stays fp32; scaled up to exercise the max-subtraction path.
+    prefix_lse = (
+        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
+    )
+    suffix_lse = (
+        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
+    )
+    yield prefix_output, prefix_lse, suffix_output, suffix_lse
 
 
 @pytest.mark.merge_state
 def test_perf_merge_state():
-    bench = MergeStateBenchmark(
+    bench = OpBenchmark(
         op_name="merge_state",
-        torch_op=reference,
+        torch_op=get_reference("merge_state"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="n_tokens, num_heads, head_size",
     )
     bench.set_gems(flaggems_sglang.merge_state)
     bench.run()

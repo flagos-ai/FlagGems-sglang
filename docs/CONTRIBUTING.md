@@ -211,37 +211,45 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-reference = get_reference("my_op")
+SHAPES = [(1024, 4096), (4096, 4096)]
+MORE_SHAPES = [(17, 31)]
 
 
-class MyOpBenchmark(OpBenchmark):
-    DEFAULT_DTYPES = [torch.bfloat16]
-    DEFAULT_SHAPE_DESC = "M, N"
-    CORE_SHAPES = [(1024, 4096), (4096, 4096)]
-    MORE_SHAPES = [(17, 31)]
-
-    def get_input_iter(self, cur_dtype):
-        for M, N in self.shapes:
-            yield (
-                torch.randn(M, N, dtype=cur_dtype, device=self.device),
-            )
+def _input_fn(shape, cur_dtype, device):
+    M, N = shape
+    yield (torch.randn(M, N, dtype=cur_dtype, device=device),)
 
 
 @pytest.mark.my_op
 def test_perf_my_op():
-    bench = MyOpBenchmark(op_name="my_op", torch_op=reference)
+    bench = OpBenchmark(
+        op_name="my_op",
+        torch_op=get_reference("my_op"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="M, N",
+    )
     bench.set_gems(flaggems_sglang.my_op)
     bench.run()
 ```
 
-Each tuple yielded by `get_input_iter` is unpacked into the positional
-arguments of both `torch_op` (the pure-torch reference, used as the speedup
-baseline) and the kernel registered via `set_gems`, so the two must accept the
-same signature. `Benchmark.run` handles warmup, timing, and the
+An op normally needs no benchmark class of its own: `OpBenchmark` (a thin
+`GenericBenchmark` subclass) drives everything, and the op only supplies
+`input_fn`. It is called once per shape and yields the input tuples for that
+shape. Each tuple is unpacked into the positional arguments of both `torch_op`
+(the pure-torch reference, used as the speedup baseline) and the kernel
+registered via `set_gems`, so the two must accept the same signature.
+`Benchmark.run` handles warmup, timing, and the
 `Operator: ... Performance Test` report table.
 
-Declare shapes on the benchmark class: `CORE_SHAPES` always runs, and
-`MORE_SHAPES` is added at the default `--level comprehensive`. Pick shapes
+If the op takes a flag that should be benchmarked both ways, parametrize the
+test and bind the flag with `functools.partial(_input_fn, reverse=reverse)`
+rather than subclassing — see `benchmark/test_chunk_local_cumsum_scalar.py`.
+
+`shapes` always runs; `more_shapes` is added at the default
+`--level comprehensive` and skipped for `--level core`. Pick shapes
 representative of the serving scenarios the op is designed for (decode vs.
 prefill, typical hidden dims for target models). `benchmark/core_shapes.yaml`
 is vendored from upstream FlagGems and has no entries for this repository's

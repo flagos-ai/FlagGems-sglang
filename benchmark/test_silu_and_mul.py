@@ -22,37 +22,31 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-reference = get_reference("silu_and_mul")
+# Shapes match kernel-comp-baseline/problems/activation_norm/silu_and_mul.
+SHAPES = [(bs, 4096) for bs in (1, 8, 64, 512, 4096)]
+MORE_SHAPES = [(bs, d) for bs in (1, 8, 64, 512, 4096) for d in (1024, 8192)]
 
 
-class SiluAndMulBenchmark(OpBenchmark):
-    DEFAULT_DTYPES = [torch.bfloat16]
-    DEFAULT_SHAPE_DESC = "bs, d"
-    # Shapes match kernel-comp-baseline/problems/activation_norm/silu_and_mul.
-    CORE_SHAPES = [(bs, d) for bs in (1, 8, 64, 512, 4096) for d in (4096,)]
-    MORE_SHAPES = [
-        (bs, d) for bs in (1, 8, 64, 512, 4096) for d in (1024, 8192)
-    ]
-
-    def get_input_iter(self, cur_dtype):
-        for bs, d in self.shapes:
-            # The op reads x1/x3 from a single [bs, 2 * d] tensor.
-            g = torch.Generator(device=self.device).manual_seed(0)
-            hidden_states = torch.randn(
-                bs,
-                2 * d,
-                dtype=torch.float32,
-                device=self.device,
-                generator=g,
-            ).to(cur_dtype)
-            yield (hidden_states,)
+def _input_fn(shape, cur_dtype, device):
+    bs, d = shape
+    # The op reads x1/x3 from a single [bs, 2 * d] tensor.
+    g = torch.Generator(device=device).manual_seed(0)
+    hidden_states = torch.randn(
+        bs, 2 * d, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
+    yield (hidden_states,)
 
 
 @pytest.mark.silu_and_mul
 def test_perf_silu_and_mul():
-    bench = SiluAndMulBenchmark(
+    bench = OpBenchmark(
         op_name="silu_and_mul",
-        torch_op=reference,
+        torch_op=get_reference("silu_and_mul"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="bs, d",
     )
     bench.set_gems(flaggems_sglang.silu_and_mul)
     bench.run()

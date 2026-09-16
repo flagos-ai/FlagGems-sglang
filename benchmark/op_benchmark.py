@@ -12,45 +12,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Benchmark base class for the operators implemented in this repository.
+"""Shared benchmark entry point for this repository's operators.
 
-``benchmark/performance_utils.py``, ``benchmark/conftest.py`` and
-``benchmark/core_shapes.yaml`` are vendored from upstream FlagGems, and that
-shape file has no entries for the ops here. The inherited
-:meth:`Benchmark.set_shapes` walks the MRO looking for a matching key and
-would therefore settle on the generic ``Benchmark:`` shapes from the vendored
-YAML. Declaring shapes on the subclass instead keeps them next to the input
-builder that consumes them, and leaves the vendored file untouched so it can
-be re-synced from upstream.
+Each op benchmark reuses upstream's :class:`GenericBenchmark`: the op supplies
+an ``input_fn(shape, cur_dtype, device)`` generator plus its shape list, and
+the base class handles dtype/metric selection, warmup, timing against the
+reference and the ``Operator: ... Performance Test`` report. Ops therefore
+need no benchmark subclass of their own -- see ``test_silu_and_mul.py``.
+
+Shapes are constructor arguments rather than YAML entries. ``core_shapes.yaml``
+is vendored from upstream FlagGems and has no keys for this repository's ops,
+so the inherited ``set_shapes`` would walk the MRO and silently fall back to
+the generic ``Benchmark:`` shapes. Keeping shapes out of that file leaves it
+re-syncable.
 """
+
+from typing import Any, Iterable, Optional, Sequence
 
 from . import conftest
 from .attri_util import BenchLevel
-from .performance_utils import Benchmark
+from .performance_utils import GenericBenchmark
 
 
-class OpBenchmark(Benchmark):
-    """Shape handling shared by this repository's operator benchmarks.
+class OpBenchmark(GenericBenchmark):
+    """:class:`GenericBenchmark` with shapes supplied by the caller.
 
-    Subclasses declare ``CORE_SHAPES`` (always benchmarked) and optionally
-    ``MORE_SHAPES`` (added by ``--level comprehensive``, the default), plus a
-    ``DEFAULT_SHAPE_DESC`` naming the fields of a shape tuple.
+    ``shapes`` always runs; ``more_shapes`` is appended at the default
+    ``--level comprehensive`` and skipped for ``--level core``.
     """
 
-    CORE_SHAPES: list = []
-    MORE_SHAPES: list = []
+    def __init__(
+        self,
+        *args: Any,
+        shapes: Iterable[Sequence[int]],
+        shape_desc: str,
+        more_shapes: Optional[Iterable[Sequence[int]]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.core_shapes = [tuple(shape) for shape in shapes]
+        self.more_shapes = [tuple(shape) for shape in more_shapes or ()]
+        self.shapes = list(self.core_shapes)
+        self.shape_desc = shape_desc
 
-    def set_shapes(self, shape_file_path=None):
-        self.shapes = list(self.CORE_SHAPES)
-        self.shape_desc = self.DEFAULT_SHAPE_DESC
-        if self.MORE_SHAPES and _is_comprehensive():
-            self.shapes = list(
-                dict.fromkeys(self.shapes + list(self.MORE_SHAPES))
-            )
+    def set_shapes(self, shape_file_path: Optional[str] = None) -> None:
+        self.shapes = list(self.core_shapes)
+        if self.more_shapes and _is_comprehensive():
+            self.shapes = list(dict.fromkeys(self.shapes + self.more_shapes))
 
-    def set_more_shapes(self):
-        # Shapes are merged by set_shapes above; returning None keeps the
-        # vendored base class from merging them a second time.
+    def set_more_shapes(self) -> None:
+        # Shapes are merged by set_shapes above. The generic 1D/2D/3D shapes
+        # GenericBenchmark would add here don't fit these operators.
         return None
 
 

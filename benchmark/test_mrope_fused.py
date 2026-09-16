@@ -22,63 +22,39 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-reference = get_reference("mrope_fused")
-
 MROPE_SECTION = [16, 24, 24]
 MAX_POSITION = 4096
 
+# Shapes match kernel-comp-baseline/problems/rope/mrope_fused.
+SHAPES = [(n, 8, 2, 128, 128) for n in (1, 128, 2048, 8192)]
 
-class MropeFusedBenchmark(OpBenchmark):
-    DEFAULT_DTYPES = [torch.bfloat16]
-    DEFAULT_SHAPE_DESC = "num_tokens, n_qh, n_kh, head_size, rotary_dim"
-    # Shapes match kernel-comp-baseline/problems/rope/mrope_fused.
-    CORE_SHAPES = [
-        (1, 8, 2, 128, 128),
-        (128, 8, 2, 128, 128),
-        (2048, 8, 2, 128, 128),
-        (8192, 8, 2, 128, 128),
-    ]
 
-    def get_input_iter(self, cur_dtype):
-        for num_tokens, n_qh, n_kh, head_size, rotary_dim in self.shapes:
-            q = torch.randn(
-                num_tokens,
-                n_qh * head_size,
-                device=self.device,
-                dtype=cur_dtype,
-            )
-            k = torch.randn(
-                num_tokens,
-                n_kh * head_size,
-                device=self.device,
-                dtype=cur_dtype,
-            )
-            cos_sin_cache = torch.randn(
-                MAX_POSITION, rotary_dim, device=self.device, dtype=cur_dtype
-            )
-            positions = torch.randint(
-                0,
-                MAX_POSITION,
-                (3, num_tokens),
-                device=self.device,
-                dtype=torch.int64,
-            )
-            yield (
-                q,
-                k,
-                cos_sin_cache,
-                positions,
-                MROPE_SECTION,
-                head_size,
-                rotary_dim,
-            )
+def _input_fn(shape, cur_dtype, device):
+    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
+    q = torch.randn(
+        num_tokens, n_qh * head_size, device=device, dtype=cur_dtype
+    )
+    k = torch.randn(
+        num_tokens, n_kh * head_size, device=device, dtype=cur_dtype
+    )
+    cos_sin_cache = torch.randn(
+        MAX_POSITION, rotary_dim, device=device, dtype=cur_dtype
+    )
+    positions = torch.randint(
+        0, MAX_POSITION, (3, num_tokens), device=device, dtype=torch.int64
+    )
+    yield q, k, cos_sin_cache, positions, MROPE_SECTION, head_size, rotary_dim
 
 
 @pytest.mark.mrope_fused
 def test_perf_mrope_fused():
-    bench = MropeFusedBenchmark(
+    bench = OpBenchmark(
         op_name="mrope_fused",
-        torch_op=reference,
+        torch_op=get_reference("mrope_fused"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        shape_desc="num_tokens, n_qh, n_kh, head_size, rotary_dim",
     )
     bench.set_gems(flaggems_sglang.mrope_fused)
     bench.run()

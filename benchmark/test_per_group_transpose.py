@@ -22,40 +22,40 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-reference = get_reference("per_group_transpose")
-
 NUM_EXPERTS = 8
 
+# Shapes match kernel-comp-baseline/problems/quantization/per_group_transpose;
+# every expert gets ``rows_per_expert`` rows.
+SHAPES = [(k, n) for k in (128, 512, 4096) for n in (16, 128, 1024)]
 
-class PerGroupTransposeBenchmark(OpBenchmark):
-    DEFAULT_DTYPES = [torch.bfloat16]
-    DEFAULT_SHAPE_DESC = "k, rows_per_expert"
-    # Shapes match kernel-comp-baseline/problems/quantization/
-    # per_group_transpose; every expert gets ``rows_per_expert`` rows.
-    CORE_SHAPES = [(k, n) for k in (128, 512, 4096) for n in (16, 128, 1024)]
 
-    def get_input_iter(self, cur_dtype):
-        for k, rows_per_expert in self.shapes:
-            counts = [rows_per_expert] * NUM_EXPERTS
-            m = sum(counts)
-            g = torch.Generator(device=self.device).manual_seed(0)
-            a = torch.randn(
-                m, k, generator=g, device=self.device, dtype=cur_dtype
-            ).contiguous()
-            offsets = [0]
-            for c in counts:
-                offsets.append(offsets[-1] + c)
-            expert_offsets = torch.tensor(
-                offsets, dtype=torch.int32, device=self.device
-            )
-            yield a, expert_offsets
+def _input_fn(shape, cur_dtype, device):
+    k, rows_per_expert = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    a = torch.randn(
+        rows_per_expert * NUM_EXPERTS,
+        k,
+        generator=g,
+        device=device,
+        dtype=cur_dtype,
+    ).contiguous()
+    expert_offsets = torch.tensor(
+        [i * rows_per_expert for i in range(NUM_EXPERTS + 1)],
+        dtype=torch.int32,
+        device=device,
+    )
+    yield a, expert_offsets
 
 
 @pytest.mark.per_group_transpose
 def test_perf_per_group_transpose():
-    bench = PerGroupTransposeBenchmark(
+    bench = OpBenchmark(
         op_name="per_group_transpose",
-        torch_op=reference,
+        torch_op=get_reference("per_group_transpose"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        shape_desc="k, rows_per_expert",
     )
     bench.set_gems(flaggems_sglang.per_group_transpose)
     bench.run()
