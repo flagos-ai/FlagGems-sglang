@@ -509,10 +509,6 @@ class Benchmark:
             print(result)
             result_json = result.to_json()
             emit_record_logger(result_json)
-            # Also feed the numeric benchmark data into the JSON record channel.
-            # Without this, `--record json` only captured pass/fail status via
-            # pytest_runtest_logreport, leaving details/latency empty. update_result
-            # itself no-ops unless Config.record_json is set.
             update_result(self.op_name, json.loads(result_json))
 
 
