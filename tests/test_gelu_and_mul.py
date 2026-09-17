@@ -110,7 +110,7 @@ def test_gelu_and_mul(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.gelu_and_mul import gelu_and_mul
+        from flaggems_sglang import gelu_and_mul
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/gelu_and_mul ops module not found")
         return

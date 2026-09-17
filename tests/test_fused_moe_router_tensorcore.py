@@ -144,9 +144,7 @@ def test_fused_moe_router_tensorcore(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_moe_router_tensorcore import (
-            fused_moe_router_tensorcore,
-        )
+        from flaggems_sglang import fused_moe_router_tensorcore
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/fused_moe_router_tensorcore ops module not found")
         return

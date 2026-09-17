@@ -105,7 +105,7 @@ def test_interleaved_rope(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.interleaved_rope import interleaved_rope
+        from flaggems_sglang import interleaved_rope
     except (ImportError, ModuleNotFoundError):
         pytest.skip("rope/interleaved_rope ops module not found")
         return

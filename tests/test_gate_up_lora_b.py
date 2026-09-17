@@ -149,7 +149,7 @@ def test_gate_up_lora_b(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.gate_up_lora_b import gate_up_lora_b
+        from flaggems_sglang import gate_up_lora_b
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/gate_up_lora_b ops module not found")
         return

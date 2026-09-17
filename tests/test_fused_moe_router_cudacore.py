@@ -142,9 +142,7 @@ def test_fused_moe_router_cudacore(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_moe_router_cudacore import (
-            fused_moe_router_cudacore,
-        )
+        from flaggems_sglang import fused_moe_router_cudacore
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/fused_moe_router_cudacore ops module not found")
         return

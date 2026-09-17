@@ -164,7 +164,7 @@ def test_moe_fused_mul_sum(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.moe_fused_mul_sum import moe_fused_mul_sum
+        from flaggems_sglang import moe_fused_mul_sum
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_fused_mul_sum ops module not found")
         return

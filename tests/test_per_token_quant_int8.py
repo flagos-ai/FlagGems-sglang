@@ -133,9 +133,7 @@ def test_per_token_quant_int8(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.per_token_quant_int8 import (
-            per_token_quant_int8,
-        )
+        from flaggems_sglang import per_token_quant_int8
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/per_token_quant_int8 ops module not found")
         return

@@ -106,7 +106,7 @@ def test_silu_and_mul(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.silu_and_mul import silu_and_mul
+        from flaggems_sglang import silu_and_mul
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/silu_and_mul ops module not found")
         return

@@ -164,7 +164,7 @@ def test_moe_fused_gate(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.moe_fused_gate import moe_fused_gate
+        from flaggems_sglang import moe_fused_gate
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_fused_gate ops module not found")
         return

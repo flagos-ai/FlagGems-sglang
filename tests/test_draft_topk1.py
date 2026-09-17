@@ -149,7 +149,7 @@ def test_draft_topk1(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.draft_topk1 import draft_topk1
+        from flaggems_sglang import draft_topk1
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/draft_topk1 ops module not found")
         return
