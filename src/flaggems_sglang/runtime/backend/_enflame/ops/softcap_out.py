@@ -17,7 +17,6 @@ import triton
 import triton.language as tl
 from triton.language.extra.libdevice import tanh as _gcu_tanh
 
-
 _MAX_CTAS = 12
 
 
@@ -44,9 +43,9 @@ def _softcap_out_enflame_kernel(
             tl.store(output_ptr + offsets, result)
         else:
             mask = offsets < N_ELEMENTS
-            x = tl.load(
-                input_ptr + offsets, mask=mask, other=0.0
-            ).to(tl.float32)
+            x = tl.load(input_ptr + offsets, mask=mask, other=0.0).to(
+                tl.float32
+            )
             result = softcap_const * _gcu_tanh(x * inv_softcap)
             tl.store(output_ptr + offsets, result, mask=mask)
     else:
@@ -54,14 +53,12 @@ def _softcap_out_enflame_kernel(
         # advance through contiguous tiles without launching a CUDA-style grid.
         num_programs = tl.num_programs(0)
         num_blocks = tl.cdiv(N_ELEMENTS, BLOCK_SIZE)
-        for block_id in tl.range(
-            pid, num_blocks, num_programs, num_stages=2
-        ):
+        for block_id in tl.range(pid, num_blocks, num_programs, num_stages=2):
             offsets = block_id * BLOCK_SIZE + lane
             mask = offsets < N_ELEMENTS
-            x = tl.load(
-                input_ptr + offsets, mask=mask, other=0.0
-            ).to(tl.float32)
+            x = tl.load(input_ptr + offsets, mask=mask, other=0.0).to(
+                tl.float32
+            )
             result = softcap_const * _gcu_tanh(x * inv_softcap)
             tl.store(output_ptr + offsets, result, mask=mask)
 
@@ -111,5 +108,6 @@ def softcap_out(x, softcap_const, autotune=False):
         num_stages=2 if n_elements <= 65536 else 1,
     )
     return output
+
 
 __all__ = ["softcap_out"]

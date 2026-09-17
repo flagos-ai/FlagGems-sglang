@@ -19,6 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference.chunk_cumsum import (
+    reference as chunk_cumsum_reference,
+)
 
 reference = get_reference("chunk_state_varlen")
 
@@ -56,11 +59,6 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 # Cases (from kernel-comp-baseline/problems/mamba/chunk_state_varlen/cases.py)
 # ---------------------------------------------------------------------------
-
-
-from flaggems_sglang.reference.chunk_cumsum import (
-    reference as chunk_cumsum_reference,
-)
 
 
 def _check(actual, expected):

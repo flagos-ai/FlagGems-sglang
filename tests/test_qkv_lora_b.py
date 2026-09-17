@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
 reference = get_reference("qkv_lora_b")
 
@@ -58,9 +59,6 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 # ---------------------------------------------------------------------------
 # Cases (from kernel-comp-baseline/problems/lora/qkv_lora_b/cases.py)
 # ---------------------------------------------------------------------------
-
-
-from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
 
 def _case(

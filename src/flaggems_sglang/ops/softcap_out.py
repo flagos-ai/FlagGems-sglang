@@ -16,7 +16,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # Keep the one-dimensional physical launch below known heterogeneous-backend
 # limits.  Large tensors continue through a short grid-stride loop.
 _MAX_PROGRAMS = 32768

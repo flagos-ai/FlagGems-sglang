@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 import triton
 import triton.language as tl
-import torch
 
 
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_SIZE': 512}, num_warps=4, num_stages=2),
-        triton.Config({'BLOCK_SIZE': 1024}, num_warps=4, num_stages=2),
-        triton.Config({'BLOCK_SIZE': 2048}, num_warps=8, num_stages=3),
+        triton.Config({"BLOCK_SIZE": 512}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE": 1024}, num_warps=4, num_stages=2),
+        triton.Config({"BLOCK_SIZE": 2048}, num_warps=8, num_stages=3),
     ],
-    key=['n_elements'],
+    key=["n_elements"],
 )
 @triton.jit
 def _softcap_kernel(
@@ -66,7 +66,7 @@ def softcap_out(x: torch.Tensor, softcap_const: float) -> torch.Tensor:
 
     n_elements = x_fp32.numel()
 
-    grid = lambda meta: (triton.cdiv(n_elements, meta['BLOCK_SIZE']),)
+    grid = lambda meta: (triton.cdiv(n_elements, meta["BLOCK_SIZE"]),)
 
     _softcap_kernel[grid](
         x_fp32,
@@ -76,5 +76,6 @@ def softcap_out(x: torch.Tensor, softcap_const: float) -> torch.Tensor:
     )
 
     return out
+
 
 __all__ = ["softcap_out"]
