@@ -186,7 +186,7 @@ def test_chunk_state_varlen(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_state_varlen import chunk_state_varlen
+        from flaggems_sglang import chunk_state_varlen
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/chunk_state_varlen ops module not found")
         return

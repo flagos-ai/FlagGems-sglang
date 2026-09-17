@@ -105,7 +105,7 @@ def test_softcap_out(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.softcap_out import softcap_out
+        from flaggems_sglang import softcap_out
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/softcap_out ops module not found")
         return

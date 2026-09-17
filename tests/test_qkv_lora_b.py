@@ -158,7 +158,7 @@ def test_qkv_lora_b(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.qkv_lora_b import qkv_lora_b
+        from flaggems_sglang import qkv_lora_b
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/qkv_lora_b ops module not found")
         return

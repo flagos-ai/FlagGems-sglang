@@ -207,7 +207,7 @@ def test_fused_recurrent_gdn(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_recurrent_gdn import fused_recurrent_gdn
+        from flaggems_sglang import fused_recurrent_gdn
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/fused_recurrent_gdn ops module not found")
         return

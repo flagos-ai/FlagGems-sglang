@@ -131,9 +131,7 @@ def test_mamba_layernorm_gated(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.mamba_layernorm_gated import (
-            mamba_layernorm_gated,
-        )
+        from flaggems_sglang import mamba_layernorm_gated
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/layernorm_gated ops module not found")
         return

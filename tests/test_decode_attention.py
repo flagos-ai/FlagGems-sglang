@@ -160,7 +160,7 @@ def test_decode_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.decode_attention import decode_attention
+        from flaggems_sglang import decode_attention
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/decode_attention ops module not found")
         return

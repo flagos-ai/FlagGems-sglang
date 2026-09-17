@@ -156,7 +156,7 @@ def test_bmm_chunk(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.bmm_chunk import bmm_chunk
+        from flaggems_sglang import bmm_chunk
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/bmm_chunk ops module not found")
         return

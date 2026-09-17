@@ -158,9 +158,7 @@ def test_decode_grouped_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.decode_grouped_attention import (
-            decode_grouped_attention,
-        )
+        from flaggems_sglang import decode_grouped_attention
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/decode_grouped_attention ops module not found")
         return

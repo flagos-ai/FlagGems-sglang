@@ -155,7 +155,7 @@ def test_context_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.context_attention import context_attention
+        from flaggems_sglang import context_attention
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/context_attention ops module not found")
         return

@@ -148,7 +148,7 @@ def test_embedding_lora_a(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.embedding_lora_a import embedding_lora_a
+        from flaggems_sglang import embedding_lora_a
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/embedding_lora_a ops module not found")
         return

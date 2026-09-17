@@ -120,9 +120,7 @@ def test_chunk_local_cumsum_vector(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_local_cumsum_vector import (
-            chunk_local_cumsum_vector,
-        )
+        from flaggems_sglang import chunk_local_cumsum_vector
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/chunk_local_cumsum_vector ops module not found")
         return

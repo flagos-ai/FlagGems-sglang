@@ -120,7 +120,7 @@ def test_apply_token_bitmask(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.apply_token_bitmask import apply_token_bitmask
+        from flaggems_sglang import apply_token_bitmask
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "sampling_grammar/apply_token_bitmask ops module not found"

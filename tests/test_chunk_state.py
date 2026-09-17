@@ -161,7 +161,7 @@ def test_chunk_state(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_state import chunk_state
+        from flaggems_sglang import chunk_state
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/chunk_state ops module not found")
         return

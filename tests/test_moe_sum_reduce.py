@@ -106,7 +106,7 @@ def test_moe_sum_reduce(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.moe_sum_reduce import moe_sum_reduce
+        from flaggems_sglang import moe_sum_reduce
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_sum_reduce ops module not found")
         return

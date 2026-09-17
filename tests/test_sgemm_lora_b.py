@@ -130,7 +130,7 @@ def test_sgemm_lora_b(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.sgemm_lora_b import sgemm_lora_b
+        from flaggems_sglang import sgemm_lora_b
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/sgemm_lora_b ops module not found")
         return

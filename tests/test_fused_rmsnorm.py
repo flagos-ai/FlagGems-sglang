@@ -114,7 +114,7 @@ def test_fused_rmsnorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_rmsnorm import fused_rmsnorm
+        from flaggems_sglang import fused_rmsnorm
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/fused_rmsnorm ops module not found")
         return

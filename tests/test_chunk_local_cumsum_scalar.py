@@ -114,9 +114,7 @@ def test_chunk_local_cumsum_scalar(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_local_cumsum_scalar import (
-            chunk_local_cumsum_scalar,
-        )
+        from flaggems_sglang import chunk_local_cumsum_scalar
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/chunk_local_cumsum_scalar ops module not found")
         return

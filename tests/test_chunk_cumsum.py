@@ -146,7 +146,7 @@ def test_chunk_cumsum(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_cumsum import chunk_cumsum
+        from flaggems_sglang import chunk_cumsum
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/chunk_cumsum ops module not found")
         return
