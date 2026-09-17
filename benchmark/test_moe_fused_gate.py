@@ -18,57 +18,12 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("moe_fused_gate")
-
-device = flaggems_sglang.device
+from .op_benchmark import OpBenchmark
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/moe/moe_fused_gate/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _check(actual, expected):
-    aw, ai = actual
-    ew, ei = expected
-    assert_close(aw, ew, dtype=torch.float32)
-    assert torch.equal(ai, ei), "expert index mismatch"
-
-
-def _case(
+def _shape(
     m,
     n,
     topk,
@@ -80,36 +35,32 @@ def _case(
     moe_softcapping=0.0,
     num_expert_group=1,
     topk_group=1,
-    dtype=torch.bfloat16,
-    seed=0,
 ):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    scores = torch.randn(
-        m, n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
-    bias = 0.1 * torch.randn(
-        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    )
-
-    return dict(
-        scores=scores,
-        bias=bias,
-        topk=topk,
-        scoring_func=scoring_func,
-        num_fused_shared_experts=num_fused_shared_experts,
-        renormalize=renormalize,
-        routed_scaling_factor=routed_scaling_factor,
-        apply_routed_scaling_factor_on_output=apply_routed_scaling_factor_on_output,
-        moe_softcapping=moe_softcapping,
-        num_expert_group=num_expert_group,
-        topk_group=topk_group,
-        check=_check,
+    return (
+        m,
+        n,
+        topk,
+        scoring_func,
+        num_fused_shared_experts,
+        renormalize,
+        routed_scaling_factor,
+        apply_routed_scaling_factor_on_output,
+        moe_softcapping,
+        num_expert_group,
+        topk_group,
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 8, 2),
-    _case(
+# Shapes match kernel-comp-baseline/problems/moe/moe_fused_gate.
+SHAPES = [
+    _shape(
+        m, 256, 8, num_fused_shared_experts=1, num_expert_group=8, topk_group=4
+    )
+    for m in (1, 8, 64, 512, 4096)
+]
+MORE_SHAPES = [
+    _shape(1, 8, 2),
+    _shape(
         37,
         256,
         8,
@@ -118,8 +69,8 @@ CORRECTNESS_CASES = [
         num_expert_group=8,
         topk_group=4,
     ),
-    _case(83, 64, 6, scoring_func="sqrtsoftplus"),
-    _case(
+    _shape(83, 64, 6, scoring_func="sqrtsoftplus"),
+    _shape(
         17,
         32,
         4,
@@ -127,55 +78,74 @@ CORRECTNESS_CASES = [
         moe_softcapping=30.0,
         renormalize=False,
     ),
-    _case(
+    _shape(
         9,
         128,
         6,
         apply_routed_scaling_factor_on_output=True,
         routed_scaling_factor=1.7,
-        dtype=torch.float32,
     ),
 ]
 
-BENCH_CASES = [
-    _case(
-        m, 256, 8, num_fused_shared_experts=1, num_expert_group=8, topk_group=4
+
+def _input_fn(shape, cur_dtype, device):
+    (
+        m,
+        n,
+        topk,
+        scoring_func,
+        num_fused_shared_experts,
+        renormalize,
+        routed_scaling_factor,
+        apply_routed_scaling_factor_on_output,
+        moe_softcapping,
+        num_expert_group,
+        topk_group,
+    ) = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    scores = torch.randn(
+        m, n, generator=g, device=device, dtype=torch.float32
+    ).to(cur_dtype)
+    # The bias stays fp32; the reference upcasts both operands anyway.
+    bias = 0.1 * torch.randn(
+        n, generator=g, device=device, dtype=torch.float32
     )
-    for m in (1, 8, 64, 512, 4096)
-]
+    # ``scoring_func`` is a str, which unpack_to_args_kwargs would drop from
+    # the positional args, so route it (and the rest of the gate config)
+    # through kwargs.
+    yield scores, bias, topk, dict(
+        scoring_func=scoring_func,
+        num_fused_shared_experts=num_fused_shared_experts,
+        renormalize=renormalize,
+        routed_scaling_factor=routed_scaling_factor,
+        apply_routed_scaling_factor_on_output=(
+            apply_routed_scaling_factor_on_output
+        ),
+        moe_softcapping=moe_softcapping,
+        num_expert_group=num_expert_group,
+        topk_group=topk_group,
+    )
 
-BENCH_IDS = [f"m{m}" for m in (1, 8, 64, 512, 4096)]
 
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.moe_fused_gate
-def test_moe_fused_gate_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_moe_fused_gate():
+    # This op has a reference but no Triton implementation yet.
+    gems_op = flaggems_sglang.get_op("moe_fused_gate")
+    if gems_op is None:
+        pytest.skip("moe/moe_fused_gate not implemented yet")
+    bench = OpBenchmark(
+        op_name="moe_fused_gate",
+        torch_op=get_reference("moe_fused_gate"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc=(
+            "m, n, topk, scoring_func, num_fused_shared_experts, "
+            "renormalize, routed_scaling_factor, "
+            "apply_routed_scaling_factor_on_output, moe_softcapping, "
+            "num_expert_group, topk_group"
+        ),
     )
-
-    try:
-        from flaggems_sglang.ops.moe_fused_gate import moe_fused_gate
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("moe/moe_fused_gate ops module not found")
-        return
-
-    try:
-        moe_fused_gate(**kwargs)
-    except NotImplementedError:
-        pytest.skip("moe/moe_fused_gate not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: moe_fused_gate(**kwargs))
-
-    record_case("moe/moe_fused_gate", BENCH_IDS[case_idx], ref_us, triton_us)
+    bench.set_gems(gems_op)
+    bench.run()

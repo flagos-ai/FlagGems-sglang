@@ -27,7 +27,7 @@ import flaggems_sglang
 try:
     from sglang.srt.lora.utils import LoRABatchInfo
 except ImportError:
-    from flaggems_reference._lora_batch_info import LoRABatchInfo
+    from flaggems_sglang.reference._lora_batch_info import LoRABatchInfo
 
 
 def make_batch_info(

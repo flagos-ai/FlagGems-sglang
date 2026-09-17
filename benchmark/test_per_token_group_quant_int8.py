@@ -18,143 +18,49 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_token_group_quant_int8")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+# Shapes match kernel-comp-baseline/problems/quantization/
+# per_token_group_quant_int8. The last entry is the quantization group size.
+SHAPES = [
+    (m, k, 128) for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)
+]
+MORE_SHAPES = [(7, 128, 128), (83, 512, 128), (256, 4096, 128), (3, 256, 64)]
 
 
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
+def _input_fn(shape, cur_dtype, device):
+    m, k, group_size = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    x = (
         (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_token_group_quant_int8/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _x(m, k, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return (
-        (
-            torch.rand(
-                m,
-                k,
-                generator=g,
-                device=flaggems_sglang.device,
-                dtype=torch.float32,
-            )
+            torch.rand(m, k, generator=g, device=device, dtype=torch.float32)
             * 2
             - 1
         )
-        .to(dtype)
+        .to(cur_dtype)
         .contiguous()
     )
+    yield x, group_size, torch.int8
 
 
-def _check(actual, expected):
-    aq, asc = actual
-    eq, esc = expected
-    assert_close(asc, esc, dtype=torch.float32)
-    a_deq = aq.to(torch.float32) * asc.repeat_interleave(
-        aq.shape[-1] // asc.shape[-1], dim=-1
-    )
-    e_deq = eq.to(torch.float32) * esc.repeat_interleave(
-        eq.shape[-1] // esc.shape[-1], dim=-1
-    )
-    atol, rtol = 2e-2, 2e-2
-    mismatch = (a_deq - e_deq).abs() > (atol + rtol * e_deq.abs())
-    assert (
-        mismatch.float().mean() < 1e-2
-    ), "too many int8 rounding-boundary mismatches"
-
-
-CORRECTNESS_CASES = [
-    dict(x=_x(7, 128), group_size=128, check=_check),
-    dict(x=_x(83, 512), group_size=128, check=_check),
-    dict(x=_x(256, 4096), group_size=128, check=_check),
-    dict(x=_x(3, 256), group_size=64, check=_check),
-]
-
-BENCH_CASES = [
-    dict(x=_x(m, k), group_size=128, check=_check)
-    for m in (1, 8, 64, 512, 4096)
-    for k in (2048, 4096, 8192)
-]
-
-BENCH_IDS = [
-    f"m{m}_k{k}" for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.per_token_group_quant_int8
-def test_per_token_group_quant_int8_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
-    )
-
-    try:
-        from flaggems_sglang.ops.per_token_group_quant_int8 import (
-            per_token_group_quant_int8,
-        )
-    except (ImportError, ModuleNotFoundError):
+def test_perf_per_token_group_quant_int8():
+    # This op has a reference but no Triton implementation yet.
+    gems_op = flaggems_sglang.get_op("per_token_group_quant_int8")
+    if gems_op is None:
         pytest.skip(
-            "quantization/per_token_group_quant_int8 ops module not found"
+            "quantization/per_token_group_quant_int8 not implemented yet"
         )
-        return
-
-    try:
-        per_token_group_quant_int8(**kwargs)
-    except NotImplementedError:
-        pytest.skip(
-            "quantization/per_token_group_quant_int8 not yet implemented"
-        )
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: per_token_group_quant_int8(**kwargs))
-
-    record_case(
-        "quantization/per_token_group_quant_int8",
-        BENCH_IDS[case_idx],
-        ref_us,
-        triton_us,
+    bench = OpBenchmark(
+        op_name="per_token_group_quant_int8",
+        torch_op=get_reference("per_token_group_quant_int8"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="m, k, group_size",
     )
+    bench.set_gems(gems_op)
+    bench.run()

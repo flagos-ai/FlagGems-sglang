@@ -18,50 +18,12 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("moe_fused_mul_sum")
-
-device = flaggems_sglang.device
+from .op_benchmark import OpBenchmark
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/moe/moe_fused_mul_sum/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(
+def _shape(
     num_tokens,
     top_k,
     size,
@@ -69,25 +31,50 @@ def _case(
     use_expert_map=False,
     num_experts=8,
     routed_scaling_factor=None,
-    dtype=torch.bfloat16,
-    seed=0,
 ):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    return (
+        num_tokens,
+        top_k,
+        size,
+        is_ep,
+        use_expert_map,
+        num_experts,
+        routed_scaling_factor,
+    )
+
+
+# Shapes match kernel-comp-baseline/problems/moe/moe_fused_mul_sum.
+SHAPES = [_shape(m, 8, 4096) for m in (1, 8, 64, 512, 4096)]
+MORE_SHAPES = [
+    _shape(1, 2, 128),
+    _shape(37, 4, 256, routed_scaling_factor=2.5),
+    _shape(83, 6, 512, is_ep=True, num_experts=16),
+    _shape(64, 4, 256, use_expert_map=True, num_experts=16),
+]
+
+
+def _input_fn(shape, cur_dtype, device):
+    (
+        num_tokens,
+        top_k,
+        size,
+        is_ep,
+        use_expert_map,
+        num_experts,
+        routed_scaling_factor,
+    ) = shape
+    g = torch.Generator(device=device).manual_seed(0)
     inputs = torch.randn(
         num_tokens,
         top_k,
         size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     topk_weights = torch.rand(
-        num_tokens,
-        top_k,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
+        num_tokens, top_k, generator=g, device=device, dtype=torch.float32
+    ).to(cur_dtype)
 
     topk_ids = None
     expert_map = None
@@ -97,20 +84,14 @@ def _case(
             num_experts,
             (num_tokens, top_k),
             generator=g,
-            device=flaggems_sglang.device,
+            device=device,
             dtype=torch.int32,
         )
         if is_ep and not use_expert_map:
             # is_ep (no expert_map): the kernel checks `id_val >= 0` directly,
             # so -1 sentinels in topk_ids are a valid "already dropped" marker.
             drop = (
-                torch.rand(
-                    num_tokens,
-                    top_k,
-                    generator=g,
-                    device=flaggems_sglang.device,
-                )
-                < 0.3
+                torch.rand(num_tokens, top_k, generator=g, device=device) < 0.3
             )
             topk_ids = torch.where(
                 drop, torch.full_like(topk_ids, -1), topk_ids
@@ -120,64 +101,35 @@ def _case(
         # guard, so topk_ids must stay valid (dropping is expressed entirely
         # via expert_map's own -1 entries, never via a -1 topk_id).
         expert_map = torch.arange(
-            num_experts, device=flaggems_sglang.device, dtype=torch.int32
+            num_experts, device=device, dtype=torch.int32
         )
         expert_map[num_experts // 2 :] = -1
 
-    return dict(
-        inputs=inputs,
-        topk_weights=topk_weights,
-        topk_ids=topk_ids,
-        expert_map=expert_map,
+    # ``is_ep`` is a bool, which unpack_to_args_kwargs would append as a
+    # positional int, so route the trailing flags through kwargs.
+    yield inputs, topk_weights, topk_ids, expert_map, dict(
         routed_scaling_factor=routed_scaling_factor,
         is_ep=is_ep,
-        check=assert_close,
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 2, 128),
-    _case(37, 4, 256, routed_scaling_factor=2.5),
-    _case(83, 6, 512, is_ep=True, num_experts=16),
-    _case(64, 4, 256, use_expert_map=True, num_experts=16),
-]
-
-BENCH_CASES = [_case(m, 8, 4096) for m in (1, 8, 64, 512, 4096)]
-
-BENCH_IDS = [f"m{m}" for m in (1, 8, 64, 512, 4096)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.moe_fused_mul_sum
-def test_moe_fused_mul_sum_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_moe_fused_mul_sum():
+    # This op has a reference but no Triton implementation yet.
+    gems_op = flaggems_sglang.get_op("moe_fused_mul_sum")
+    if gems_op is None:
+        pytest.skip("moe/moe_fused_mul_sum not implemented yet")
+    bench = OpBenchmark(
+        op_name="moe_fused_mul_sum",
+        torch_op=get_reference("moe_fused_mul_sum"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc=(
+            "num_tokens, top_k, size, is_ep, use_expert_map, num_experts, "
+            "routed_scaling_factor"
+        ),
     )
-
-    try:
-        from flaggems_sglang.ops.moe_fused_mul_sum import moe_fused_mul_sum
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("moe/moe_fused_mul_sum ops module not found")
-        return
-
-    try:
-        moe_fused_mul_sum(**kwargs)
-    except NotImplementedError:
-        pytest.skip("moe/moe_fused_mul_sum not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: moe_fused_mul_sum(**kwargs))
-
-    record_case(
-        "moe/moe_fused_mul_sum", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(gems_op)
+    bench.run()
