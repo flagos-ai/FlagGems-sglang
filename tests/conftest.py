@@ -12,56 +12,43 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import fcntl
 import json
 import logging
 import os
 from datetime import datetime
 
 import pytest
-import torch
-import yaml  # type: ignore[import-untyped]
+
+# TODO(Qiming): Try remove this line
+# import torch  # noqa: F401
+import yaml
 
 import flaggems_sglang
 
 BUILTIN_MARKS = {
+    "filterwarnings",
     "parametrize",
     "skip",
     "skipif",
-    "xfail",
-    "usefixtures",
-    "filterwarnings",
     "timeout",
     "tryfirst",
     "trylast",
+    "usefixtures",
+    "xfail",
 }
 REGISTERED_MARKS = []
 TEST_RESULTS = {}
 RUNTEST_INFO = {}
 RECORD_LOG = False
+RECORD_JSON = False
 TO_CPU = False
 QUICK_MODE = False
 
 device = flaggems_sglang.device
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
-REPORT_DIR = "out_tests"
-REPORT_FILE = f"result_{TIMESTAMP}.json"
-MODE_OPTION = (
-    "--fg_mode"
-    if flaggems_sglang.vendor_name == "kunlunxin" and torch.__version__ < "2.5"
-    else "--mode"
-)
-
-
-def _getoption(config, name, default=None):
-    try:
-        return config.getoption(name)
-    except (AttributeError, ValueError):
-        return default
-
-
-def _report_dir(config):
-    return os.path.join(str(config.rootpath), REPORT_DIR)
+REPORT_FILE = "accuracy_result.json"
 
 
 def pytest_addoption(parser):
@@ -82,26 +69,18 @@ def pytest_addoption(parser):
 
     try:
         parser.addoption(
-            MODE_OPTION,
-            action="store",
-            default="normal",
-            required=False,
-            choices=["normal", "quick"],
-            help="run tests on normal or quick mode",
-        )
-    except ValueError:
-        # Mixed test+benchmark pytest runs may already register this option.
-        pass
-
-    try:
-        parser.addoption(
             "--record",
             action="store",
             default="none",
             required=False,
-            choices=["none", "log"],
-            help="tests function param recorded in log files or not",
+            choices=["none", "log", "json"],
+            help="record test results in log/json files or not",
         )
+        parser.addoption(
+            "--output",
+            help="path to the result file",
+        )
+
     except ValueError:
         # Mixed test+benchmark pytest runs may already register --record in
         # benchmark/conftest.py. Reuse the existing option in that case.
@@ -110,20 +89,17 @@ def pytest_addoption(parser):
     try:
         parser.addoption(
             "--collect-marks",
-            action="store_true",
-            help=(
-                "Collect the tests with marker information without "
-                "executing them"
-            ),
+            default=None,
+            help="Collect the tests with marker information and write to the specified file",
         )
     except ValueError:
-        # Mixed test+benchmark pytest runs may already register this option in
-        # benchmark/conftest.py. Reuse the existing option in that case.
         pass
 
 
 def pytest_configure(config):
     global RECORD_LOG
+    global RECORD_JSON
+    global REPORT_FILE
     global REGISTERED_MARKS
     global RUNTEST_INFO
     global TO_CPU
@@ -133,23 +109,25 @@ def pytest_configure(config):
         marker.split(":")[0].strip() for marker in config.getini("markers")
     }
 
-    RECORD_LOG = _getoption(config, "--record", "none") == "log"
-    TO_CPU = _getoption(config, "--ref", device) == "cpu"
-    QUICK_MODE = _getoption(config, "--quick", False) is True
-    QUICK_MODE = QUICK_MODE or _getoption(config, MODE_OPTION) == "quick"
+    RECORD_LOG = config.getoption("--record") == "log"
+    RECORD_JSON = config.getoption("--record") == "json"
+    TO_CPU = config.getoption("--ref") == "cpu"
+    QUICK_MODE = config.getoption("--quick") is True
+
+    if RECORD_JSON:
+        report_file = config.getoption("--output")
+        if report_file:
+            REPORT_FILE = report_file
 
     if RECORD_LOG:
         RUNTEST_INFO = {}
-        report_dir = _report_dir(config)
-        os.makedirs(report_dir, exist_ok=True)
         cmd_args = [
             arg.replace(".py", "").replace("=", "_").replace("/", "_")
             for arg in config.invocation_params.args
         ]
         logging.basicConfig(
-            filename=os.path.join(
-                report_dir,
-                "result_{}.log".format("_".join(cmd_args)).replace("_-", "-"),
+            filename="result_{}.log".format("_".join(cmd_args)).replace(
+                "_-", "-"
             ),
             filemode="w",
             level=logging.INFO,
@@ -199,7 +177,9 @@ def pytest_runtest_protocol(item, nextitem):
         param_values = request.node.callspec.params
 
     TEST_RESULTS[item.nodeid]["params"] = param_values
+    # get all mark
     all_marks = [mark.name for mark in item.iter_markers()]
+    # exclude marks，such as parametrize、skipif and so on
     operator_marks = [mark for mark in all_marks if mark not in BUILTIN_MARKS]
     TEST_RESULTS[item.nodeid]["opname"] = operator_marks
 
@@ -215,42 +195,48 @@ def get_reason(report):
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_logreport(report):
+    result = TEST_RESULTS.setdefault(
+        report.nodeid, {"params": None, "result": None, "opname": None}
+    )
     if report.when == "setup":
         if report.outcome == "skipped":
             reason = get_reason(report)
-            TEST_RESULTS[report.nodeid]["result"] = "skipped"
-            TEST_RESULTS[report.nodeid]["reason"] = reason
+            result["result"] = "skipped"
+            result["reason"] = reason
     elif report.when == "call":
-        TEST_RESULTS[report.nodeid]["result"] = report.outcome
+        result["result"] = report.outcome
         if report.outcome in ["skipped", "failed"]:
             reason = get_reason(report)
-            TEST_RESULTS[report.nodeid]["reason"] = reason
+            result["reason"] = reason
         else:
-            TEST_RESULTS[report.nodeid]["reason"] = None
+            result["reason"] = None
 
 
 def pytest_terminal_summary(terminalreporter):
-    report_dir = _report_dir(terminalreporter.config)
-    os.makedirs(report_dir, exist_ok=True)
-    report_file = os.path.join(report_dir, REPORT_FILE)
-
     data = TEST_RESULTS
-    if os.path.exists(report_file):
-        with open(report_file, "r") as json_file:
-            existing_data = json.load(json_file)
-        existing_data.update(TEST_RESULTS)
-        data = existing_data
-
-    with open(report_file, "w") as json_file:
+    with open(REPORT_FILE, "a+") as json_file:
+        fcntl.flock(json_file, fcntl.LOCK_EX)
+        json_file.seek(0)
+        content = json_file.read()
+        if content:
+            existing_data = json.loads(content)
+            existing_data.update(TEST_RESULTS)
+            data = existing_data
+        json_file.seek(0)
+        json_file.truncate()
         json.dump(data, json_file, indent=2, default=str)
+        json_file.flush()
+        os.fsync(json_file.fileno())
 
 
 def pytest_collection_modifyitems(session, config, items):
-    if config.getoption("--collect-marks"):
+    collect_marks_file = config.getoption("--collect-marks")
+    if collect_marks_file:
         report = []
         for item in items:
             data = {}
 
+            # Collect some general information
             if item.cls:
                 data["class"] = item.cls.__name__
             data["test_case"] = item.name
@@ -269,6 +255,8 @@ def pytest_collection_modifyitems(session, config, items):
             data["marks"] = op_marks
             report.append(data)
 
-        print(yaml.dump(report, indent=2))
+        with open(collect_marks_file, "w") as f:
+            yaml.dump(report, f, indent=2)
 
+        # Skip all tests
         items.clear()

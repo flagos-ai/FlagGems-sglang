@@ -20,6 +20,15 @@ dist/
 
 # An auxiliary product of unittests
 tests/*.json
+benchmark/*.json
+!benchmark/core_shapes.yaml
+/*.json
+
+# Reports produced by pytest --record and tools/run_tests.py
+out_tests/
+out_benchmark/
+logs_results_*/
+result_*.log
 
 # Executables
 *.swf

@@ -48,7 +48,7 @@ The following commands can be used for quick validation after installation.
 ```shell
 cd /workspace/FlagGems-sglang
 pytest -q tests --collect-only
-pytest -q tests/test_outer.py --quick
+pytest -q tests/test_silu_and_mul.py --quick
 ```
 
 ### Run benchmark
@@ -56,7 +56,7 @@ pytest -q tests/test_outer.py --quick
 ```shell
 cd /workspace/FlagGems-sglang
 pytest -q benchmark --collect-only
-pytest -q benchmark/test_outer.py::test_outer --level core --iter 1 --warmup 1
+pytest -q benchmark/test_silu_and_mul.py --level core --iter 1 --warmup 1
 ```
 
 ### Notes

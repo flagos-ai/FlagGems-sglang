@@ -18,130 +18,54 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("merge_state")
+from .op_benchmark import OpBenchmark
+
+# Shapes match kernel-comp-baseline/problems/attention/merge_state.
+SHAPES = [(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
+MORE_SHAPES = [(7, 4, 64), (83, 16, 128), (3, 32, 512)]
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/attention/merge_state/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(n_tokens, num_heads, head_size, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    n_tokens, num_heads, head_size = shape
+    g = torch.Generator(device=device).manual_seed(0)
     prefix_output = torch.randn(
         n_tokens,
         num_heads,
         head_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     suffix_output = torch.randn(
         n_tokens,
         num_heads,
         head_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
+    # lse stays fp32; scaled up to exercise the max-subtraction path.
     prefix_lse = (
-        torch.randn(
-            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
-        )
-        * 3
+        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
     )
     suffix_lse = (
-        torch.randn(
-            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
-        )
-        * 3
+        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
     )
-    return dict(
-        prefix_output=prefix_output,
-        prefix_lse=prefix_lse,
-        suffix_output=suffix_output,
-        suffix_lse=suffix_lse,
-        check=_check,
-    )
+    yield prefix_output, prefix_lse, suffix_output, suffix_lse
 
 
-def _check(actual, expected):
-    a_out, a_lse = actual
-    e_out, e_lse = expected
-    assert_close(a_out, e_out)
-    assert_close(a_lse, e_lse, dtype=torch.float32)
-
-
-CORRECTNESS_CASES = [
-    _case(7, 4, 64),
-    _case(83, 16, 128),
-    _case(3, 32, 512),
-]
-
-BENCH_CASES = [_case(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.merge_state
-def test_merge_state_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_merge_state():
+    bench = OpBenchmark(
+        op_name="merge_state",
+        torch_op=get_reference("merge_state"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="n_tokens, num_heads, head_size",
     )
-
-    try:
-        from flaggems_sglang.ops.merge_state import merge_state
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("attention/merge_state ops module not found")
-        return
-
-    try:
-        merge_state(**kwargs)
-    except NotImplementedError:
-        pytest.skip("attention/merge_state not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: merge_state(**kwargs))
-    record_case("attention/merge_state", f"case{case_idx}", ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.merge_state)
+    bench.run()
