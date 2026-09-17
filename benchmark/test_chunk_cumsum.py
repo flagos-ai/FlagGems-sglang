@@ -18,141 +18,49 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("chunk_cumsum")
+from .op_benchmark import OpBenchmark
+
+# Shapes match kernel-comp-baseline/problems/mamba/chunk_cumsum; every case
+# benchmarks the fully-featured path (dt_bias + dt_softplus).
+SHAPES = [(8, 16, 256, 32), (32, 4, 256, 64)]
+MORE_SHAPES = [(1, 1, 8, 4), (2, 3, 16, 8), (3, 2, 32, 16)]
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/mamba/chunk_cumsum/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _check(actual, expected):
-    a_dt, a_dA = actual
-    e_dt, e_dA = expected
-    assert_close(a_dt, e_dt, dtype=torch.float32)
-    assert_close(a_dA, e_dA, dtype=torch.float32)
-
-
-def _case(
-    batch,
-    nchunks,
-    chunk_size,
-    nheads,
-    dt_bias=False,
-    dt_softplus=False,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    batch, nchunks, chunk_size, nheads = shape
+    g = torch.Generator(device=device).manual_seed(0)
     seqlen = nchunks * chunk_size
     dt = torch.randn(
         batch,
         seqlen,
         nheads,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
+    # A must stay negative for the decay to be stable.
     a = (
-        -torch.rand(
-            nheads,
-            generator=g,
-            device=flaggems_sglang.device,
-            dtype=torch.float32,
-        )
+        -torch.rand(nheads, generator=g, device=device, dtype=torch.float32)
         - 0.1
     )
-    bias = None
-    if dt_bias:
-        bias = torch.randn(
-            nheads,
-            generator=g,
-            device=flaggems_sglang.device,
-            dtype=torch.float32,
-        )
-    return dict(
-        dt=dt,
-        A=a,
-        chunk_size=chunk_size,
-        dt_bias=bias,
-        dt_softplus=dt_softplus,
-        check=_check,
+    dt_bias = torch.randn(
+        nheads, generator=g, device=device, dtype=torch.float32
     )
+    yield dt, a, chunk_size, dict(dt_bias=dt_bias, dt_softplus=True)
 
 
-CORRECTNESS_CASES = [
-    _case(1, 1, 8, 4),
-    _case(2, 3, 16, 8, dt_bias=True, dt_softplus=True),
-    _case(3, 2, 32, 16, dt_bias=True),
-]
-
-BENCH_CASES = [
-    _case(8, 16, 256, 32, dt_bias=True, dt_softplus=True),
-    _case(32, 4, 256, 64, dt_bias=True, dt_softplus=True),
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.chunk_cumsum
-def test_chunk_cumsum_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_chunk_cumsum():
+    bench = OpBenchmark(
+        op_name="chunk_cumsum",
+        torch_op=get_reference("chunk_cumsum"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="batch, nchunks, chunk_size, nheads",
     )
-
-    try:
-        from flaggems_sglang.ops.chunk_cumsum import chunk_cumsum
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("mamba/chunk_cumsum ops module not found")
-        return
-
-    try:
-        chunk_cumsum(**kwargs)
-    except NotImplementedError:
-        pytest.skip("mamba/chunk_cumsum not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: chunk_cumsum(**kwargs))
-    record_case("mamba/chunk_cumsum", f"case{case_idx}", ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.chunk_cumsum)
+    bench.run()

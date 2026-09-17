@@ -14,123 +14,49 @@
 
 """Benchmark for fla/chunk_local_cumsum_vector."""
 
+from functools import partial
+
 import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("chunk_local_cumsum_vector")
+from .op_benchmark import OpBenchmark
+
+# Shapes match kernel-comp-baseline/problems/fla/chunk_local_cumsum_vector.
+# chunk_size must be >= 16: the kernel implements the cumsum via a triangular
+# matmul whose contraction dim is chunk_size (tl.dot requires K >= 16).
+SHAPES = [(8, 16, 64, 8, 64), (32, 4, 64, 8, 128)]
+MORE_SHAPES = [(1, 1, 16, 2, 16), (2, 3, 16, 4, 32), (3, 2, 32, 4, 64)]
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/fla/chunk_local_cumsum_vector/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(
-    batch,
-    nchunks,
-    chunk_size,
-    nheads,
-    s,
-    reverse=False,
-    scale=None,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    t = nchunks * chunk_size
+def _input_fn(shape, cur_dtype, device, reverse, scale=None):
+    batch, nchunks, chunk_size, nheads, s = shape
+    g = torch.Generator(device=device).manual_seed(0)
     x = torch.randn(
         batch,
-        t,
+        nchunks * chunk_size,
         nheads,
         s,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
-    return dict(g=x, chunk_size=chunk_size, reverse=reverse, scale=scale)
+    ).to(cur_dtype)
+    yield x, chunk_size, reverse, scale
 
 
-# chunk_size must be >= 16: the kernel implements the cumsum via a
-# triangular matmul whose contraction dim is chunk_size (tl.dot requires
-# K >= 16).
-CORRECTNESS_CASES = [
-    _case(1, 1, 16, 2, 16),
-    _case(2, 3, 16, 4, 32, reverse=True),
-    _case(3, 2, 32, 4, 64, scale=0.5),
-]
-
-BENCH_CASES = [
-    _case(8, 16, 64, 8, 64),
-    _case(32, 4, 64, 8, 128),
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.chunk_local_cumsum_vector
-def test_chunk_local_cumsum_vector_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+@pytest.mark.parametrize("reverse", [False, True])
+def test_perf_chunk_local_cumsum_vector(reverse):
+    bench = OpBenchmark(
+        op_name="chunk_local_cumsum_vector",
+        torch_op=get_reference("chunk_local_cumsum_vector"),
+        input_fn=partial(_input_fn, reverse=reverse),
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="batch, nchunks, chunk_size, nheads, s",
     )
-
-    try:
-        from flaggems_sglang.ops.chunk_local_cumsum_vector import (
-            chunk_local_cumsum_vector,
-        )
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("fla/chunk_local_cumsum_vector ops module not found")
-        return
-
-    try:
-        chunk_local_cumsum_vector(**kwargs)
-    except NotImplementedError:
-        pytest.skip("fla/chunk_local_cumsum_vector not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: chunk_local_cumsum_vector(**kwargs))
-    record_case(
-        "fla/chunk_local_cumsum_vector", f"case{case_idx}", ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.chunk_local_cumsum_vector)
+    bench.run()

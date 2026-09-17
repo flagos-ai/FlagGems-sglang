@@ -18,128 +18,48 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("mamba_layernorm_gated")
+from .op_benchmark import OpBenchmark
+
+EPS = 1e-5
+
+# Shapes match kernel-comp-baseline/problems/mamba/layernorm_gated.
+SHAPES = [(m, 4096, 128) for m in (1, 8, 64, 512, 4096)]
+# ``group_size == n`` is equivalent to the single-group default.
+MORE_SHAPES = [(1, 64, 64), (37, 256, 64), (83, 512, 128), (4, 1024, 1024)]
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
+def _input_fn(shape, cur_dtype, device):
+    m, n, group_size = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    x = torch.randn(m, n, generator=g, device=device, dtype=torch.float32).to(
+        cur_dtype
     )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/mamba/layernorm_gated/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(
-    m,
-    n,
-    group_size=None,
-    has_z=True,
-    norm_before_gate=True,
-    is_rms_norm=True,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    x = torch.randn(
-        m, n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
     weight = torch.randn(
-        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
-    bias = torch.randn(
-        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
-    z = None
-    if has_z:
-        z = torch.randn(
-            m,
-            n,
-            generator=g,
-            device=flaggems_sglang.device,
-            dtype=torch.float32,
-        ).to(dtype)
-    return dict(
-        x=x,
-        weight=weight,
-        bias=bias,
-        eps=1e-5,
-        z=z,
-        group_size=group_size,
-        norm_before_gate=norm_before_gate,
-        is_rms_norm=is_rms_norm,
+        n, generator=g, device=device, dtype=torch.float32
+    ).to(cur_dtype)
+    bias = torch.randn(n, generator=g, device=device, dtype=torch.float32).to(
+        cur_dtype
     )
+    z = torch.randn(m, n, generator=g, device=device, dtype=torch.float32).to(
+        cur_dtype
+    )
+    # ``norm_before_gate``/``is_rms_norm`` keep their defaults; the vendored
+    # unpack_to_args_kwargs routes the dict into kwargs.
+    yield x, weight, bias, EPS, dict(z=z, group_size=group_size)
 
 
-CORRECTNESS_CASES = [
-    _case(1, 64),
-    _case(37, 256, group_size=64),
-    _case(83, 512, group_size=128, norm_before_gate=False),
-    _case(4, 1024, is_rms_norm=False, has_z=False),
-]
-
-BENCH_CASES = [_case(m, 4096, group_size=128) for m in (1, 8, 64, 512, 4096)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.mamba_layernorm_gated
-def test_mamba_layernorm_gated_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_mamba_layernorm_gated():
+    bench = OpBenchmark(
+        op_name="mamba_layernorm_gated",
+        torch_op=get_reference("mamba_layernorm_gated"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="m, n, group_size",
     )
-
-    try:
-        from flaggems_sglang.ops.mamba_layernorm_gated import (
-            mamba_layernorm_gated,
-        )
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("mamba/layernorm_gated ops module not found")
-        return
-
-    try:
-        mamba_layernorm_gated(**kwargs)
-    except NotImplementedError:
-        pytest.skip("mamba/layernorm_gated not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: mamba_layernorm_gated(**kwargs))
-    record_case("mamba/layernorm_gated", f"case{case_idx}", ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.mamba_layernorm_gated)
+    bench.run()

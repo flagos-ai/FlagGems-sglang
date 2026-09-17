@@ -18,69 +18,33 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
-
-reference = get_reference("embedding_lora_a")
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        equal_nan=True,
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/lora/embedding_lora_a/cases.py)
-# ---------------------------------------------------------------------------
-
-
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
+from .op_benchmark import OpBenchmark
 
-def _case(
-    seg_lens,
-    num_lora,
-    r,
-    vocab_size,
-    num_extra=0,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    s = sum(seg_lens)
-    total_vocab = vocab_size + num_extra
+# Shapes match kernel-comp-baseline/problems/lora/embedding_lora_a. The first
+# entry is the per-segment token count.
+SHAPES = [
+    ((512,) * 8, 4, 32, 32000, 0),
+    ((2048,) * 4, 2, 64, 128256, 0),
+]
+MORE_SHAPES = [
+    ((5,), 1, 16, 128, 0),
+    ((3, 7, 0, 12), 2, 32, 512, 0),
+    ((9, 4), 2, 16, 256, 8),
+]
+
+
+def _input_fn(shape, cur_dtype, device):
+    seg_lens, num_lora, r, vocab_size, num_extra = shape
+    g = torch.Generator(device=device).manual_seed(0)
     input_ids = torch.randint(
         0,
-        total_vocab,
-        (s,),
+        vocab_size + num_extra,
+        (sum(seg_lens),),
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.int64,
     )
     weights = torch.randn(
@@ -88,9 +52,9 @@ def _case(
         r,
         vocab_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     extra_embeddings = None
     if num_extra > 0:
         extra_embeddings = torch.randn(
@@ -98,70 +62,33 @@ def _case(
             num_extra,
             r,
             generator=g,
-            device=flaggems_sglang.device,
+            device=device,
             dtype=torch.float32,
-        ).to(dtype)
-    weight_indices = [i % num_lora for i in range(len(seg_lens))]
+        ).to(cur_dtype)
     batch_info = make_batch_info(
-        seg_lens, weight_indices, lora_ranks=[r] * num_lora
+        list(seg_lens),
+        [i % num_lora for i in range(len(seg_lens))],
+        lora_ranks=[r] * num_lora,
     )
-    return dict(
-        input_ids=input_ids,
-        weights=weights,
+    # ``batch_info`` is a dataclass, which unpack_to_args_kwargs would drop
+    # from the positional args, so route it (and the tail) through kwargs.
+    yield input_ids, weights, dict(
         batch_info=batch_info,
         vocab_size=vocab_size,
         extra_embeddings=extra_embeddings,
     )
 
 
-CORRECTNESS_CASES = [
-    _case([5], 1, 16, 128),
-    _case([3, 7, 0, 12], 2, 32, 512),
-    _case([9, 4], 2, 16, 256, num_extra=8),
-]
-
-BENCH_CASES = [
-    _case([512] * 8, 4, 32, 32000),
-    _case([2048] * 4, 2, 64, 128256),
-]
-
-
-# Use BENCH_CASES if defined, otherwise fall back to CORRECTNESS_CASES
-_BENCH = (
-    BENCH_CASES
-    if "BENCH_CASES" in dir() and BENCH_CASES
-    else CORRECTNESS_CASES
-)
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(_BENCH)))
 @pytest.mark.embedding_lora_a
-def test_embedding_lora_a_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = _BENCH[case_idx]
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_embedding_lora_a():
+    bench = OpBenchmark(
+        op_name="embedding_lora_a",
+        torch_op=get_reference("embedding_lora_a"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="seg_lens, num_lora, r, vocab_size, num_extra",
     )
-
-    try:
-        from flaggems_sglang.ops.embedding_lora_a import embedding_lora_a
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("lora/embedding_lora_a ops module not found")
-        return
-
-    try:
-        embedding_lora_a(**kwargs)
-    except NotImplementedError:
-        pytest.skip("lora/embedding_lora_a not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: embedding_lora_a(**kwargs))
-    record_case("lora/embedding_lora_a", f"case{case_idx}", ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.embedding_lora_a)
+    bench.run()
