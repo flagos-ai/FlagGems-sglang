@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for attention/context_attention."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("context_attention")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,84 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/attention/context_attention/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _case(
+    seq_lens, num_heads, head_dim, is_causal, dtype=torch.float32, seed=0
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
+    total = sum(seq_lens)
+    q = torch.randn(
+        total,
+        num_heads,
+        head_dim,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=dtype,
+    )
+    k = torch.randn(
+        total,
+        num_heads,
+        head_dim,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=dtype,
+    )
+    v = torch.randn(
+        total,
+        num_heads,
+        head_dim,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=dtype,
+    )
+
+    b_start_loc = torch.zeros(
+        len(seq_lens), dtype=torch.int32, device=flaggems_sglang.device
+    )
+    b_start_loc[1:] = torch.cumsum(
+        torch.tensor(
+            seq_lens[:-1], dtype=torch.int32, device=flaggems_sglang.device
+        ),
+        0,
+    )
+    b_seq_len = torch.tensor(
+        seq_lens, dtype=torch.int32, device=flaggems_sglang.device
+    )
+    max_input_len = max(seq_lens)
+
+    return dict(
+        q=q,
+        k=k,
+        v=v,
+        b_start_loc=b_start_loc,
+        b_seq_len=b_seq_len,
+        max_input_len=max_input_len,
+        is_causal=is_causal,
+        check=_check,
+    )
 
 
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+def _check(actual, expected):
+    assert_close(actual.to(torch.float32), expected, atol=1e-2, rtol=1e-2)
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case([8, 12], 4, 128, True),
+    _case([8, 12], 4, 128, False),
+    _case([5, 30, 7], 4, 96, True),
+    _case([20], 4, 80, True),
+    _case([9], 4, 13, True),
 ]
 
 BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
+    _case([seq_len] * bs, 32, 128, True)
+    for bs in (1, 8, 64)
+    for seq_len in (128, 2048)
 ]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +140,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.context_attention
+def test_context_attention(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +155,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import context_attention
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("attention/context_attention ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = context_attention(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("attention/context_attention not yet implemented")
         return
 
     # Compare

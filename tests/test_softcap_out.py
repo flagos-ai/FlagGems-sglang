@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for activation_norm/softcap_out."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("softcap_out")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,34 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/activation_norm/softcap_out/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _x(m, n, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
+    return (
+        torch.randn(
+            m,
+            n,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
+        )
+        * 20
+    ).to(dtype)
 
 
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
+def _case(m, n, softcap_const=30.0):
+    return dict(x=_x(m, n), softcap_const=softcap_const)
 
 
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
-
-
-CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
-]
+CORRECTNESS_CASES = [_case(1, 17), _case(37, 1024), _case(4, 32000)]
 
 BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
+    _case(m, n) for m in (1, 8, 64, 512) for n in (4096, 32000, 128256)
 ]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +90,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.softcap_out
+def test_softcap_out(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +105,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import softcap_out
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("activation_norm/softcap_out ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = softcap_out(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("activation_norm/softcap_out not yet implemented")
         return
 
     # Compare

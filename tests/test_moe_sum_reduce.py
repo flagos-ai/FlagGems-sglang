@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for moe/moe_sum_reduce."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("moe_sum_reduce")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,35 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/moe/moe_sum_reduce/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _case(T, top_k, H, dtype=torch.bfloat16, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
+    x = torch.randn(
+        T,
+        top_k,
+        H,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    return dict(input=x, routed_scaling_factor=2.5, check=_check)
 
 
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+def _check(actual, expected):
+    assert_close(actual, expected)
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case(7, 2, 128),
+    _case(83, 4, 512),
+    _case(3, 8, 2048),
 ]
 
-BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
-]
+BENCH_CASES = [_case(t, 8, 7168) for t in (1, 8, 64, 512, 4096)]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +91,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.moe_sum_reduce
+def test_moe_sum_reduce(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +106,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import moe_sum_reduce
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("moe/moe_sum_reduce ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = moe_sum_reduce(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("moe/moe_sum_reduce not yet implemented")
         return
 
     # Compare

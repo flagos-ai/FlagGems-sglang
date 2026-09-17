@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for mamba/bmm_chunk."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("bmm_chunk")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,85 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/mamba/bmm_chunk/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _check_factory(causal, chunk_size):
+    lower_mask = torch.tril(
+        torch.ones(
+            chunk_size,
+            chunk_size,
+            dtype=torch.bool,
+            device=flaggems_sglang.device,
+        ),
+        diagonal=-1,
+    )
+
+    def _check(actual, expected):
+        # Output dtype matches the (bf16) inputs, so compare at bf16
+        # tolerance rather than the reference's float32 dtype.
+        a = actual.clone()
+        e = expected.to(actual.dtype)
+        if causal:
+            # `causal=True` only guarantees i <= j entries; i > j is arbitrary.
+            a[..., lower_mask] = 0
+            e[..., lower_mask] = 0
+        assert_close(a, e, dtype=actual.dtype)
+
+    return _check
+
+
+def _case(
+    batch,
+    nchunks,
+    chunk_size,
+    ngroups,
+    k,
+    causal=False,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
-
-
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+    seqlen = nchunks * chunk_size
+    a = torch.randn(
+        batch,
+        seqlen,
+        ngroups,
+        k,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    b = torch.randn(
+        batch,
+        seqlen,
+        ngroups,
+        k,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    return dict(
+        a=a,
+        b=b,
+        chunk_size=chunk_size,
+        causal=causal,
+        check=_check_factory(causal, chunk_size),
+    )
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case(1, 1, 8, 2, 16),
+    _case(2, 3, 16, 2, 32, causal=True),
+    _case(3, 2, 32, 4, 64),
 ]
 
 BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
+    _case(8, 16, 256, 8, 64, causal=True),
+    _case(32, 4, 256, 8, 64, causal=True),
 ]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +141,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.bmm_chunk
+def test_bmm_chunk(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +156,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import bmm_chunk
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("mamba/bmm_chunk ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = bmm_chunk(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("mamba/bmm_chunk not yet implemented")
         return
 
     # Compare

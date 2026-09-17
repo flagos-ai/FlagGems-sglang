@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for attention/merge_state."""
+"""Correctness test for mamba/chunk_state_varlen."""
 
 import pytest
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference.chunk_cumsum import (
+    reference as chunk_cumsum_reference,
+)
 
-reference = get_reference("merge_state")
+reference = get_reference("chunk_state_varlen")
 
 
 # ---------------------------------------------------------------------------
@@ -54,63 +57,110 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/attention/merge_state/cases.py)
+# Cases (from kernel-comp-baseline/problems/mamba/chunk_state_varlen/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _case(n_tokens, num_heads, head_size, dtype=torch.bfloat16, seed=0):
+def _check(actual, expected):
+    assert_close(actual, expected, atol=3e-2, rtol=3e-2)
+
+
+def _case(
+    seq_lens,
+    chunk_size,
+    nheads,
+    ngroups,
+    headdim,
+    dstate,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    prefix_output = torch.randn(
-        n_tokens,
-        num_heads,
-        head_size,
+
+    # Tight-packed cu_seqlens, with `seq_lens` chosen (by the caller) so that
+    # every running cumulative sum which ends a chunk lands exactly on a
+    # chunk_size multiple -- i.e. no sequence straddles a chunk boundary.
+    # That keeps every sequence within a single physical chunk, matching
+    # this problem's documented scope (no initial-state / cross-chunk path).
+    cu_list = [0]
+    for length in seq_lens:
+        cu_list.append(cu_list[-1] + length)
+    total_seqlen = cu_list[-1]
+    assert total_seqlen % chunk_size == 0
+    nchunks = total_seqlen // chunk_size
+    cu_seqlens = torch.tensor(
+        cu_list, dtype=torch.int32, device=flaggems_sglang.device
+    )
+
+    x = torch.randn(
+        total_seqlen,
+        nheads,
+        headdim,
         generator=g,
         device=flaggems_sglang.device,
         dtype=torch.float32,
     ).to(dtype)
-    suffix_output = torch.randn(
-        n_tokens,
-        num_heads,
-        head_size,
+    b = torch.randn(
+        total_seqlen,
+        ngroups,
+        dstate,
         generator=g,
         device=flaggems_sglang.device,
         dtype=torch.float32,
     ).to(dtype)
-    prefix_lse = (
-        torch.randn(
-            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
-        )
-        * 3
+    raw_dt = torch.rand(
+        1,
+        total_seqlen,
+        nheads,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
     )
-    suffix_lse = (
-        torch.randn(
-            n_tokens, num_heads, generator=g, device=flaggems_sglang.device
+    a = (
+        -torch.rand(
+            nheads,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
         )
-        * 3
+        - 0.1
     )
+    dt_out, dA_cumsum = chunk_cumsum_reference(raw_dt, a, chunk_size)
+    dt_out = dt_out.squeeze(0)
+    dA_cumsum = dA_cumsum.squeeze(0)
+
+    chunk_states = torch.randn(
+        nchunks,
+        nheads,
+        headdim,
+        dstate,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+
     return dict(
-        prefix_output=prefix_output,
-        prefix_lse=prefix_lse,
-        suffix_output=suffix_output,
-        suffix_lse=suffix_lse,
+        B=b,
+        x=x,
+        dt=dt_out,
+        dA_cumsum=dA_cumsum,
+        cu_seqlens=cu_seqlens,
+        chunk_states=chunk_states,
         check=_check,
     )
 
 
-def _check(actual, expected):
-    a_out, a_lse = actual
-    e_out, e_lse = expected
-    assert_close(a_out, e_out)
-    assert_close(a_lse, e_lse, dtype=torch.float32)
-
-
 CORRECTNESS_CASES = [
-    _case(7, 4, 64),
-    _case(83, 16, 128),
-    _case(3, 32, 512),
+    _case([3, 5], 8, 4, 2, 16, 8),
+    _case([10, 6, 4, 12], 16, 8, 2, 32, 16),
+    _case([20, 12, 5, 27, 32], 32, 16, 4, 64, 32),
 ]
 
-BENCH_CASES = [_case(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
+BENCH_CASES = [
+    _case([256] * 8, 256, 32, 8, 64, 128),
+    _case([256] * 32, 256, 64, 8, 64, 128),
+]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -119,8 +169,8 @@ BENCH_CASES = [_case(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.merge_state
-def test_merge_state(case_idx):
+@pytest.mark.chunk_state_varlen
+def test_chunk_state_varlen(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -134,15 +184,15 @@ def test_merge_state(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import merge_state
+        from flaggems_sglang import chunk_state_varlen
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("attention/merge_state ops module not found")
+        pytest.skip("mamba/chunk_state_varlen ops module not found")
         return
 
     try:
-        actual = merge_state(**kwargs)
+        actual = chunk_state_varlen(**kwargs)
     except NotImplementedError:
-        pytest.skip("attention/merge_state not yet implemented")
+        pytest.skip("mamba/chunk_state_varlen not yet implemented")
         return
 
     # Compare

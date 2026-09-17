@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for mamba/chunk_cumsum."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("chunk_cumsum")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,75 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/mamba/chunk_cumsum/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _check(actual, expected):
+    a_dt, a_dA = actual
+    e_dt, e_dA = expected
+    assert_close(a_dt, e_dt, dtype=torch.float32)
+    assert_close(a_dA, e_dA, dtype=torch.float32)
+
+
+def _case(
+    batch,
+    nchunks,
+    chunk_size,
+    nheads,
+    dt_bias=False,
+    dt_softplus=False,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
-
-
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+    seqlen = nchunks * chunk_size
+    dt = torch.randn(
+        batch,
+        seqlen,
+        nheads,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    a = (
+        -torch.rand(
+            nheads,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
+        )
+        - 0.1
+    )
+    bias = None
+    if dt_bias:
+        bias = torch.randn(
+            nheads,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
+        )
+    return dict(
+        dt=dt,
+        A=a,
+        chunk_size=chunk_size,
+        dt_bias=bias,
+        dt_softplus=dt_softplus,
+        check=_check,
+    )
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case(1, 1, 8, 4),
+    _case(2, 3, 16, 8, dt_bias=True, dt_softplus=True),
+    _case(3, 2, 32, 16, dt_bias=True),
 ]
 
 BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
+    _case(8, 16, 256, 32, dt_bias=True, dt_softplus=True),
+    _case(32, 4, 256, 64, dt_bias=True, dt_softplus=True),
 ]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +131,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.chunk_cumsum
+def test_chunk_cumsum(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +146,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import chunk_cumsum
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("mamba/chunk_cumsum ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = chunk_cumsum(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("mamba/chunk_cumsum not yet implemented")
         return
 
     # Compare

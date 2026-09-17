@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for mamba/layernorm_gated."""
 
 import pytest
 import torch
@@ -20,7 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("mamba_layernorm_gated")
 
 
 # ---------------------------------------------------------------------------
@@ -54,38 +54,60 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/mamba/layernorm_gated/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _case(
+    m,
+    n,
+    group_size=None,
+    has_z=True,
+    norm_before_gate=True,
+    is_rms_norm=True,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
-
-
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+    x = torch.randn(
+        m, n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    weight = torch.randn(
+        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    bias = torch.randn(
+        n, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+    ).to(dtype)
+    z = None
+    if has_z:
+        z = torch.randn(
+            m,
+            n,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
+        ).to(dtype)
+    return dict(
+        x=x,
+        weight=weight,
+        bias=bias,
+        eps=1e-5,
+        z=z,
+        group_size=group_size,
+        norm_before_gate=norm_before_gate,
+        is_rms_norm=is_rms_norm,
+    )
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case(1, 64),
+    _case(37, 256, group_size=64),
+    _case(83, 512, group_size=128, norm_before_gate=False),
+    _case(4, 1024, is_rms_norm=False, has_z=False),
 ]
 
-BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
-]
+BENCH_CASES = [_case(m, 4096, group_size=128) for m in (1, 8, 64, 512, 4096)]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +116,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.mamba_layernorm_gated
+def test_mamba_layernorm_gated(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +131,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import mamba_layernorm_gated
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("mamba/layernorm_gated ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = mamba_layernorm_gated(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("mamba/layernorm_gated not yet implemented")
         return
 
     # Compare

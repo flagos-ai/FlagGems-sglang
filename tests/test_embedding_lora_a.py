@@ -12,15 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for quantization/per_group_transpose."""
+"""Correctness test for lora/embedding_lora_a."""
 
 import pytest
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
-reference = get_reference("per_group_transpose")
+reference = get_reference("embedding_lora_a")
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
         )
     )
     tol.update(overrides)
+    equal_nan = tol.pop("equal_nan", True)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
         (
@@ -49,43 +51,78 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
             if expected.dtype.is_floating_point
             else expected
         ),
+        equal_nan=equal_nan,
         **tol,
     )
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/per_group_transpose/cases.py)
+# Cases (from kernel-comp-baseline/problems/lora/embedding_lora_a/cases.py)
 # ---------------------------------------------------------------------------
 
 
-def _a(m, k, dtype=torch.bfloat16, seed=0):
+def _case(
+    seg_lens,
+    num_lora,
+    r,
+    vocab_size,
+    num_extra=0,
+    dtype=torch.bfloat16,
+    seed=0,
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m, k, generator=g, device=flaggems_sglang.device, dtype=dtype
-    ).contiguous()
-
-
-def _offsets(counts):
-    cum = [0]
-    for c in counts:
-        cum.append(cum[-1] + c)
-    return torch.tensor(cum, dtype=torch.int32, device=flaggems_sglang.device)
-
-
-def _case(k, counts):
-    m = sum(counts)
-    return dict(a=_a(m, k), expert_offsets=_offsets(counts))
+    s = sum(seg_lens)
+    total_vocab = vocab_size + num_extra
+    input_ids = torch.randint(
+        0,
+        total_vocab,
+        (s,),
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.int64,
+    )
+    weights = torch.randn(
+        num_lora,
+        r,
+        vocab_size,
+        generator=g,
+        device=flaggems_sglang.device,
+        dtype=torch.float32,
+    ).to(dtype)
+    extra_embeddings = None
+    if num_extra > 0:
+        extra_embeddings = torch.randn(
+            num_lora,
+            num_extra,
+            r,
+            generator=g,
+            device=flaggems_sglang.device,
+            dtype=torch.float32,
+        ).to(dtype)
+    weight_indices = [i % num_lora for i in range(len(seg_lens))]
+    batch_info = make_batch_info(
+        seg_lens, weight_indices, lora_ranks=[r] * num_lora
+    )
+    return dict(
+        input_ids=input_ids,
+        weights=weights,
+        batch_info=batch_info,
+        vocab_size=vocab_size,
+        extra_embeddings=extra_embeddings,
+    )
 
 
 CORRECTNESS_CASES = [
-    _case(16, [3, 0, 5, 2]),
-    _case(64, [17, 33, 1, 49]),
-    _case(128, [128, 128, 128, 128]),
+    _case([5], 1, 16, 128),
+    _case([3, 7, 0, 12], 2, 32, 512),
+    _case([9, 4], 2, 16, 256, num_extra=8),
 ]
 
 BENCH_CASES = [
-    _case(k, [n] * 8) for k in (128, 512, 4096) for n in (16, 128, 1024)
+    _case([512] * 8, 4, 32, 32000),
+    _case([2048] * 4, 2, 64, 128256),
 ]
+CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -94,8 +131,8 @@ BENCH_CASES = [
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.per_group_transpose
-def test_per_group_transpose(case_idx):
+@pytest.mark.embedding_lora_a
+def test_embedding_lora_a(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -109,15 +146,15 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        from flaggems_sglang import embedding_lora_a
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_group_transpose ops module not found")
+        pytest.skip("lora/embedding_lora_a ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = embedding_lora_a(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_group_transpose not yet implemented")
+        pytest.skip("lora/embedding_lora_a not yet implemented")
         return
 
     # Compare
@@ -127,6 +164,8 @@ def test_per_group_transpose(case_idx):
         assert_close(actual, expected)
     elif isinstance(expected, (tuple, list)):
         for a, e in zip(actual, expected):
+            if a is None and e is None:
+                continue
             if isinstance(e, torch.Tensor):
                 assert_close(a, e)
     # Restore check for reuse
