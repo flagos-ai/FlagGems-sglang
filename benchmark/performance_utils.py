@@ -14,6 +14,7 @@
 
 import gc
 import importlib
+import json
 import os
 import time
 from typing import Any, Generator, List, Optional, Tuple
@@ -39,7 +40,7 @@ from .attri_util import (
     OperationAttribute,
     check_metric_dependencies,
 )
-from .conftest import Config, emit_record_logger
+from .conftest import Config, emit_record_logger, update_result
 
 torch_backend_device = flaggems_sglang.runtime.torch_backend_device
 torch_device_fn = flaggems_sglang.runtime.torch_device_fn
@@ -506,7 +507,9 @@ class Benchmark:
                 result=metrics,
             )
             print(result)
-            emit_record_logger(result.to_json())
+            result_json = result.to_json()
+            emit_record_logger(result_json)
+            update_result(self.op_name, json.loads(result_json))
 
 
 class GenericBenchmark(Benchmark):
