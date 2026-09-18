@@ -18,141 +18,56 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("hc_head")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
+# Shapes match kernel-comp-baseline/problems/activation_norm/hc_head.
+SHAPES = [(t, 4, 7168) for t in (1, 128, 2048, 8192)]
+MORE_SHAPES = [(1, 2, 128), (37, 4, 256), (129, 2, 512)]
 
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+_NORM_EPS = 1e-6
+_HC_EPS = 1e-3
 
 
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/activation_norm/hc_head/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(
-    t,
-    hc_mult,
-    hidden_size,
-    norm_eps=1e-6,
-    hc_eps=1e-3,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    t, hc_mult, hidden_size = shape
+    g = torch.Generator(device=device).manual_seed(0)
     x = torch.randn(
         t,
         hc_mult,
         hidden_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     hc_fn = (
         torch.randn(
             hc_mult,
             hc_mult * hidden_size,
             generator=g,
-            device=flaggems_sglang.device,
+            device=device,
             dtype=torch.float32,
         )
         * 0.02
     )
-    hc_scale = torch.tensor(
-        [1.5], device=flaggems_sglang.device, dtype=torch.float32
-    )
+    hc_scale = torch.tensor([1.5], device=device, dtype=torch.float32)
     hc_base = 0.1 * torch.randn(
-        hc_mult,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
+        hc_mult, generator=g, device=device, dtype=torch.float32
     )
-
-    return dict(
-        x=x,
-        hc_fn=hc_fn,
-        hc_scale=hc_scale,
-        hc_base=hc_base,
-        norm_eps=norm_eps,
-        hc_eps=hc_eps,
-        check=assert_close,
-    )
+    yield x, hc_fn, hc_scale, hc_base, _NORM_EPS, _HC_EPS
 
 
-CORRECTNESS_CASES = [
-    _case(1, 2, 128),
-    _case(37, 4, 256),
-    _case(129, 2, 512),
-]
-
-BENCH_CASES = [_case(t, 4, 7168) for t in (1, 128, 2048, 8192)]
-
-BENCH_IDS = [f"t{t}" for t in (1, 128, 2048, 8192)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.hc_head
-def test_hc_head_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_hc_head():
+    bench = OpBenchmark(
+        op_name="hc_head",
+        torch_op=get_reference("hc_head"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="t, hc_mult, hidden_size",
     )
-
-    try:
-        from flaggems_sglang.ops.hc_head import hc_head
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("activation_norm/hc_head ops module not found")
-        return
-
-    try:
-        hc_head(**kwargs)
-    except NotImplementedError:
-        pytest.skip("activation_norm/hc_head not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: hc_head(**kwargs))
-
-    record_case(
-        "activation_norm/hc_head", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.hc_head)
+    bench.run()

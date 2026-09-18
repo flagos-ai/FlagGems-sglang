@@ -18,87 +18,46 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("extend_attention")
+from .op_benchmark import OpBenchmark
+
+# Shapes match kernel-comp-baseline/problems/attention/extend_attention.
+SHAPES = [
+    (B, n_ctx, 32, 8, 128)
+    for B, n_ctx in ((1, 2048), (8, 2048), (64, 512), (256, 256))
+]
+MORE_SHAPES = [(4, 256, 12, 4, 128), (4, 256, 12, 4, 80), (2, 128, 8, 8, 64)]
 
 
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/attention/extend_attention/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(B, n_ctx, H_Q, H_KV, D, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    B, n_ctx, H_Q, H_KV, D = shape
+    g = torch.Generator(device=device).manual_seed(0)
 
     def rnd_int(lo, hi, n):
         return torch.randint(
-            lo,
-            hi,
-            (n,),
-            dtype=torch.int32,
-            device=flaggems_sglang.device,
-            generator=g,
+            lo, hi, (n,), dtype=torch.int32, device=device, generator=g
         )
 
     b_seq_len_prefix = rnd_int(1, max(2, n_ctx // 2), B)
     b_seq_len_extend = rnd_int(1, max(2, n_ctx // 2), B)
     b_seq_len = b_seq_len_prefix + b_seq_len_extend
 
-    b_start_loc = torch.zeros(
-        (B,), dtype=torch.int32, device=flaggems_sglang.device
-    )
+    b_start_loc = torch.zeros((B,), dtype=torch.int32, device=device)
     b_start_loc[1:] = torch.cumsum(b_seq_len[:-1], 0)
-    b_start_loc_extend = torch.zeros(
-        (B,), dtype=torch.int32, device=flaggems_sglang.device
-    )
+    b_start_loc_extend = torch.zeros((B,), dtype=torch.int32, device=device)
     b_start_loc_extend[1:] = torch.cumsum(b_seq_len_extend[:-1], 0)
 
-    kv_indptr = torch.zeros(
-        (B + 1,), dtype=torch.int32, device=flaggems_sglang.device
-    )
+    kv_indptr = torch.zeros((B + 1,), dtype=torch.int32, device=device)
     kv_indptr[1:] = torch.cumsum(b_seq_len_prefix, 0)
     kv_indices = torch.zeros(
-        (int(b_seq_len_prefix.sum()),),
-        dtype=torch.int32,
-        device=flaggems_sglang.device,
+        (int(b_seq_len_prefix.sum()),), dtype=torch.int32, device=device
     )
     for i in range(B):
         kv_indices[kv_indptr[i] : kv_indptr[i + 1]] = torch.arange(
             b_start_loc[i].item(),
             (b_start_loc[i] + b_seq_len_prefix[i]).item(),
-            device=flaggems_sglang.device,
+            device=device,
         )
 
     total_token_num = int(b_seq_len.sum())
@@ -108,26 +67,26 @@ def _case(B, n_ctx, H_Q, H_KV, D, dtype=torch.bfloat16, seed=0):
         H_KV,
         D,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     v_buffer = torch.randn(
         total_token_num,
         H_KV,
         D,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
 
     k_extend = torch.empty(
-        (extend_token_num, H_KV, D), dtype=dtype, device=flaggems_sglang.device
+        (extend_token_num, H_KV, D), dtype=cur_dtype, device=device
     )
     v_extend = torch.empty(
-        (extend_token_num, H_KV, D), dtype=dtype, device=flaggems_sglang.device
+        (extend_token_num, H_KV, D), dtype=cur_dtype, device=device
     )
     q_extend = torch.empty(
-        (extend_token_num, H_Q, D), dtype=dtype, device=flaggems_sglang.device
+        (extend_token_num, H_Q, D), dtype=cur_dtype, device=device
     )
     for i in range(B):
         eib = (b_start_loc[i] + b_seq_len_prefix[i]).item()
@@ -139,82 +98,37 @@ def _case(B, n_ctx, H_Q, H_KV, D, dtype=torch.bfloat16, seed=0):
         q_extend[es:ee] = torch.randn(
             (ee - es, H_Q, D),
             generator=g,
-            device=flaggems_sglang.device,
+            device=device,
             dtype=torch.float32,
-        ).to(dtype)
+        ).to(cur_dtype)
 
-    qo_indptr = torch.zeros(
-        (B + 1,), dtype=torch.int32, device=flaggems_sglang.device
-    )
+    qo_indptr = torch.zeros((B + 1,), dtype=torch.int32, device=device)
     qo_indptr[1:] = torch.cumsum(b_seq_len_extend, 0)
     max_len_extend = int(b_seq_len_extend.max())
 
-    return dict(
-        q_extend=q_extend,
-        k_extend=k_extend,
-        v_extend=v_extend,
-        k_buffer=k_buffer,
-        v_buffer=v_buffer,
-        qo_indptr=qo_indptr,
-        kv_indptr=kv_indptr,
-        kv_indices=kv_indices,
-        max_len_extend=max_len_extend,
-        check=_check,
+    yield (
+        q_extend,
+        k_extend,
+        v_extend,
+        k_buffer,
+        v_buffer,
+        qo_indptr,
+        kv_indptr,
+        kv_indices,
+        max_len_extend,
     )
 
 
-def _check(actual, expected):
-    assert_close(actual.to(torch.float32), expected, atol=1e-2, rtol=1e-2)
-
-
-CORRECTNESS_CASES = [
-    _case(4, 256, 12, 4, 128),
-    _case(4, 256, 12, 4, 80),
-    _case(2, 128, 8, 8, 64),
-]
-
-# Lazy (zero-arg callables): total token count scales with B * n_ctx, so
-# cases are generated one at a time by harness.bench.run_bench_cases rather
-# than all held in memory at once.
-BENCH_CASES = [
-    (lambda B=B, n_ctx=n_ctx: _case(B, n_ctx, 32, 8, 128))
-    for B, n_ctx in ((1, 2048), (8, 2048), (64, 512), (256, 256))
-]
-
-BENCH_IDS = [
-    f"B{B}_ctx{n_ctx}"
-    for B, n_ctx in ((1, 2048), (8, 2048), (64, 512), (256, 256))
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.extend_attention
-def test_extend_attention_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = {k: v for k, v in case.items() if k != "check"}
-
-    try:
-        from flaggems_sglang.ops.extend_attention import extend_attention
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("attention/extend_attention ops module not found")
-        return
-
-    try:
-        extend_attention(**kwargs)
-    except NotImplementedError:
-        pytest.skip("attention/extend_attention not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: extend_attention(**kwargs))
-
-    record_case(
-        "attention/extend_attention", BENCH_IDS[case_idx], ref_us, triton_us
+def test_perf_extend_attention():
+    bench = OpBenchmark(
+        op_name="extend_attention",
+        torch_op=get_reference("extend_attention"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="B, n_ctx, H_Q, H_KV, D",
     )
+    bench.set_gems(flaggems_sglang.extend_attention)
+    bench.run()

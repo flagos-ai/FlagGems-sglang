@@ -144,9 +144,7 @@ def test_chain_speculative_sampling(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chain_speculative_sampling import (
-            chain_speculative_sampling,
-        )
+        from flaggems_sglang import chain_speculative_sampling
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "sampling_grammar/chain_speculative_sampling ops module not found"

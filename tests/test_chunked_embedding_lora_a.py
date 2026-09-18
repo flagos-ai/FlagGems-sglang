@@ -138,9 +138,7 @@ def test_chunked_embedding_lora_a(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunked_embedding_lora_a import (
-            chunked_embedding_lora_a,
-        )
+        from flaggems_sglang import chunked_embedding_lora_a
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/chunked_embedding_lora_a ops module not found")
         return

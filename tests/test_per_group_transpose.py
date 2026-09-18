@@ -109,7 +109,7 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.per_group_transpose import per_group_transpose
+        from flaggems_sglang import per_group_transpose
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/per_group_transpose ops module not found")
         return

@@ -134,7 +134,7 @@ def test_merge_state(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.merge_state import merge_state
+        from flaggems_sglang import merge_state
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/merge_state ops module not found")
         return

@@ -138,7 +138,7 @@ def test_hc_head(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.hc_head import hc_head
+        from flaggems_sglang import hc_head
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/hc_head ops module not found")
         return

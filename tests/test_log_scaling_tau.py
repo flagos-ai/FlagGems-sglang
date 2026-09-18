@@ -101,7 +101,7 @@ def test_log_scaling_tau(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.log_scaling_tau import log_scaling_tau
+        from flaggems_sglang import log_scaling_tau
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/log_scaling_tau ops module not found")
         return

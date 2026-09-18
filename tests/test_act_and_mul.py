@@ -109,7 +109,7 @@ def test_act_and_mul(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.act_and_mul import act_and_mul
+        from flaggems_sglang import act_and_mul
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/act_and_mul ops module not found")
         return

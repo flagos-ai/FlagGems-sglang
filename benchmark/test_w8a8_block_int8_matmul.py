@@ -18,70 +18,31 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("w8a8_block_int8_matmul")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/quantization/w8a8_block_int8_matmul/cases.py)
-# ---------------------------------------------------------------------------
-
+# Shapes match
+# kernel-comp-baseline/problems/quantization/w8a8_block_int8_matmul.
+SHAPES = [
+    (m, n, k)
+    for m in (1, 8, 64, 512, 4096)
+    for n, k in ((1024, 4096), (4096, 4096), (7168, 4096))
+]
+MORE_SHAPES = [(7, 256, 512), (64, 1024, 512), (256, 1024, 4096)]
 
 _BLOCK = [128, 128]
 
 
-def _case(m, n, k, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    m, n, k = shape
     block_n, block_k = _BLOCK
+    g = torch.Generator(device=device).manual_seed(0)
     A = torch.randint(
-        -8,
-        8,
-        (m, k),
-        dtype=torch.int8,
-        device=flaggems_sglang.device,
-        generator=g,
+        -8, 8, (m, k), dtype=torch.int8, device=device, generator=g
     )
     B = torch.randint(
-        -8,
-        8,
-        (n, k),
-        dtype=torch.int8,
-        device=flaggems_sglang.device,
-        generator=g,
+        -8, 8, (n, k), dtype=torch.int8, device=device, generator=g
     )
     As = (
         1e-2
@@ -89,7 +50,7 @@ def _case(m, n, k, dtype=torch.bfloat16, seed=0):
             m,
             k // block_k,
             dtype=torch.float32,
-            device=flaggems_sglang.device,
+            device=device,
             generator=g,
         )
     ).contiguous()
@@ -99,81 +60,25 @@ def _case(m, n, k, dtype=torch.bfloat16, seed=0):
             n // block_n,
             k // block_k,
             dtype=torch.float32,
-            device=flaggems_sglang.device,
+            device=device,
             generator=g,
         )
     ).contiguous()
-    return dict(
-        A=A,
-        B=B,
-        As=As,
-        Bs=Bs,
-        block_size=_BLOCK,
-        output_dtype=dtype,
-        check=_check,
-    )
+    # block_size is a list and output_dtype a torch.dtype; both survive
+    # unpack_to_args_kwargs as positionals.
+    yield A, B, As, Bs, _BLOCK, cur_dtype
 
 
-def _check(actual, expected):
-    assert_close(actual, expected, atol=0.5, rtol=1e-2)
-
-
-CORRECTNESS_CASES = [
-    _case(7, 256, 512),
-    _case(64, 1024, 512),
-    _case(256, 1024, 4096),
-]
-
-BENCH_CASES = [
-    _case(m, n, k)
-    for m in (1, 8, 64, 512, 4096)
-    for n, k in ((1024, 4096), (4096, 4096), (7168, 4096))
-]
-
-BENCH_IDS = [
-    f"m{m}_n{n}_k{k}"
-    for m in (1, 8, 64, 512, 4096)
-    for n, k in ((1024, 4096), (4096, 4096), (7168, 4096))
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.w8a8_block_int8_matmul
-def test_w8a8_block_int8_matmul_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_w8a8_block_int8_matmul():
+    bench = OpBenchmark(
+        op_name="w8a8_block_int8_matmul",
+        torch_op=get_reference("w8a8_block_int8_matmul"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="m, n, k",
     )
-
-    try:
-        from flaggems_sglang.ops.w8a8_block_int8_matmul import (
-            w8a8_block_int8_matmul,
-        )
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/w8a8_block_int8_matmul ops module not found")
-        return
-
-    try:
-        w8a8_block_int8_matmul(**kwargs)
-    except NotImplementedError:
-        pytest.skip("quantization/w8a8_block_int8_matmul not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: w8a8_block_int8_matmul(**kwargs))
-
-    record_case(
-        "quantization/w8a8_block_int8_matmul",
-        BENCH_IDS[case_idx],
-        ref_us,
-        triton_us,
-    )
+    bench.set_gems(flaggems_sglang.w8a8_block_int8_matmul)
+    bench.run()

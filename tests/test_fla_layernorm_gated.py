@@ -124,7 +124,7 @@ def test_fla_layernorm_gated(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fla_layernorm_gated import fla_layernorm_gated
+        from flaggems_sglang import fla_layernorm_gated
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/layernorm_gated ops module not found")
         return

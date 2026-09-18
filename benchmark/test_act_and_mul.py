@@ -18,110 +18,49 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("act_and_mul")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/moe/act_and_mul/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _x(m, hidden_size, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    return torch.randn(
-        m,
-        hidden_size,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
-
-
-def _case(m, half_hidden, activation="silu", swiglu_limit=None):
-    return dict(
-        gateup_output=_x(m, half_hidden * 2),
-        activation=activation,
-        swiglu_limit=swiglu_limit,
-    )
-
-
-CORRECTNESS_CASES = [
-    _case(1, 37, "silu"),
-    _case(83, 1024, "gelu"),
-    _case(7, 512, "silu", swiglu_limit=7.0),
-    _case(256, 4096, "gelu", swiglu_limit=10.0),
+# Shapes match kernel-comp-baseline/problems/moe/act_and_mul.
+SHAPES = [(m, 4096, "silu", None) for m in (1, 8, 64, 512, 4096)]
+MORE_SHAPES = [
+    (1, 37, "silu", None),
+    (83, 1024, "gelu", None),
+    (7, 512, "silu", 7.0),
+    (256, 4096, "gelu", 10.0),
 ]
 
-BENCH_CASES = [_case(m, 4096, "silu") for m in (1, 8, 64, 512, 4096)]
 
-BENCH_IDS = [f"m{m}" for m in (1, 8, 64, 512, 4096)]
+def _input_fn(shape, cur_dtype, device):
+    m, half_hidden, activation, swiglu_limit = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    # The op reads both halves from a single [m, 2 * half_hidden] tensor.
+    gateup_output = torch.randn(
+        m,
+        half_hidden * 2,
+        generator=g,
+        device=device,
+        dtype=torch.float32,
+    ).to(cur_dtype)
+    # ``activation`` is a str and ``swiglu_limit`` may be None-or-float;
+    # a trailing dict keeps them out of the positional args.
+    yield gateup_output, {
+        "activation": activation,
+        "swiglu_limit": swiglu_limit,
+    }
 
 
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.act_and_mul
-def test_act_and_mul_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_act_and_mul():
+    bench = OpBenchmark(
+        op_name="act_and_mul",
+        torch_op=get_reference("act_and_mul"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="m, half_hidden, activation, swiglu_limit",
     )
-
-    try:
-        from flaggems_sglang.ops.act_and_mul import act_and_mul
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("moe/act_and_mul ops module not found")
-        return
-
-    try:
-        act_and_mul(**kwargs)
-    except NotImplementedError:
-        pytest.skip("moe/act_and_mul not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: act_and_mul(**kwargs))
-
-    record_case("moe/act_and_mul", BENCH_IDS[case_idx], ref_us, triton_us)
+    bench.set_gems(flaggems_sglang.act_and_mul)
+    bench.run()

@@ -137,9 +137,7 @@ def test_causal_conv1d_update(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.causal_conv1d_update import (
-            causal_conv1d_update,
-        )
+        from flaggems_sglang import causal_conv1d_update
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/causal_conv1d_update ops module not found")
         return

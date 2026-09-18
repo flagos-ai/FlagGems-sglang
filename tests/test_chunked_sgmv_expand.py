@@ -161,7 +161,7 @@ def test_chunked_sgmv_expand(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunked_sgmv_expand import chunked_sgmv_expand
+        from flaggems_sglang import chunked_sgmv_expand
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/chunked_sgmv_expand ops module not found")
         return

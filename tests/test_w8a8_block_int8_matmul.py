@@ -150,9 +150,7 @@ def test_w8a8_block_int8_matmul(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.w8a8_block_int8_matmul import (
-            w8a8_block_int8_matmul,
-        )
+        from flaggems_sglang import w8a8_block_int8_matmul
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/w8a8_block_int8_matmul ops module not found")
         return

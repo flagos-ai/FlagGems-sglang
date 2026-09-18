@@ -18,158 +18,73 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("ernie45_rope_fused")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
+# Shapes match kernel-comp-baseline/problems/rope/ernie45_rope_fused.
+# mrope_section is [section_h, section_w, section_t] with
+# section_h == section_w and the three summing to rotary_dim // 2
+# (Ernie4.5 layout), so it is derived from rotary_dim rather than listed.
+SHAPES = [(t, 8, 2, 128, 128) for t in (1, 128, 2048, 8192)]
+MORE_SHAPES = [(1, 4, 1, 64, 64), (37, 8, 2, 128, 128), (129, 16, 2, 128, 64)]
 
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+_MAX_POS = 4096
 
 
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/rope/ernie45_rope_fused/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _check(actual, expected):
-    aq, ak = actual
-    eq, ek = expected
-    assert_close(aq, eq)
-    assert_close(ak, ek)
-
-
-def _case(
-    num_tokens,
-    n_qh,
-    n_kh,
-    head_size,
-    rotary_dim,
-    mrope_section,
-    max_pos=4096,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    dtype = torch.bfloat16
-
+def _input_fn(shape, cur_dtype, device):
+    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
+    g = torch.Generator(device=device).manual_seed(0)
+    # section_h == section_w == rotary_dim // 8, section_t takes the rest of
+    # rotary_dim // 2.
+    section_h = rotary_dim // 8
+    mrope_section = [
+        section_h,
+        section_h,
+        rotary_dim // 2 - 2 * section_h,
+    ]
     q = torch.randn(
         num_tokens,
         n_qh * head_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     k = torch.randn(
         num_tokens,
         n_kh * head_size,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     cos_sin_cache = torch.randn(
-        max_pos,
+        _MAX_POS,
         rotary_dim,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     positions = torch.randint(
         0,
-        max_pos,
+        _MAX_POS,
         (3, num_tokens),
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.int64,
     )
-
-    return dict(
-        q=q,
-        k=k,
-        cos_sin_cache=cos_sin_cache,
-        positions=positions,
-        mrope_section=mrope_section,
-        head_size=head_size,
-        rotary_dim=rotary_dim,
-        check=_check,
-    )
+    yield q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
 
 
-# mrope_section is [section_h, section_w, section_t] with section_h == section_w
-# and section_h + section_w + section_t == rotary_dim // 2 (Ernie4.5 layout).
-CORRECTNESS_CASES = [
-    _case(1, 4, 1, 64, 64, [8, 8, 16]),
-    _case(37, 8, 2, 128, 128, [16, 16, 32]),
-    _case(129, 16, 2, 128, 64, [8, 8, 16]),
-]
-
-BENCH_CASES = [
-    _case(t, 8, 2, 128, 128, [16, 16, 32]) for t in (1, 128, 2048, 8192)
-]
-
-BENCH_IDS = [f"t{t}" for t in (1, 128, 2048, 8192)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.ernie45_rope_fused
-def test_ernie45_rope_fused_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_ernie45_rope_fused():
+    bench = OpBenchmark(
+        op_name="ernie45_rope_fused",
+        torch_op=get_reference("ernie45_rope_fused"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="num_tokens, n_qh, n_kh, head_size, rotary_dim",
     )
-
-    try:
-        from flaggems_sglang.ops.ernie45_rope_fused import ernie45_rope_fused
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("rope/ernie45_rope_fused ops module not found")
-        return
-
-    try:
-        ernie45_rope_fused(**kwargs)
-    except NotImplementedError:
-        pytest.skip("rope/ernie45_rope_fused not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: ernie45_rope_fused(**kwargs))
-
-    record_case(
-        "rope/ernie45_rope_fused", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.ernie45_rope_fused)
+    bench.run()

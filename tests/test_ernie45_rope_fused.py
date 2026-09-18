@@ -155,7 +155,7 @@ def test_ernie45_rope_fused(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.ernie45_rope_fused import ernie45_rope_fused
+        from flaggems_sglang import ernie45_rope_fused
     except (ImportError, ModuleNotFoundError):
         pytest.skip("rope/ernie45_rope_fused ops module not found")
         return

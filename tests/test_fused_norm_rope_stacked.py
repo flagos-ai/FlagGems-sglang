@@ -155,9 +155,7 @@ def test_fused_norm_rope_stacked(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_norm_rope_stacked import (
-            fused_norm_rope_stacked,
-        )
+        from flaggems_sglang import fused_norm_rope_stacked
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/fused_norm_rope_stacked ops module not found")
         return

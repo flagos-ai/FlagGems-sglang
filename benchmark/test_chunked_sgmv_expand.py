@@ -18,63 +18,32 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
-
-reference = get_reference("chunked_sgmv_expand")
-
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        equal_nan=True,
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/lora/chunked_sgmv_expand/cases.py)
-# ---------------------------------------------------------------------------
-
-
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
+from .op_benchmark import OpBenchmark
 
-def _case(
-    seg_lens,
-    num_lora,
-    r,
-    slice_sizes,
-    permutation="identity",
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+# Shapes match kernel-comp-baseline/problems/lora/chunked_sgmv_expand.
+# Entries are (seg_len, num_segs, num_lora, r, *slice_sizes): every segment
+# has the same length, which covers both bench cases.
+SHAPES = [
+    (64, 8, 4, 32, 4096, 4096),
+    (256, 4, 2, 64, 4096, 1024, 1024),
+]
+# BLOCK_M == max(seg_lens) is used directly as a Triton arange size, so the
+# largest segment must stay a power of 2.
+MORE_SHAPES = [
+    (8, 1, 1, 16, 64),
+    (16, 4, 2, 16, 128, 64),
+    (16, 2, 2, 32, 256, 128, 128),
+]
+
+
+def _input_fn(shape, cur_dtype, device):
+    seg_len, num_segs, num_lora, r = shape[:4]
+    slice_sizes = list(shape[4:])
+    g = torch.Generator(device=device).manual_seed(0)
+    seg_lens = [seg_len] * num_segs
     s = sum(seg_lens)
     n_slices = len(slice_sizes)
     output_dim = sum(slice_sizes)
@@ -83,99 +52,55 @@ def _case(
     offsets = [0]
     for sz in slice_sizes:
         offsets.append(offsets[-1] + sz)
-    slice_offsets = torch.tensor(
-        offsets, dtype=torch.int32, device=flaggems_sglang.device
-    )
+    slice_offsets = torch.tensor(offsets, dtype=torch.int32, device=device)
 
     x = torch.randn(
         s,
         n_slices * r,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     weights = torch.randn(
         num_lora,
         output_dim,
         r,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     base_output = torch.randn(
-        s,
-        output_dim,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
-    weight_indices = [i % num_lora for i in range(len(seg_lens))]
+        s, output_dim, generator=g, device=device, dtype=torch.float32
+    ).to(cur_dtype)
+    weight_indices = [i % num_lora for i in range(num_segs)]
     scalings = [0.5 + 0.25 * i for i in range(num_lora)]
     batch_info = make_batch_info(
         seg_lens,
         weight_indices,
         lora_ranks=[r] * num_lora,
         scalings=scalings,
-        permutation=permutation,
+        permutation="identity",
     )
-    return dict(
-        x=x,
-        weights=weights,
-        batch_info=batch_info,
-        slice_offsets=slice_offsets,
-        max_slice_size=max_slice_size,
-        base_output=base_output,
-    )
+    # batch_info is a dataclass, which unpack_to_args_kwargs drops from the
+    # positional args -- it and every later parameter ride in a dict.
+    yield x, weights, {
+        "batch_info": batch_info,
+        "slice_offsets": slice_offsets,
+        "max_slice_size": max_slice_size,
+        "base_output": base_output,
+    }
 
 
-# BLOCK_M == max(seg_lens) is used directly as a Triton arange size, so the
-# largest segment in each case must be a power of 2.
-CORRECTNESS_CASES = [
-    _case([8], 1, 16, [64]),
-    _case([3, 7, 0, 16], 2, 16, [128, 64]),
-    _case([16, 4], 2, 32, [256, 128, 128], permutation="shuffled"),
-]
-
-BENCH_CASES = [
-    _case([64] * 8, 4, 32, [4096, 4096]),
-    _case([256] * 4, 2, 64, [4096, 1024, 1024]),
-]
-
-BENCH_IDS = ["seg64x8_r32", "seg256x4_r64"]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.chunked_sgmv_expand
-def test_chunked_sgmv_expand_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_chunked_sgmv_expand():
+    bench = OpBenchmark(
+        op_name="chunked_sgmv_expand",
+        torch_op=get_reference("chunked_sgmv_expand"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="seg_len, num_segs, num_lora, r, *slice_sizes",
     )
-
-    try:
-        from flaggems_sglang.ops.chunked_sgmv_expand import chunked_sgmv_expand
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("lora/chunked_sgmv_expand ops module not found")
-        return
-
-    try:
-        chunked_sgmv_expand(**kwargs)
-    except NotImplementedError:
-        pytest.skip("lora/chunked_sgmv_expand not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: chunked_sgmv_expand(**kwargs))
-
-    record_case(
-        "lora/chunked_sgmv_expand", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.chunked_sgmv_expand)
+    bench.run()

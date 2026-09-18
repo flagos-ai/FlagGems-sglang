@@ -101,7 +101,7 @@ def test_l2norm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.l2norm import l2norm
+        from flaggems_sglang import l2norm
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/l2norm ops module not found")
         return

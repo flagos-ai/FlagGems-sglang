@@ -149,9 +149,7 @@ def test_chunk_scaled_dot_kkt(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunk_scaled_dot_kkt import (
-            chunk_scaled_dot_kkt,
-        )
+        from flaggems_sglang import chunk_scaled_dot_kkt
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/chunk_scaled_dot_kkt ops module not found")
         return

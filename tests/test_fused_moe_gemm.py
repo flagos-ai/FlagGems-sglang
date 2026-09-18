@@ -131,7 +131,7 @@ def test_fused_moe_gemm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_moe_gemm import fused_moe_gemm
+        from flaggems_sglang import fused_moe_gemm
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/fused_moe_gemm ops module not found")
         return

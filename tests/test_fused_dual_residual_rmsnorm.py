@@ -134,9 +134,7 @@ def test_fused_dual_residual_rmsnorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_dual_residual_rmsnorm import (
-            fused_dual_residual_rmsnorm,
-        )
+        from flaggems_sglang import fused_dual_residual_rmsnorm
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "activation_norm/fused_dual_residual_rmsnorm ops module not found"

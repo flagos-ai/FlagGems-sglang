@@ -18,104 +18,41 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("log_scaling_tau")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+# Shapes match kernel-comp-baseline/problems/attention/log_scaling_tau.
+SHAPES = [(t, 16, 128) for t in (1, 128, 2048, 8192)]
+# (37, 8, 64) and (129, 512) from the correctness cases; the 2-D case is
+# padded with a 1 so every shape tuple has the same arity.
+MORE_SHAPES = [(1, 1, 128), (37, 8, 64), (129, 1, 512)]
 
 
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
+def _input_fn(shape, cur_dtype, device):
+    g = torch.Generator(device=device).manual_seed(0)
+    # A leading 1 in the middle position marks a genuinely 2-D case.
+    dims = tuple(d for i, d in enumerate(shape) if not (i == 1 and d == 1))
+    x = torch.randn(*dims, generator=g, device=device, dtype=torch.float32).to(
+        cur_dtype
     )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/attention/log_scaling_tau/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _case(shape, dtype=torch.float16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    x = torch.randn(
-        *shape, generator=g, device=flaggems_sglang.device, dtype=torch.float32
-    ).to(dtype)
-    rows = shape[0]
+    # tau is per-row (one entry per index along dim 0).
     tau = 0.5 + torch.rand(
-        rows, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+        shape[0], generator=g, device=device, dtype=torch.float32
     )
-    return dict(x=x, tau=tau, check=assert_close)
+    yield x, tau
 
 
-CORRECTNESS_CASES = [
-    _case((1, 128)),
-    _case((37, 8, 64)),
-    _case((129, 512)),
-]
-
-BENCH_CASES = [_case((t, 16, 128)) for t in (1, 128, 2048, 8192)]
-
-BENCH_IDS = [f"t{t}" for t in (1, 128, 2048, 8192)]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.log_scaling_tau
-def test_log_scaling_tau_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_log_scaling_tau():
+    bench = OpBenchmark(
+        op_name="log_scaling_tau",
+        torch_op=get_reference("log_scaling_tau"),
+        input_fn=_input_fn,
+        dtypes=[torch.float16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="t, heads, d",
     )
-
-    try:
-        from flaggems_sglang.ops.log_scaling_tau import log_scaling_tau
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("attention/log_scaling_tau ops module not found")
-        return
-
-    try:
-        log_scaling_tau(**kwargs)
-    except NotImplementedError:
-        pytest.skip("attention/log_scaling_tau not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: log_scaling_tau(**kwargs))
-
-    record_case(
-        "attention/log_scaling_tau", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.log_scaling_tau)
+    bench.run()

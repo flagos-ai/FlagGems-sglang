@@ -18,148 +18,46 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("fused_dual_residual_rmsnorm")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
-
-
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/activation_norm/fused_dual_residual_rmsnorm/cases.py)
-# ---------------------------------------------------------------------------
-
+# Shapes match
+# kernel-comp-baseline/problems/activation_norm/fused_dual_residual_rmsnorm.
+SHAPES = [(bs, h) for bs in (1, 8, 64, 512, 4096) for h in (1024, 4096, 8192)]
+MORE_SHAPES = [(7, 16), (83, 1024), (48, 3072), (1, 8192)]
 
 _EPS = 1e-6
 
 
-def _case(bs, hidden, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    bs, hidden = shape
+    g = torch.Generator(device=device).manual_seed(0)
     x = torch.randn(
-        bs,
-        hidden,
-        dtype=torch.float32,
-        device=flaggems_sglang.device,
-        generator=g,
-    ).to(dtype)
+        bs, hidden, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
     residual = torch.randn(
-        bs,
-        hidden,
-        dtype=torch.float32,
-        device=flaggems_sglang.device,
-        generator=g,
-    ).to(dtype)
+        bs, hidden, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
     weight1 = torch.randn(
-        hidden, dtype=torch.float32, device=flaggems_sglang.device, generator=g
-    ).to(dtype)
+        hidden, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
     weight2 = torch.randn(
-        hidden, dtype=torch.float32, device=flaggems_sglang.device, generator=g
-    ).to(dtype)
-    return dict(
-        x=x,
-        residual=residual,
-        weight1=weight1,
-        weight2=weight2,
-        eps=_EPS,
-        check=_check,
-    )
+        hidden, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
+    yield x, residual, weight1, weight2, _EPS
 
 
-def _check(actual, expected):
-    a_out, a_mid = actual
-    e_out, e_mid = expected
-    assert_close(a_out, e_out)
-    assert_close(a_mid, e_mid)
-
-
-CORRECTNESS_CASES = [
-    _case(7, 16),
-    _case(83, 1024),
-    _case(48, 3072),
-    _case(1, 8192),
-]
-
-BENCH_CASES = [
-    _case(bs, h) for bs in (1, 8, 64, 512, 4096) for h in (1024, 4096, 8192)
-]
-
-BENCH_IDS = [
-    f"bs{bs}_h{h}" for bs in (1, 8, 64, 512, 4096) for h in (1024, 4096, 8192)
-]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.fused_dual_residual_rmsnorm
-def test_fused_dual_residual_rmsnorm_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_fused_dual_residual_rmsnorm():
+    bench = OpBenchmark(
+        op_name="fused_dual_residual_rmsnorm",
+        torch_op=get_reference("fused_dual_residual_rmsnorm"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="bs, hidden",
     )
-
-    try:
-        from flaggems_sglang.ops.fused_dual_residual_rmsnorm import (
-            fused_dual_residual_rmsnorm,
-        )
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip(
-            "activation_norm/fused_dual_residual_rmsnorm ops module not found"
-        )
-        return
-
-    try:
-        fused_dual_residual_rmsnorm(**kwargs)
-    except NotImplementedError:
-        pytest.skip(
-            "activation_norm/fused_dual_residual_rmsnorm not yet implemented"
-        )
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: fused_dual_residual_rmsnorm(**kwargs))
-
-    record_case(
-        "activation_norm/fused_dual_residual_rmsnorm",
-        BENCH_IDS[case_idx],
-        ref_us,
-        triton_us,
-    )
+    bench.set_gems(flaggems_sglang.fused_dual_residual_rmsnorm)
+    bench.run()

@@ -130,7 +130,7 @@ def test_fused_gdn_gating(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.fused_gdn_gating import fused_gdn_gating
+        from flaggems_sglang import fused_gdn_gating
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/fused_gdn_gating ops module not found")
         return

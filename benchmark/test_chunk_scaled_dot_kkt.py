@@ -18,65 +18,25 @@ import pytest
 import torch
 
 import flaggems_sglang
-from benchmark.bench_report import do_bench_us, record_case
 from flaggems_sglang.reference import get_reference
 
-reference = get_reference("chunk_scaled_dot_kkt")
+from .op_benchmark import OpBenchmark
 
-device = flaggems_sglang.device
-
-
-# ---------------------------------------------------------------------------
-# Tolerance helper
-# ---------------------------------------------------------------------------
-
-_TOLERANCES = {
-    torch.float32: dict(atol=1e-4, rtol=1e-4),
-    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
-    torch.float16: dict(atol=1e-2, rtol=1e-2),
-}
-_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+# Shapes match kernel-comp-baseline/problems/fla/chunk_scaled_dot_kkt.
+SHAPES = [
+    (8, 16, 64, 8, 32, 128, 1),
+    (32, 4, 64, 8, 32, 128, 1),
+]
+MORE_SHAPES = [
+    (1, 1, 16, 2, 2, 32, 1),
+    (2, 3, 16, 2, 4, 32, 0),
+    (3, 2, 32, 4, 8, 64, 1),
+]
 
 
-def assert_close(actual, expected, *, dtype=None, **overrides):
-    tol = dict(
-        _TOLERANCES.get(
-            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
-        )
-    )
-    tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/fla/chunk_scaled_dot_kkt/cases.py)
-# ---------------------------------------------------------------------------
-
-
-def _check(actual, expected):
-    assert_close(actual, expected, dtype=torch.float32)
-
-
-def _case(
-    batch,
-    nchunks,
-    chunk_size,
-    hg,
-    h,
-    k_dim,
-    use_g=True,
-    dtype=torch.bfloat16,
-    seed=0,
-):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+def _input_fn(shape, cur_dtype, device):
+    batch, nchunks, chunk_size, hg, h, k_dim, use_g = shape
+    g = torch.Generator(device=device).manual_seed(0)
     t = nchunks * chunk_size
     k = torch.randn(
         batch,
@@ -84,27 +44,17 @@ def _case(
         hg,
         k_dim,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
+    ).to(cur_dtype)
     beta = torch.rand(
-        batch,
-        t,
-        h,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
+        batch, t, h, generator=g, device=device, dtype=torch.float32
     )
     g_cumsum = None
     if use_g:
         raw = (
             -torch.rand(
-                batch,
-                t,
-                h,
-                generator=g,
-                device=flaggems_sglang.device,
-                dtype=torch.float32,
+                batch, t, h, generator=g, device=device, dtype=torch.float32
             )
             * 0.1
         )
@@ -113,59 +63,19 @@ def _case(
             .cumsum(dim=2)
             .view(batch, t, h)
         )
-    return dict(
-        k=k, beta=beta, g_cumsum=g_cumsum, chunk_size=chunk_size, check=_check
-    )
+    yield k, beta, g_cumsum, {"chunk_size": chunk_size}
 
 
-CORRECTNESS_CASES = [
-    _case(1, 1, 16, 2, 2, 32),
-    _case(2, 3, 16, 2, 4, 32, use_g=False),
-    _case(3, 2, 32, 4, 8, 64),
-]
-
-BENCH_CASES = [
-    _case(8, 16, 64, 8, 32, 128),
-    _case(32, 4, 64, 8, 32, 128),
-]
-
-BENCH_IDS = ["batch8_nchunks16", "batch32_nchunks4"]
-
-
-# ---------------------------------------------------------------------------
-# Benchmark
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("case_idx", range(len(BENCH_CASES)))
 @pytest.mark.chunk_scaled_dot_kkt
-def test_chunk_scaled_dot_kkt_perf(case_idx):
-    """Benchmark triton kernel vs torch reference; record per-case speedup."""
-    case = BENCH_CASES[case_idx]
-    case = case() if callable(case) else case
-    kwargs = (
-        {k: v for k, v in case.items() if k != "check"}
-        if isinstance(case, dict)
-        else case
+def test_perf_chunk_scaled_dot_kkt():
+    bench = OpBenchmark(
+        op_name="chunk_scaled_dot_kkt",
+        torch_op=get_reference("chunk_scaled_dot_kkt"),
+        input_fn=_input_fn,
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="batch, nchunks, chunk_size, hg, h, k_dim, use_g",
     )
-
-    try:
-        from flaggems_sglang.ops.chunk_scaled_dot_kkt import (
-            chunk_scaled_dot_kkt,
-        )
-    except (ImportError, ModuleNotFoundError):
-        pytest.skip("fla/chunk_scaled_dot_kkt ops module not found")
-        return
-
-    try:
-        chunk_scaled_dot_kkt(**kwargs)
-    except NotImplementedError:
-        pytest.skip("fla/chunk_scaled_dot_kkt not yet implemented")
-        return
-
-    ref_us = do_bench_us(lambda: reference(**kwargs))
-    triton_us = do_bench_us(lambda: chunk_scaled_dot_kkt(**kwargs))
-
-    record_case(
-        "fla/chunk_scaled_dot_kkt", BENCH_IDS[case_idx], ref_us, triton_us
-    )
+    bench.set_gems(flaggems_sglang.chunk_scaled_dot_kkt)
+    bench.run()

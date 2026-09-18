@@ -133,7 +133,7 @@ def test_chunked_sgmv_shrink(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang.ops.chunked_sgmv_shrink import chunked_sgmv_shrink
+        from flaggems_sglang import chunked_sgmv_shrink
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/chunked_sgmv_shrink ops module not found")
         return
