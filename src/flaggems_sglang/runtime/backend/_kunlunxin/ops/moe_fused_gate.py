@@ -1,0 +1,284 @@
+# Copyright 2026, The FlagOS Contributors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License")
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language governing
+# permissions and limitations under the License.
+
+import torch
+import triton
+import triton.language as tl
+
+
+@triton.jit
+def _moe_fused_gate_kernel(
+    scores_ptr,
+    bias_ptr,
+    weights_ptr,
+    indices_ptr,
+    routed_sums_ptr,
+    stride_sm,
+    stride_sn,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    K_ROUTED: tl.constexpr,
+    SCORING_FUNC: tl.constexpr,
+    HAS_SOFTCAP: tl.constexpr,
+    SOFTCAP: tl.constexpr,
+    ROUTED_SCALE: tl.constexpr,
+    NUM_GROUPS: tl.constexpr,
+    TOPK_GROUP: tl.constexpr,
+    EXPERTS_PER_GROUP: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
+    offsets = tl.arange(0, BLOCK_N)
+    valid = offsets < N
+    bias = tl.load(bias_ptr + offsets, mask=valid, other=0.0).to(tl.float32)
+
+    row = tl.program_id(0)
+    scores = tl.load(
+        scores_ptr + row * stride_sm + offsets * stride_sn,
+        mask=valid,
+        other=0.0,
+    ).to(tl.float32)
+
+    if SCORING_FUNC == 0:
+        activated = tl.fdiv(1.0, 1.0 + tl.exp(-scores))
+        selection = activated + bias
+    elif SCORING_FUNC == 1:
+        softplus = tl.where(
+            scores > 20.0,
+            scores,
+            tl.log(1.0 + tl.exp(scores)),
+        )
+        activated = tl.sqrt(softplus)
+        selection = activated + bias
+    else:
+        logits = scores
+        if HAS_SOFTCAP:
+            scaled = logits * (1.0 / SOFTCAP)
+            logits = SOFTCAP * (2.0 * tl.sigmoid(2.0 * scaled) - 1.0)
+        selection = tl.where(valid, logits + bias, -float("inf"))
+        row_max = tl.max(selection, axis=0)
+        exponentials = tl.where(valid, tl.exp(selection - row_max), 0.0)
+        denominator = tl.sum(exponentials, axis=0)
+        activated = exponentials / denominator
+
+    selection = tl.where(valid, selection, -float("inf"))
+    selection = tl.where(selection == selection, selection, -1.0e30)
+
+    if NUM_GROUPS > 1:
+        group_of_expert = offsets // EXPERTS_PER_GROUP
+        group_scores = tl.full((BLOCK_N,), -float("inf"), tl.float32)
+        for group in tl.static_range(0, NUM_GROUPS):
+            in_group = valid & (group_of_expert == group)
+            group_values = tl.where(in_group, selection, -float("inf"))
+            first_value = tl.max(group_values, axis=0)
+            first_lane = tl.max(
+                tl.where(
+                    group_values == first_value,
+                    offsets,
+                    -1,
+                ),
+                axis=0,
+            )
+            second_values = tl.where(
+                in_group & (offsets != first_lane),
+                selection,
+                -float("inf"),
+            )
+            group_score = first_value + tl.max(second_values, axis=0)
+            group_scores = tl.where(
+                offsets == group, group_score, group_scores
+            )
+
+        kept_experts = tl.zeros((BLOCK_N,), dtype=tl.int1)
+        remaining_groups = group_scores
+        for _ in tl.static_range(0, TOPK_GROUP):
+            best_group_score = tl.max(remaining_groups, axis=0)
+            best_group = tl.max(
+                tl.where(
+                    remaining_groups == best_group_score,
+                    offsets,
+                    -1,
+                ),
+                axis=0,
+            )
+            kept_experts = kept_experts | (group_of_expert == best_group)
+            remaining_groups = tl.where(
+                offsets == best_group,
+                -float("inf"),
+                remaining_groups,
+            )
+        selection = tl.where(kept_experts & valid, selection, -float("inf"))
+
+    routed_sum = 0.0
+    remaining = selection
+    output_start = row * K
+    for rank in tl.static_range(0, K_ROUTED):
+        best_value = tl.max(remaining, axis=0)
+        best_expert = tl.max(
+            tl.where(remaining == best_value, offsets, -1),
+            axis=0,
+        )
+        weight = tl.sum(
+            tl.where(offsets == best_expert, activated, 0.0),
+            axis=0,
+        )
+        tl.store(weights_ptr + output_start + rank, weight)
+        tl.store(indices_ptr + output_start + rank, best_expert)
+        routed_sum += weight
+        remaining = tl.where(
+            offsets == best_expert,
+            -float("inf"),
+            remaining,
+        )
+
+    tl.store(routed_sums_ptr + row, routed_sum)
+    for shared_rank in tl.static_range(K_ROUTED, K):
+        tl.store(
+            weights_ptr + output_start + shared_rank,
+            routed_sum / ROUTED_SCALE,
+        )
+        tl.store(
+            indices_ptr + output_start + shared_rank,
+            N + shared_rank - K_ROUTED,
+        )
+
+
+@triton.jit
+def _normalize_scale_kernel(
+    weights_ptr,
+    routed_sums_ptr,
+    K: tl.constexpr,
+    RENORMALIZE: tl.constexpr,
+    APPLY_SCALE: tl.constexpr,
+    ROUTED_SCALE: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    row = tl.program_id(0)
+    rank_offsets = tl.arange(0, BLOCK_K)
+    rank_mask = rank_offsets < K
+    output_start = row * K
+    values = tl.load(
+        weights_ptr + output_start + rank_offsets,
+        mask=rank_mask,
+        other=0.0,
+    )
+    if RENORMALIZE:
+        routed_sum = tl.load(routed_sums_ptr + row)
+        denominator = tl.where(routed_sum > 0.0, routed_sum, 1.0)
+        values /= denominator
+    if APPLY_SCALE:
+        values *= ROUTED_SCALE
+    tl.store(
+        weights_ptr + output_start + rank_offsets,
+        values,
+        mask=rank_mask,
+    )
+
+
+def moe_fused_gate(
+    scores,
+    bias,
+    topk,
+    scoring_func="sigmoid",
+    num_fused_shared_experts=0,
+    renormalize=True,
+    routed_scaling_factor=1.0,
+    apply_routed_scaling_factor_on_output=False,
+    moe_softcapping=0.0,
+    num_expert_group=1,
+    topk_group=1,
+):
+    if scoring_func == "sigmoid":
+        scoring_func_id = 0
+    elif scoring_func == "sqrtsoftplus":
+        scoring_func_id = 1
+    elif scoring_func == "softmax":
+        scoring_func_id = 2
+    else:
+        raise ValueError("unsupported scoring_func")
+
+    if routed_scaling_factor is None:
+        routed_scaling_factor = 1.0
+
+    M, N = scores.shape
+    K = int(topk)
+    K_routed = K - int(num_fused_shared_experts)
+    if K_routed <= 0:
+        raise ValueError("topk must be greater than num_fused_shared_experts")
+    if num_expert_group > 1:
+        if N % num_expert_group != 0:
+            raise ValueError(
+                "num_experts must be divisible by num_expert_group"
+            )
+        if topk_group < 1 or topk_group > num_expert_group:
+            raise ValueError("invalid topk_group")
+
+    weights = torch.empty((M, K), dtype=torch.float32, device=scores.device)
+    indices = torch.empty((M, K), dtype=torch.int32, device=scores.device)
+    routed_sums = torch.empty((M,), dtype=torch.float32, device=scores.device)
+    if M == 0:
+        return weights, indices
+
+    block_n = max(16, triton.next_power_of_2(N))
+    if block_n <= 512:
+        num_warps = 1
+    else:
+        num_warps = 4
+
+    max_grid_x = 32768
+    for row_start in range(0, M, max_grid_x):
+        grid_rows = min(max_grid_x, M - row_start)
+        row_stop = row_start + grid_rows
+        score_chunk = scores[row_start:row_stop]
+        weight_chunk = weights[row_start:row_stop]
+        index_chunk = indices[row_start:row_stop]
+        sum_chunk = routed_sums[row_start:row_stop]
+        _moe_fused_gate_kernel[(grid_rows,)](
+            score_chunk,
+            bias,
+            weight_chunk,
+            index_chunk,
+            sum_chunk,
+            scores.stride(0),
+            scores.stride(1),
+            N=N,
+            K=K,
+            K_ROUTED=K_routed,
+            SCORING_FUNC=scoring_func_id,
+            HAS_SOFTCAP=bool(moe_softcapping != 0.0),
+            SOFTCAP=float(moe_softcapping),
+            ROUTED_SCALE=float(routed_scaling_factor),
+            NUM_GROUPS=int(num_expert_group),
+            TOPK_GROUP=int(topk_group),
+            EXPERTS_PER_GROUP=N // int(num_expert_group),
+            BLOCK_N=block_n,
+            num_warps=num_warps,
+            num_stages=1,
+        )
+        if renormalize or apply_routed_scaling_factor_on_output:
+            block_k = max(16, triton.next_power_of_2(K))
+            _normalize_scale_kernel[(grid_rows,)](
+                weight_chunk,
+                sum_chunk,
+                K=K,
+                RENORMALIZE=bool(renormalize),
+                APPLY_SCALE=bool(apply_routed_scaling_factor_on_output),
+                ROUTED_SCALE=float(routed_scaling_factor),
+                BLOCK_K=block_k,
+                num_warps=1,
+                num_stages=1,
+            )
+    return weights, indices
+
+
+__all__ = ["moe_fused_gate"]
