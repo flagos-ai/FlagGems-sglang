@@ -13,6 +13,34 @@
 # limitations under the License.
 
 ops:
+  - id: apply_token_bitmask
+    description: |
+      Applies a packed bitmask to logits for grammar-constrained decoding.
+      Masks out disallowed vocabulary tokens by setting them to -inf.
+    for:
+      - apply_token_bitmask
+    labels:
+      - fused
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: bmm_chunk
+    description: |
+      Chunked batched matrix multiplication for the Mamba2 SSD scan.
+      Computes per-chunk C @ B^T products with optional causal masking.
+    for:
+      - bmm_chunk
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: causal_conv1d_fn
     description: |
       Generic depthwise causal 1-D convolution over continuous-batched sequences.
@@ -26,6 +54,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: chunk_cumsum
+    description: |
+      Chunk-wise cumulative sum of the Mamba timestep and state-decay terms.
+      Computes dt with optional softplus and bias, plus the cumulative dA per chunk.
+    for:
+      - chunk_cumsum
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
   - id: chunk_local_cumsum_scalar
     description: |
       Computes local cumulative sum over chunked sequences with optional scaling and reverse direction.
@@ -37,6 +79,117 @@ ops:
       - sglang
     kind:
       - Reduction
+    stages:
+      - stable: '1.0'
+  - id: chunk_local_cumsum_vector
+    description: |
+      Within-chunk cumulative sum of a per-token, per-head vector gate.
+      Supports optional scaling and reverse-direction accumulation.
+    for:
+      - chunk_local_cumsum_vector
+    labels:
+      - fused
+      - sglang
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: chunk_state
+    description: |
+      Mamba2 per-chunk SSM hidden-state accumulation.
+      Accumulates x against the decay- and dt-scaled state-projection matrix per chunk.
+    for:
+      - chunk_state
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunk_state_varlen
+    description: |
+      Variable-length variant of the Mamba2 per-chunk state accumulation.
+      Handles packed sequences delimited by cumulative sequence lengths.
+    for:
+      - chunk_state_varlen
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: context_attention
+    description: |
+      Prefill/context-stage scaled dot-product attention on packed variable-length sequences.
+      Supports causal masking over sequences delimited by per-batch start offsets and lengths.
+    for:
+      - context_attention
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: decode_attention
+    description: |
+      Decode-stage attention against a paged KV cache.
+      Gathers keys and values through an indirection table for single-token queries.
+    for:
+      - decode_attention
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: decode_grouped_attention
+    description: |
+      Grouped-query variant of decode-stage paged attention.
+      Shares each KV head across a group of query heads to cut cache bandwidth.
+    for:
+      - decode_grouped_attention
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: draft_topk1
+    description: |
+      Top-1 draft token selection for speculative decoding.
+      Picks the argmax draft token per position and writes it to the draft token column.
+    for:
+      - draft_topk1
+    labels:
+      - fused
+      - sglang
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: embedding_lora_a
+    description: |
+      LoRA A-projection over an embedding lookup for segmented multi-adapter batches.
+      Selects the per-segment adapter weight and projects the gathered rows.
+    for:
+      - embedding_lora_a
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
     stages:
       - stable: '1.0'
   - id: fused_moe_gemm
@@ -53,6 +206,106 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_moe_router_cudacore
+    description: |
+      Fused Mixture-of-Experts router evaluated on CUDA cores.
+      Computes router logits with optional softcapping and correction bias, then selects top-k experts.
+    for:
+      - fused_moe_router_cudacore
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_moe_router_tensorcore
+    description: |
+      Tensor Core variant of the fused Mixture-of-Experts router.
+      Mathematically identical to the CUDA-core router, tuned for Tensor Core throughput.
+    for:
+      - fused_moe_router_tensorcore
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_rmsnorm
+    description: |
+      Fused root-mean-square layer normalization with a learned weight.
+      Computes the reciprocal RMS and applies the scale in a single pass.
+    for:
+      - fused_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gate_up_lora_b
+    description: |
+      LoRA B-projection for fused gate/up projections in segmented multi-adapter batches.
+      Expands the low-rank activations and accumulates onto the base output.
+    for:
+      - gate_up_lora_b
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gelu_and_mul
+    description: |
+      Fused GELU gate and multiply operation. Computes gelu(x[..., :d]) * x[..., d:] in a single pass.
+      Stride-aware so non-contiguous gate/up splits are handled without a copy.
+    for:
+      - gelu_and_mul
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: interleaved_rope
+    description: |
+      Interleaved-layout Rotary Positional Embedding.
+      Rotates adjacent element pairs using multi-section temporal, height, and width splits.
+    for:
+      - interleaved_rope
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: mamba_layernorm_gated
+    description: |
+      Gated layer/RMS normalization for Mamba blocks.
+      Applies grouped normalization with a SiLU gate before or after the norm.
+    for:
+      - mamba_layernorm_gated
+    labels:
+      - fused
+      - sglang
+      - Mamba
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: merge_state
     description: |
       Merges attention states from prefix and suffix sequences using log-sum-exp scaling.
@@ -65,6 +318,34 @@ ops:
       - Attention
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: moe_fused_gate
+    description: |
+      Fused Mixture-of-Experts gating with expert-group selection.
+      Scores experts, applies bias and top-k selection, then optionally renormalizes and rescales.
+    for:
+      - moe_fused_gate
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: moe_sum_reduce
+    description: |
+      Sums the per-expert outputs of a Mixture-of-Experts layer.
+      Reduces over the top-k dimension and applies the routed scaling factor.
+    for:
+      - moe_sum_reduce
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: mrope_fused
@@ -95,6 +376,118 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: per_token_group_quant_int8
+    description: |
+      Per-token, per-group symmetric INT8 quantization.
+      Emits quantized values alongside one scale per token group.
+    for:
+      - per_token_group_quant_int8
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_quant_int8
+    description: |
+      Per-token symmetric INT8 quantization.
+      Emits quantized values alongside one scale per token row.
+    for:
+      - per_token_quant_int8
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: qkv_lora_b
+    description: |
+      LoRA B-projection for fused QKV projections in segmented multi-adapter batches.
+      Expands the low-rank activations into per-slice Q, K and V offsets of the base output.
+    for:
+      - qkv_lora_b
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: rotary_embedding
+    description: |
+      Rotary Positional Embedding with precomputed cosine and sine tables.
+      Supports both the interleaved and half-split rotation layouts.
+    for:
+      - rotary_embedding
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: selective_state_update
+    description: |
+      Single-step Mamba selective state-space update.
+      Advances the recurrent state in float32 with optional softplus dt, D skip and gating.
+    for:
+      - selective_state_update
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: sgemm_lora_a
+    description: |
+      LoRA A-projection GEMM for segmented multi-adapter batches.
+      Shrinks activations to the adapter rank, optionally over a stack of projections.
+    for:
+      - sgemm_lora_a
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: sgemm_lora_b
+    description: |
+      LoRA B-projection GEMM for segmented multi-adapter batches.
+      Expands the low-rank activations and accumulates onto the base output.
+    for:
+      - sgemm_lora_b
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: sigmoid_gate_topk_renorm
+    description: |
+      Sigmoid expert gating with top-k selection and weight renormalization.
+      Applies optional bias, shared-expert handling, and route/global scaling.
+    for:
+      - sigmoid_gate_topk_renorm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: silu_and_mul
     description: |
       Fused SiLU gate and multiply operation. Computes silu(x[..., :d]) * x[..., d:] in a single pass.
@@ -106,6 +499,66 @@ ops:
       - pointwise
       - sglang
       - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: silu_and_mul_masked
+    description: |
+      Masked SiLU gate and multiply for grouped Mixture-of-Experts activations.
+      Computes only the valid token rows indicated by the per-group masked length.
+    for:
+      - silu_and_mul_masked
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: softcap_inplace_logits
+    description: |
+      In-place logit softcapping. Computes cap * tanh(x / cap) over the full logit tensor.
+      Bounds logit magnitude before sampling without allocating an output buffer.
+    for:
+      - softcap_inplace_logits
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: softcap_out
+    description: |
+      Out-of-place logit softcapping. Computes cap * tanh(x / cap) and returns an FP32 tensor.
+      Uses a deterministic shape heuristic to pick a tiling on every launch.
+    for:
+      - softcap_out
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: state_passing
+    description: |
+      Mamba2 SSD inter-chunk state-passing scan.
+      Sequentially propagates each chunk's final state forward from the initial state.
+    for:
+      - state_passing
+    labels:
+      - fused
+      - sglang
+      - Mamba
     kind:
       - NeuralNetwork
     stages:
