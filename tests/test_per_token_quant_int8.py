@@ -20,8 +20,6 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-from . import conftest as cfg
-
 reference = get_reference("per_token_quant_int8")
 
 
