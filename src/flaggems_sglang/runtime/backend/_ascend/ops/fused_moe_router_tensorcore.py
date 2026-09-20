@@ -109,6 +109,12 @@ _FUSED_M_LIMIT = 512
 # shape-keyed config picker to keep tiles inside the UB. Pure constant.
 _UB_BYTES = 1572864 // 8
 
+# Deepest loop-level software pipelining this backend's Triton accepts for
+# ``tl.range(..., num_stages=N)``: it asserts ``num_stages <= 2`` on a range
+# iterator ("Only `range` iterator supports num_stages <= 2"), so anything
+# deeper is a compile error, not a slow kernel. Pure constant.
+_MAX_KLOOP_STAGES = 2
+
 
 def _gemm_config(M, N, H):
     """Pick (BLOCK_M, BLOCK_N, BLOCK_K, num_warps, num_stages) for the
@@ -278,14 +284,13 @@ def _fused_config(M, E, H):
     # K-loop (software-pipelining) stages, independent of the kernel-wide
     # num_stages. ``tl.range(num_stages=...)`` overlaps K-tile loads with the
     # dot compute; the wide-N (BN=256) bench K-loop runs 4096/64 = 64 iters so
-    # deeper pipelining helps (measured M=8: LNS=4 ~111us vs LNS=2 ~121us;
-    # M=1 flat ~109us). The conservative UB-fit ``num_stages`` above is about
-    # the kernel-level staging; the K-loop's own staging is allowed higher
-    # here (verified to compile/run for the bench tiles). Keep it modest for
+    # pipelining helps. This backend's Triton caps loop-level pipelining at
+    # ``_MAX_KLOOP_STAGES`` (see the constant), so take the deepest allowed
+    # staging and clamp it against the kernel-wide UB-fit ``num_stages`` for
     # the wide-K / small-N correctness tiles where the dot tile is big.
-    kloop_stages = 4
+    kloop_stages = _MAX_KLOOP_STAGES
     if block_n <= 32:
-        kloop_stages = min(num_stages, 3)
+        kloop_stages = min(num_stages, _MAX_KLOOP_STAGES)
     return block_m, block_n, block_k, num_warps, num_stages, kloop_stages
 
 
@@ -559,7 +564,7 @@ def fused_moe_router_tensorcore(
         # ---- Launch-bound regime: single fused kernel --------------------
         # Fast path for the common full-axis bench shape (E=256, H=4096): the
         # config is fully determined by M here (BN=256, BK=64, 8 warps, kernel
-        # stages=2, K-loop stages=4), so we set it inline instead of calling
+        # stages=2, K-loop stages=2), so we set it inline instead of calling
         # the shape-keyed picker. This shaves ~12us of Python work from the
         # launcher; on this device the kernel launch is async, so CPU work
         # between back-to-back launches serialises them and shows up as GPU
@@ -575,7 +580,7 @@ def fused_moe_router_tensorcore(
             block_k = 64
             num_warps = 8
             num_stages = 2
-            kloop_stages = 4
+            kloop_stages = _MAX_KLOOP_STAGES
         else:
             block_m, block_n, block_k, num_warps, num_stages, kloop_stages = (
                 _fused_config(M, N, K)
