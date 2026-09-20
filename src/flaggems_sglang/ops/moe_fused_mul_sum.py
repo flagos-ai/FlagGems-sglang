@@ -48,9 +48,19 @@ N_PROG = 4096
 
 @triton.jit
 def _moe_fused_mul_sum_kernel(
-    in_ptr, w_ptr, ids_ptr, map_ptr, out_ptr,
-    scale, top_k, hidden, mode, n_work, nt,
-    N_PROG: tl.constexpr, BLOCK_H: tl.constexpr,
+    in_ptr,
+    w_ptr,
+    ids_ptr,
+    map_ptr,
+    out_ptr,
+    scale,
+    top_k,
+    hidden,
+    mode,
+    n_work,
+    nt,
+    N_PROG: tl.constexpr,
+    BLOCK_H: tl.constexpr,
 ):
     # A k-loop with scalar weight/id loads, NOT a single [top_k, BLOCK_H] tile.
     # The tiled form is the tidier kernel and was marginally faster locally, but
@@ -71,17 +81,29 @@ def _moe_fused_mul_sum_kernel(
             # in use those pointers are one-element dummies.
             wgt = tl.load(w_ptr + t * top_k + k).to(tl.float32) * scale
             e = tl.load(ids_ptr + tl.where(mode != 0, t * top_k + k, 0))
-            bad_map = tl.load(map_ptr + tl.where(mode == 1, tl.maximum(e, 0), 0)) < 0
+            bad_map = (
+                tl.load(map_ptr + tl.where(mode == 1, tl.maximum(e, 0), 0)) < 0
+            )
             wgt = tl.where((mode == 1) & bad_map, 0.0, wgt)
             wgt = tl.where((mode == 2) & (e < 0), 0.0, wgt)
             v = tl.load(base + k * hidden, mask=mask, other=0.0).to(tl.float32)
             acc += v * wgt
 
-        tl.store(out_ptr + t * hidden + offs_h, acc.to(out_ptr.dtype.element_ty), mask=mask)
+        tl.store(
+            out_ptr + t * hidden + offs_h,
+            acc.to(out_ptr.dtype.element_ty),
+            mask=mask,
+        )
 
 
-def moe_fused_mul_sum(inputs, topk_weights, topk_ids=None, expert_map=None,
-                      routed_scaling_factor=None, is_ep=False):
+def moe_fused_mul_sum(
+    inputs,
+    topk_weights,
+    topk_ids=None,
+    expert_map=None,
+    routed_scaling_factor=None,
+    is_ep=False,
+):
     inp = inputs.contiguous()
     num_tokens, top_k, hidden = inp.shape
     out = torch.empty((num_tokens, hidden), dtype=inp.dtype, device=inp.device)
@@ -105,9 +127,19 @@ def moe_fused_mul_sum(inputs, topk_weights, topk_ids=None, expert_map=None,
     nt = (hidden + BLOCK_H - 1) // BLOCK_H
     n_work = num_tokens * nt
     _moe_fused_mul_sum_kernel[(min(n_work, N_PROG),)](
-        inp, topk_weights.contiguous(), ids, emap, out,
+        inp,
+        topk_weights.contiguous(),
+        ids,
+        emap,
+        out,
         1.0 if routed_scaling_factor is None else float(routed_scaling_factor),
-        top_k, hidden, mode, n_work, nt, N_PROG, BLOCK_H,
+        top_k,
+        hidden,
+        mode,
+        n_work,
+        nt,
+        N_PROG,
+        BLOCK_H,
     )
     return out
 

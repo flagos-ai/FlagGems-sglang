@@ -334,6 +334,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: moe_fused_mul_sum
+    description: |
+      Fused weighted reduction of Mixture-of-Experts outputs.
+      Scales each top-k expert output by its routing weight and sums over top-k,
+      masking slots dropped by expert-parallel routing.
+    for:
+      - moe_fused_mul_sum
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
   - id: moe_sum_reduce
     description: |
       Sums the per-expert outputs of a Mixture-of-Experts layer.
