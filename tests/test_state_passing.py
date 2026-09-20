@@ -12,15 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Correctness test for fla/fused_recurrent_gdn."""
+"""Correctness test for mamba/state_passing."""
 
 import pytest
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference.chunk_cumsum import (
+    reference as chunk_cumsum_reference,
+)
 
-reference = get_reference("fused_recurrent_gdn")
+reference = get_reference("state_passing")
 
 
 # ---------------------------------------------------------------------------
@@ -42,7 +45,6 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
         )
     )
     tol.update(overrides)
-    equal_nan = tol.pop("equal_nan", True)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
         (
@@ -50,138 +52,79 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
             if expected.dtype.is_floating_point
             else expected
         ),
-        equal_nan=equal_nan,
         **tol,
     )
 
 
 # ---------------------------------------------------------------------------
-# Cases (from kernel-comp-baseline/problems/fla/fused_recurrent_gdn/cases.py)
+# Cases (from kernel-comp-baseline/problems/mamba/state_passing)
 # ---------------------------------------------------------------------------
 
 
 def _check(actual, expected):
-    a_o, a_final = actual
-    e_o, e_final = expected
-    assert_close(a_o, e_o)
-    if e_final is not None:
-        # Accumulated float32 rounding differences over many sequential
-        # recurrence steps can exceed the tight float32 default tolerance
-        # once state magnitudes grow, without indicating an actual bug.
-        assert_close(a_final, e_final, atol=1e-2, rtol=1e-2)
+    a_out, a_final = actual
+    e_out, e_final = expected
+    assert_close(a_out, e_out)
+    assert_close(a_final, e_final, dtype=torch.float32)
 
 
 def _case(
     batch,
-    t,
-    h,
-    hv,
-    k_dim,
-    v_dim,
-    beta_headwise=False,
+    nchunks,
+    chunk_size,
+    nheads,
+    dim,
     has_init=False,
-    output_final_state=True,
-    l2norm=False,
     dtype=torch.bfloat16,
     seed=0,
 ):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    q = torch.randn(
+    device = flaggems_sglang.device
+    g = torch.Generator(device=device).manual_seed(seed)
+    states = torch.randn(
         batch,
-        t,
-        h,
-        k_dim,
+        nchunks,
+        nheads,
+        dim,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
     ).to(dtype)
-    k = torch.randn(
+    raw_dt = torch.rand(
         batch,
-        t,
-        h,
-        k_dim,
+        nchunks * chunk_size,
+        nheads,
         generator=g,
-        device=flaggems_sglang.device,
+        device=device,
         dtype=torch.float32,
-    ).to(dtype)
-    v = torch.randn(
-        batch,
-        t,
-        hv,
-        v_dim,
-        generator=g,
-        device=flaggems_sglang.device,
-        dtype=torch.float32,
-    ).to(dtype)
-    gate = (
-        -torch.rand(
-            batch,
-            t,
-            hv,
-            generator=g,
-            device=flaggems_sglang.device,
-            dtype=torch.float32,
-        )
-        * 0.1
     )
-    if beta_headwise:
-        beta = torch.sigmoid(
-            torch.randn(
-                batch,
-                t,
-                hv,
-                v_dim,
-                generator=g,
-                device=flaggems_sglang.device,
-                dtype=torch.float32,
-            )
-        )
-    else:
-        beta = torch.sigmoid(
-            torch.randn(
-                batch,
-                t,
-                hv,
-                generator=g,
-                device=flaggems_sglang.device,
-                dtype=torch.float32,
-            )
-        )
-    initial_state = None
+    a = (
+        -torch.rand(nheads, generator=g, device=device, dtype=torch.float32)
+        - 0.1
+    )
+    # dA_cumsum comes from the chunk_cumsum stage that precedes this op.
+    _, dA_cumsum = chunk_cumsum_reference(raw_dt, a, chunk_size)
+    initial_states = None
     if has_init:
-        initial_state = torch.randn(
-            batch,
-            hv,
-            v_dim,
-            k_dim,
-            generator=g,
-            device=flaggems_sglang.device,
-            dtype=torch.float32,
-        )
-    scale = k_dim**-0.5
+        initial_states = torch.randn(
+            batch, nheads, dim, generator=g, device=device, dtype=torch.float32
+        ).to(dtype)
     return dict(
-        q=q,
-        k=k,
-        v=v,
-        g=gate,
-        beta=beta,
-        scale=scale,
-        initial_state=initial_state,
-        output_final_state=output_final_state,
-        use_qk_l2norm_in_kernel=l2norm,
+        states=states,
+        dA_cumsum=dA_cumsum,
+        initial_states=initial_states,
         check=_check,
     )
 
 
 CORRECTNESS_CASES = [
-    _case(1, 4, 2, 2, 16, 16),
-    _case(2, 8, 2, 4, 32, 32, beta_headwise=True, has_init=True),
-    _case(3, 6, 4, 4, 64, 32, l2norm=True, output_final_state=False),
+    _case(1, 1, 8, 4, 16),
+    _case(2, 3, 16, 8, 32, has_init=True),
+    _case(3, 5, 32, 16, 64),
 ]
 
 BENCH_CASES = [
-    _case(8, 128, 8, 8, 64, 64),
-    _case(32, 32, 8, 8, 64, 64),
+    _case(8, 16, 256, 32, 8192),
+    _case(32, 4, 256, 64, 8192),
 ]
 CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
@@ -192,8 +135,8 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
-@pytest.mark.fused_recurrent_gdn
-def test_fused_recurrent_gdn(case_idx):
+@pytest.mark.state_passing
+def test_state_passing(case_idx):
     case = CORRECTNESS_CASES[case_idx]
     check = (
         case.pop("check", None)
@@ -207,15 +150,15 @@ def test_fused_recurrent_gdn(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_recurrent_gdn
+        from flaggems_sglang import state_passing
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("fla/fused_recurrent_gdn ops module not found")
+        pytest.skip("mamba/state_passing ops module not found")
         return
 
     try:
-        actual = fused_recurrent_gdn(**kwargs)
+        actual = state_passing(**kwargs)
     except NotImplementedError:
-        pytest.skip("fla/fused_recurrent_gdn not yet implemented")
+        pytest.skip("mamba/state_passing not yet implemented")
         return
 
     # Compare
@@ -225,8 +168,6 @@ def test_fused_recurrent_gdn(case_idx):
         assert_close(actual, expected)
     elif isinstance(expected, (tuple, list)):
         for a, e in zip(actual, expected):
-            if a is None and e is None:
-                continue
             if isinstance(e, torch.Tensor):
                 assert_close(a, e)
     # Restore check for reuse
