@@ -52,12 +52,12 @@ def _fla_ln_gated_kernel(
     for row in range(pid, rows, grid_size):
         offs = tl.arange(0, BLOCK_D)
         mask = offs < dim
-        x = tl.load(x_ptr + row * x_stride_row + offs, mask=mask, other=0.0).to(
-            tl.float32
-        )
-        g = tl.load(g_ptr + row * g_stride_row + offs, mask=mask, other=0.0).to(
-            tl.float32
-        )
+        x = tl.load(
+            x_ptr + row * x_stride_row + offs, mask=mask, other=0.0
+        ).to(tl.float32)
+        g = tl.load(
+            g_ptr + row * g_stride_row + offs, mask=mask, other=0.0
+        ).to(tl.float32)
 
         if IS_RMS:
             var = tl.sum(x * x, axis=0) / dim

@@ -45,8 +45,12 @@ def _fla_ln_gated_enflame(
     row = tl.program_id(0)
     offs = tl.arange(0, BLOCK_D)
     mask = offs < dim
-    x = tl.load(x_ptr + row * x_stride + offs, mask=mask, other=0.0).to(tl.float32)
-    g = tl.load(g_ptr + row * g_stride + offs, mask=mask, other=0.0).to(tl.float32)
+    x = tl.load(x_ptr + row * x_stride + offs, mask=mask, other=0.0).to(
+        tl.float32
+    )
+    g = tl.load(g_ptr + row * g_stride + offs, mask=mask, other=0.0).to(
+        tl.float32
+    )
 
     if IS_RMS:
         var = tl.sum(x * x, axis=0) / dim
