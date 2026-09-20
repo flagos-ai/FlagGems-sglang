@@ -17,7 +17,7 @@ import importlib
 import json
 import os
 import time
-from typing import Any, Generator, List, Optional, Tuple
+from typing import Any, Callable, Generator, List, Optional, Tuple
 
 import pytest
 import torch
@@ -102,6 +102,39 @@ def SkipVersion(module_name, skip_pattern):
         return (major, minor) < (M, N)
     else:
         return (major, minor) > (M, N)
+
+
+def do_bench_latency(
+    fn: Callable[[], Any],
+    warmup: int,
+    rep: int,
+    grad_to_none: Optional[List[Any]] = None,
+) -> float:
+    """Return the median latency of ``fn`` in milliseconds.
+
+    ``triton.testing.do_bench`` is not available on every backend:
+    triton_ascend ships ``triton.backends.ascend.testing.do_bench_npu``
+    instead, and that entry point takes an iteration count rather than
+    warmup/repetition durations. Dispatching here means benchmarks stay
+    vendor neutral.
+
+    ``warmup``/``rep``/``grad_to_none`` follow ``triton.testing.do_bench`` and
+    are ignored on backends whose ``do_bench`` does not accept them.
+    """
+    if vendor_name == "ascend":
+        from triton.backends.ascend.testing import do_bench_npu
+
+        # do_bench_npu requires iterations, rather than duration, so the
+        # warmup/repetition durations above do not apply here.
+        return do_bench_npu(fn)
+
+    return triton.testing.do_bench(
+        fn,
+        warmup=warmup,
+        rep=rep,
+        return_mode="median",
+        grad_to_none=grad_to_none,
+    )
 
 
 class Benchmark:
@@ -364,12 +397,10 @@ class Benchmark:
             end = time.time()
             latency = (end - start) / Config.repetition * 1000
         elif Config.mode == BenchMode.KERNEL:
-            do_bench = triton.testing.do_bench
-            latency = do_bench(
+            latency = do_bench_latency(
                 fn,
                 warmup=Config.warm_up,
                 rep=Config.repetition,
-                return_mode="median",
                 grad_to_none=xs if self.is_backward else None,
             )
         elif Config.mode == BenchMode.WRAPPER:
