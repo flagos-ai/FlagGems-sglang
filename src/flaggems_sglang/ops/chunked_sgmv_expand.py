@@ -61,7 +61,9 @@ def _chunked_sgmv_expand_kernel(
     segment_end = tl.load(seg_indptr_ptr + (batch_id + 1) * seg_indptr_stride)
     segment_length = segment_end - segment_start
     out_start = tl.load(slice_offsets_ptr + slice_id * slice_offsets_stride)
-    out_end = tl.load(slice_offsets_ptr + (slice_id + 1) * slice_offsets_stride)
+    out_end = tl.load(
+        slice_offsets_ptr + (slice_id + 1) * slice_offsets_stride
+    )
     output_size = out_end - out_start
 
     num_output_blocks = tl.cdiv(max_out_dim, BLOCK_N)
@@ -73,7 +75,9 @@ def _chunked_sgmv_expand_kernel(
     if output_block * BLOCK_N >= output_size:
         return
 
-    weight_index = tl.load(weight_indices_ptr + batch_id * weight_indices_stride)
+    weight_index = tl.load(
+        weight_indices_ptr + batch_id * weight_indices_stride
+    )
     if tl.load(lora_ranks_ptr + weight_index * lora_ranks_stride) == 0:
         return
 
@@ -116,7 +120,9 @@ def _chunked_sgmv_expand_kernel(
     )
     mask = token_mask[:, None] & output_mask[None, :]
     base = tl.load(output_ptrs, mask=mask, other=0.0).to(tl.float32)
-    scaling = tl.load(scalings_ptr + weight_index * scalings_stride).to(tl.float32)
+    scaling = tl.load(scalings_ptr + weight_index * scalings_stride).to(
+        tl.float32
+    )
     tl.store(
         output_ptrs,
         (base + accumulator * scaling).to(output_ptr.dtype.element_ty),
@@ -132,7 +138,12 @@ def chunked_sgmv_expand(
     rank = weights.shape[-1]
     if x.shape[1] != n_slices * rank:
         raise ValueError("x width must equal n_slices * rank")
-    if output.numel() == 0 or n_slices <= 0 or batch_info.bs == 0 or x.shape[0] == 0:
+    if (
+        output.numel() == 0
+        or n_slices <= 0
+        or batch_info.bs == 0
+        or x.shape[0] == 0
+    ):
         return output
 
     # The task's batch_info lists no max_len hint; use it when the
