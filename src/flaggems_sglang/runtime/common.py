@@ -26,6 +26,7 @@ class vendors(Enum):
     ASCEND = auto()
     TSINGMICRO = auto()
     SUNRISE = auto()
+    ENFLAME = auto()
     THEAD = auto()
 
     @classmethod

@@ -52,7 +52,12 @@ elif device == "npu":
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
 else:
-    torch_backend_device.matmul.allow_tf32 = False
+    # Attempt to disallow tf32. Backends such as gcu have no
+    # torch.backends.<device> module, leaving torch_backend_device as None.
+    try:
+        torch_backend_device.matmul.allow_tf32 = False
+    except Exception:
+        pass
 
 ELEMENTWISE_PERF_SHAPES = [
     # Launch overhead, non-power-of-two, and 1D throughput coverage.
