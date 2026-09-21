@@ -17,7 +17,11 @@ from backend_utils import VendorDescriptor  # noqa: E402
 vendor_info = VendorDescriptor(
     vendor_name="enflame",
     device_name="gcu",
-    device_query_cmd="efinfo",
+    device_query_cmd="efsmi -L",
+    dispatch_key="PrivateUse1",
+    fp64_enabled=False,
+    int64_enabled=False,
+    tle_enabled=True,
 )
 
 CUSTOMIZED_UNUSED_OPS = ()
