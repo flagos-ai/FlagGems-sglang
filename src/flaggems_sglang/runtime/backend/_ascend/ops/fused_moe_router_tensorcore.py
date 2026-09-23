@@ -388,25 +388,40 @@ def _fused_router_kernel(
     acc = tl.where(valid, acc, NEG_INF)
 
     # ---- Softmax over the full expert axis -------------------------------
+    # Only the softmax numerators are materialised over the tile; the division
+    # is deferred to the selected experts (see below), which keeps one
+    # [BLOCK_M, BLOCK_N] fp32 divide off the wide (BN = 256) tile.
     mx = tl.max(acc, axis=1)  # [BLOCK_M]
     mx = tl.where(row_mask, mx, 0.0)  # guard invalid rows
-    e = tl.exp(acc - mx[:, None])
-    e = tl.where(valid, e, 0.0)
-    sm = tl.sum(e, axis=1)  # [BLOCK_M]
-    sm = tl.where(row_mask, sm, 1.0)
-    probs = e / sm[:, None]  # [BLOCK_M, BLOCK_N] float32
+    numer = tl.exp(acc - mx[:, None])  # [BLOCK_M, BLOCK_N] float32
+    numer = tl.where(valid, numer, 0.0)
+    denom = tl.sum(numer, axis=1)  # [BLOCK_M]
+    denom = tl.where(row_mask, denom, 1.0)
 
     # ---- Top-k (k <= 2) selection + weight gather -----------------------
-    work = acc
-    for pick in range(TOPK):
-        idx = tl.argmax(work, axis=1)  # [BLOCK_M] int64
-        pick_mask = rn[None, :] == idx[:, None]  # [BLOCK_M, BLOCK_N]
-        w_pick = tl.sum(tl.where(pick_mask, probs, 0.0), axis=1)  # [BLOCK_M]
-        tl.store(out_w_ptr + rm * TOPK + pick, w_pick, mask=row_mask)
-        tl.store(
-            out_id_ptr + rm * TOPK + pick, idx.to(tl.int32), mask=row_mask
-        )
-        work = tl.where(pick_mask, NEG_INF, work)
+    # Pick 0 is the row argmax, so ``acc[idx] == mx`` exactly and its softmax
+    # numerator is ``exp(0) == 1``: the weight is just ``1 / denom``, with no
+    # masked-sum gather over the expert axis. Bit-identical to gathering it.
+    idx = tl.argmax(acc, axis=1)  # [BLOCK_M] int64
+    tl.store(out_w_ptr + rm * TOPK, 1.0 / denom, mask=row_mask)
+    tl.store(out_id_ptr + rm * TOPK, idx.to(tl.int32), mask=row_mask)
+
+    if TOPK > 1:
+        # Later picks are not the row max, so their numerator is gathered.
+        work = tl.where(rn[None, :] == idx[:, None], NEG_INF, acc)
+        for pick in range(1, TOPK):
+            idx = tl.argmax(work, axis=1)
+            pick_mask = rn[None, :] == idx[:, None]
+            numer_pick = tl.sum(tl.where(pick_mask, numer, 0.0), axis=1)
+            tl.store(
+                out_w_ptr + rm * TOPK + pick,
+                numer_pick / denom,
+                mask=row_mask,
+            )
+            tl.store(
+                out_id_ptr + rm * TOPK + pick, idx.to(tl.int32), mask=row_mask
+            )
+            work = tl.where(pick_mask, NEG_INF, work)
 
 
 @triton.jit
@@ -515,26 +530,36 @@ def _softmax_topk_kernel(
     valid = row_mask[:, None] & col_mask[None, :]
     acc = tl.where(valid, acc, NEG_INF)
 
-    # Softmax over the full expert axis.
+    # Softmax over the full expert axis; the divide is deferred to the picked
+    # experts so no [BLOCK_M, BLOCK_N] division runs over the whole tile.
     mx = tl.max(acc, axis=1)
     mx = tl.where(row_mask, mx, 0.0)
-    e = tl.exp(acc - mx[:, None])
-    e = tl.where(valid, e, 0.0)
-    sm = tl.sum(e, axis=1)
-    sm = tl.where(row_mask, sm, 1.0)
-    probs = e / sm[:, None]
+    numer = tl.exp(acc - mx[:, None])
+    numer = tl.where(valid, numer, 0.0)
+    denom = tl.sum(numer, axis=1)
+    denom = tl.where(row_mask, denom, 1.0)
 
-    # Top-k (k <= 2): iterative argmax, gather via masked sum.
-    work = acc
-    for pick in range(TOPK):
-        idx = tl.argmax(work, axis=1)
-        pick_mask = rn[None, :] == idx[:, None]
-        w_pick = tl.sum(tl.where(pick_mask, probs, 0.0), axis=1)
-        tl.store(out_w_ptr + rm * TOPK + pick, w_pick, mask=row_mask)
-        tl.store(
-            out_id_ptr + rm * TOPK + pick, idx.to(tl.int32), mask=row_mask
-        )
-        work = tl.where(pick_mask, NEG_INF, work)
+    # Top-k (k <= 2): iterative argmax. Pick 0 is the row max, so its numerator
+    # is exp(0) == 1 and the weight is 1 / denom with no gather.
+    idx = tl.argmax(acc, axis=1)
+    tl.store(out_w_ptr + rm * TOPK, 1.0 / denom, mask=row_mask)
+    tl.store(out_id_ptr + rm * TOPK, idx.to(tl.int32), mask=row_mask)
+
+    if TOPK > 1:
+        work = tl.where(rn[None, :] == idx[:, None], NEG_INF, acc)
+        for pick in range(1, TOPK):
+            idx = tl.argmax(work, axis=1)
+            pick_mask = rn[None, :] == idx[:, None]
+            numer_pick = tl.sum(tl.where(pick_mask, numer, 0.0), axis=1)
+            tl.store(
+                out_w_ptr + rm * TOPK + pick,
+                numer_pick / denom,
+                mask=row_mask,
+            )
+            tl.store(
+                out_id_ptr + rm * TOPK + pick, idx.to(tl.int32), mask=row_mask
+            )
+            work = tl.where(pick_mask, NEG_INF, work)
 
 
 def fused_moe_router_tensorcore(
