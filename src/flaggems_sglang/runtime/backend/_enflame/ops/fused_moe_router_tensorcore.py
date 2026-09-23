@@ -37,6 +37,11 @@ tile:
    * **fp32 inputs (the fp32 correctness case)** — operands are upcast and
      ``tl.dot(input_precision="ieee")`` runs the IEEE fp32 matmul the
      reference uses, meeting the float32 tolerance (atol/rtol 1e-4).
+
+   Both paths use the 3-operand ``tl.dot(a, b, acc)`` form so the running
+   accumulator is fed into the MMA and the backend folds the accumulate into
+   the tensor-core instruction, rather than emitting a separate full-tile
+   fp32 add per K-iteration. Identical arithmetic to ``acc += tl.dot(...)``.
 2. ``_post_kernel`` — per-row softmax over all E experts + top-2 selection
    + weight gather, all in registers over the loaded ``[ROW_TILE, BLOCK_E]``
    logits tile. The top-2 selection uses ``tl.max(..., return_indices=True)``,
@@ -195,12 +200,20 @@ def _gemm_logits_kernel(
                 w_ptrs, mask=k_mask[:, None] & e_mask[None, :], other=0.0
             )
 
+        # The 3-operand ``tl.dot(a, b, acc)`` form feeds the running
+        # accumulator straight into the MMA, so the backend folds the
+        # accumulate into the tensor-core instruction instead of emitting a
+        # separate full-tile fp32 add per K-iteration. Same arithmetic as
+        # ``acc += tl.dot(...)``, one fewer [ROW_TILE, BLOCK_E] op per
+        # iteration — which matters most on the wide-tile buckets
+        # (``ROW_TILE = 1024`` at m=4096) where that add is register-bound.
         if X_F32 or W_F32:
             # fp32 inputs: run the IEEE fp32 matmul the reference uses, so the
             # float32 tolerance (atol/rtol 1e-4) is met bit-for-bit.
-            acc += tl.dot(
+            acc = tl.dot(
                 x_block.to(tl.float32),
                 w_block.to(tl.float32),
+                acc,
                 input_precision="ieee",
             )
         else:
@@ -212,7 +225,7 @@ def _gemm_logits_kernel(
             # bf16 tolerance (1.5e-2). This is the tensor-core path the
             # "tensorcore variant" is built around; the fp32-IEEE path above
             # is only for the fp32 correctness cases.
-            acc += tl.dot(x_block, w_block, out_dtype=tl.float32)
+            acc = tl.dot(x_block, w_block, acc, out_dtype=tl.float32)
 
     # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
     if SOFTCAP:
@@ -305,14 +318,16 @@ def _gemm_etile_kernel(
                 w_ptrs, mask=k_mask[:, None] & e_mask[None, :], other=0.0
             )
 
+        # 3-operand dot: accumulate inside the MMA (see _gemm_logits_kernel).
         if X_F32 or W_F32:
-            acc += tl.dot(
+            acc = tl.dot(
                 x_block.to(tl.float32),
                 w_block.to(tl.float32),
+                acc,
                 input_precision="ieee",
             )
         else:
-            acc += tl.dot(x_block, w_block, out_dtype=tl.float32)
+            acc = tl.dot(x_block, w_block, acc, out_dtype=tl.float32)
 
     # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
     if SOFTCAP:
