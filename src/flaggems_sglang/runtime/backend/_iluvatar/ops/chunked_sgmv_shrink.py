@@ -1528,29 +1528,3 @@ def sgemm_lora_a_split8(x, weights, batch_info, stack_num=1):
     if x.shape[1] >= 1024:
         return split8_m64n32k64(x, weights, batch_info, stack_num)
     return split1_m64n32k64(x, weights, batch_info, stack_num)
-
-
-class _EvalBatchInfo:
-    pass
-
-
-def run(
-    x,
-    weights,
-    seg_indptr,
-    weight_indices,
-    permutation,
-    bs,
-    max_len,
-    expected_tokens,
-    num_slices=1,
-):
-    """Local evaluator adapter; the submission entrypoint remains chunked_sgmv_shrink."""
-    info = _EvalBatchInfo()
-    info.seg_indptr = seg_indptr
-    info.weight_indices = weight_indices
-    info.permutation = permutation
-    info.bs = int(bs)
-    info.max_len = int(max_len)
-    info.expected_tokens = int(expected_tokens)
-    return chunked_sgmv_shrink(x, weights, info, num_slices)
