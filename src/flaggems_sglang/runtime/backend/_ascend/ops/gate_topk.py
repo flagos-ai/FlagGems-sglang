@@ -16,18 +16,32 @@ import torch
 import triton
 import triton.language as tl
 
+__all__ = ["gate_topk"]
+
 # 昇腾专用。主机侧按探针 13233 的拆解压缩（昇腾上每次新分配 ≈ 25–30 µs、JIT 调度 ≈ 25–30 µs 都计入计时）：
 #   - 两个输出合成一次分配（同一块内存切两个视图返回；两个输出元素都是 4 字节）
 #   - 第一次走 JIT 编译，之后同一特化直接用编译好的句柄发射（只复用编译产物，不缓存任何结果，每次都在 kernel 里完整重算）
 #   - 整型形状参数 do_not_specialize；主机侧只用内置整数运算，不调 data_ptr
 
-_OLD_LAUNCH = tuple(int(v) for v in triton.__version__.split(".")[:2]) < (3, 3)   # <3.3 直接发射不带 constexpr
+_OLD_LAUNCH = tuple(int(v) for v in triton.__version__.split(".")[:2]) < (
+    3,
+    3,
+)  # <3.3 直接发射不带 constexpr
 
 
 @triton.jit(do_not_specialize=["M", "N", "stride_xm"])
-def _gate_topk_kernel(x_ptr, val_ptr, idx_ptr, M, N, stride_xm,
-                      K: tl.constexpr, KP: tl.constexpr,
-                      BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
+def _gate_topk_kernel(
+    x_ptr,
+    val_ptr,
+    idx_ptr,
+    M,
+    N,
+    stride_xm,
+    K: tl.constexpr,
+    KP: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
     # 每个 program 处理 BLOCK_M 行；k 次「取最大 + 掩掉」，平手取最小列下标，
     # 精确复现 torch.topk(sorted=True) + 「tie-break 取较小列下标」。
     pid = tl.program_id(0)
@@ -40,8 +54,11 @@ def _gate_topk_kernel(x_ptr, val_ptr, idx_ptr, M, N, stride_xm,
         rows = blk * BLOCK_M + rows0
         rmask = rows < M
         live = rmask[:, None] & (cols[None, :] < N)
-        x = tl.load(x_ptr + rows[:, None].to(tl.int64) * stride_xm + cols[None, :],
-                    mask=live, other=0.0).to(tl.float32)
+        x = tl.load(
+            x_ptr + rows[:, None].to(tl.int64) * stride_xm + cols[None, :],
+            mask=live,
+            other=0.0,
+        ).to(tl.float32)
         out_v = tl.zeros((BLOCK_M, KP), dtype=tl.float32)
         out_i = tl.zeros((BLOCK_M, KP), dtype=tl.int32)
         for i in tl.static_range(K):
@@ -81,6 +98,8 @@ def gate_topk(x, k):
         else:
             cached[1][grid](*args, k, kp, bm, bn)
     else:
-        handle = _gate_topk_kernel[grid](*args, K=k, KP=kp, BLOCK_M=bm, BLOCK_N=bn)
+        handle = _gate_topk_kernel[grid](
+            *args, K=k, KP=kp, BLOCK_M=bm, BLOCK_N=bn
+        )
         _gate_topk_kernel._s2_handle = (key, handle)
     return values, indices

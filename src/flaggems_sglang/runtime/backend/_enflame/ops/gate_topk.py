@@ -16,6 +16,8 @@ import torch
 import triton
 import triton.language as tl
 
+__all__ = ["gate_topk"]
+
 # 燧原专用。v1 在燧原上只挂了 case 2（M=512 N=64 k=1 fp32）：编译期 make_gcuir 的 PassManager 失败。
 # 这个用例独有的是 k=1（输出块只有 KP=2 列）和 N=64（行块 64 列）。所以这里：
 #   - k=1 走一维路径（就是 argmax，平手取最小下标），不构造 [BLOCK_M, KP] 输出块
@@ -23,9 +25,18 @@ import triton.language as tl
 
 
 @triton.jit
-def _gate_topk_kernel(x_ptr, val_ptr, idx_ptr, M, N, stride_xm,
-                      K: tl.constexpr, KP: tl.constexpr,
-                      BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr):
+def _gate_topk_kernel(
+    x_ptr,
+    val_ptr,
+    idx_ptr,
+    M,
+    N,
+    stride_xm,
+    K: tl.constexpr,
+    KP: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
     pid = tl.program_id(0)
     nprog = tl.num_programs(0)
     rows0 = tl.arange(0, BLOCK_M)
@@ -35,12 +46,20 @@ def _gate_topk_kernel(x_ptr, val_ptr, idx_ptr, M, N, stride_xm,
         rows = blk * BLOCK_M + rows0
         rmask = rows < M
         live = rmask[:, None] & (cols[None, :] < N)
-        x = tl.load(x_ptr + rows[:, None].to(tl.int64) * stride_xm + cols[None, :],
-                    mask=live, other=0.0).to(tl.float32)
+        x = tl.load(
+            x_ptr + rows[:, None].to(tl.int64) * stride_xm + cols[None, :],
+            mask=live,
+            other=0.0,
+        ).to(tl.float32)
         if K == 1:
             cur = tl.max(tl.where(live, x, float("-inf")), axis=1)
-            sel = tl.min(tl.where(live & (x == cur[:, None]), cols[None, :], BLOCK_N), axis=1)
-            tl.store(val_ptr + rows, cur.to(val_ptr.dtype.element_ty), mask=rmask)
+            sel = tl.min(
+                tl.where(live & (x == cur[:, None]), cols[None, :], BLOCK_N),
+                axis=1,
+            )
+            tl.store(
+                val_ptr + rows, cur.to(val_ptr.dtype.element_ty), mask=rmask
+            )
             tl.store(idx_ptr + rows, sel, mask=rmask)
         else:
             kc = tl.arange(0, KP)
@@ -48,14 +67,18 @@ def _gate_topk_kernel(x_ptr, val_ptr, idx_ptr, M, N, stride_xm,
             out_i = tl.zeros((BLOCK_M, KP), dtype=tl.int32)
             for i in tl.static_range(K):
                 cur = tl.max(tl.where(live, x, float("-inf")), axis=1)
-                cand = tl.where(live & (x == cur[:, None]), cols[None, :], BLOCK_N)
+                cand = tl.where(
+                    live & (x == cur[:, None]), cols[None, :], BLOCK_N
+                )
                 sel = tl.min(cand, axis=1)
                 live = live & (cols[None, :] != sel[:, None])
                 out_v = tl.where(kc[None, :] == i, cur[:, None], out_v)
                 out_i = tl.where(kc[None, :] == i, sel[:, None], out_i)
             omask = rmask[:, None] & (kc[None, :] < K)
             off = rows[:, None].to(tl.int64) * K + kc[None, :]
-            tl.store(val_ptr + off, out_v.to(val_ptr.dtype.element_ty), mask=omask)
+            tl.store(
+                val_ptr + off, out_v.to(val_ptr.dtype.element_ty), mask=omask
+            )
             tl.store(idx_ptr + off, out_i, mask=omask)
 
 
@@ -67,6 +90,16 @@ def gate_topk(x, k):
     KP = max(16, triton.next_power_of_2(k))
     BLOCK_M = max(1, min(32, 4096 // BLOCK_N))
     grid = (max(1, min(triton.cdiv(M, BLOCK_M), 32768)),)
-    _gate_topk_kernel[grid](x, values, indices, M, N, x.stride(0),
-                            K=k, KP=KP, BLOCK_M=BLOCK_M, BLOCK_N=BLOCK_N)
+    _gate_topk_kernel[grid](
+        x,
+        values,
+        indices,
+        M,
+        N,
+        x.stride(0),
+        K=k,
+        KP=KP,
+        BLOCK_M=BLOCK_M,
+        BLOCK_N=BLOCK_N,
+    )
     return values, indices
