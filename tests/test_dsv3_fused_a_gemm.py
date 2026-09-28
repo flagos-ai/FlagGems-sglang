@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("dsv3_fused_a_gemm")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -77,17 +74,17 @@ def _case(num_tokens, hd_in=7168, hd_out=2112, seed=0):
     return dict(mat_a=a, mat_b=w.t(), check=assert_close)
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(4, seed=1),
-    _case(8, hd_in=4096, hd_out=1536, seed=2),
-    _case(16, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(4, seed=1),
+    lambda: _case(8, hd_in=4096, hd_out=1536, seed=2),
+    lambda: _case(16, seed=3),
 ]
+_CASE_FACTORIES += [(lambda m=m: _case(m, seed=9)) for m in (1, 2, 4, 8, 16)]
 
-BENCH_CASES = [_case(m, seed=9) for m in (1, 2, 4, 8, 16)]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -98,7 +95,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.dsv3_fused_a_gemm
 def test_dsv3_fused_a_gemm(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("dsv3_fused_a_gemm")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

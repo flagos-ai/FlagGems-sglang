@@ -21,9 +21,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("compute_src2dst")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
 # ---------------------------------------------------------------------------
@@ -70,16 +67,17 @@ def _case(num_toks, seed=0):
     return dict(reorder_ids=reorder_ids, num_toks=num_toks, check=assert_close)
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(511, seed=1),
-    _case(8192, seed=2),
-    _case(131072, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(511, seed=1),
+    lambda: _case(8192, seed=2),
+    lambda: _case(131072, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda n=n: _case(n, seed=9)) for n in (8, 512, 8192, 131072, 1048576)
 ]
 
-BENCH_CASES = [_case(n, seed=9) for n in (8, 512, 8192, 131072, 1048576)]
-
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +88,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.compute_src2dst
 def test_compute_src2dst(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("compute_src2dst")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

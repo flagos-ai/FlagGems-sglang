@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("residual_gate_add")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -81,20 +78,20 @@ def _case(rows, hidden, broadcast=False, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 1024),
-    _case(37, 2048, broadcast=True, seed=1),
-    _case(1024, 3072, seed=2),
-    _case(4096, 1536, broadcast=True, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1, 1024),
+    lambda: _case(37, 2048, broadcast=True, seed=1),
+    lambda: _case(1024, 3072, seed=2),
+    lambda: _case(4096, 1536, broadcast=True, seed=3),
 ]
-
-BENCH_CASES = [
-    _case(rows, 3072, broadcast=b, seed=9)
+_CASE_FACTORIES += [
+    (lambda rows=rows, b=b: _case(rows, 3072, broadcast=b, seed=9))
     for rows in (1, 64, 1024, 16384)
     for b in (False, True)
 ]
 
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
+
 
 # ---------------------------------------------------------------------------
 # Test
@@ -104,7 +101,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.residual_gate_add
 def test_residual_gate_add(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("residual_gate_add")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

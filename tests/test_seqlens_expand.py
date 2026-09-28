@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("seqlens_expand")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -84,17 +81,19 @@ def _case(n, max_q=8, seed=0, include_short_kv=True):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(9, seed=1),
-    _case(64, seed=2),
-    _case(257, max_q=16, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(9, seed=1),
+    lambda: _case(64, seed=2),
+    lambda: _case(257, max_q=16, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda n=n: _case(n, max_q=16, seed=7)) for n in (1, 8, 64, 512, 4096)
 ]
 
-BENCH_CASES = [_case(n, max_q=16, seed=7) for n in (1, 8, 64, 512, 4096)]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +104,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.seqlens_expand
 def test_seqlens_expand(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("seqlens_expand")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

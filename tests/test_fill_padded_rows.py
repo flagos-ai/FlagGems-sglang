@@ -21,9 +21,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("fill_padded_rows")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
 # ---------------------------------------------------------------------------
@@ -81,18 +78,18 @@ def _case(rows, cols, valid, dtype=torch.int32, fill_value=-1, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 8, 1),
-    _case(64, 8, 30, seed=1),
-    _case(512, 4, 0, seed=2),
-    _case(256, 8, 256, dtype=torch.float32, fill_value=0.0, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1, 8, 1),
+    lambda: _case(64, 8, 30, seed=1),
+    lambda: _case(512, 4, 0, seed=2),
+    lambda: _case(256, 8, 256, dtype=torch.float32, fill_value=0.0, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda rows=rows: _case(rows, 8, rows // 2, seed=9))
+    for rows in (8, 64, 512, 4096, 16384)
 ]
 
-BENCH_CASES = [
-    _case(rows, 8, rows // 2, seed=9) for rows in (8, 64, 512, 4096, 16384)
-]
-
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +100,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.fill_padded_rows
 def test_fill_padded_rows(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("fill_padded_rows")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

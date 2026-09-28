@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("create_flashinfer_kv_indices")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -116,16 +113,18 @@ def _case(
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(16, seed=1),
-    _case(64, max_len=512, seed=2),
-    _case(32, max_len=1024, with_start=True, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(16, seed=1),
+    lambda: _case(64, max_len=512, seed=2),
+    lambda: _case(32, max_len=1024, with_start=True, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda bs=bs: _case(bs, max_len=4096, seed=7)) for bs in (1, 8, 32, 128)
 ]
 
-BENCH_CASES = [_case(bs, max_len=4096, seed=7) for bs in (1, 8, 32, 128)]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 # ---------------------------------------------------------------------------
 # Test
@@ -135,7 +134,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.create_flashinfer_kv_indices
 def test_create_flashinfer_kv_indices(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("create_flashinfer_kv_indices")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

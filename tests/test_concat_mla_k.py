@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("concat_mla_k")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -81,17 +78,17 @@ def _case(num_tokens, num_heads=128, nope_dim=128, rope_dim=64, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(17, seed=3),
-    _case(256, seed=6),
-    _case(1024, seed=9),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(17, seed=3),
+    lambda: _case(256, seed=6),
+    lambda: _case(1024, seed=9),
 ]
+_CASE_FACTORIES += [(lambda t=t: _case(t)) for t in (1, 8, 64, 512, 4096)]
 
-BENCH_CASES = [_case(t) for t in (1, 8, 64, 512, 4096)]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +99,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.concat_mla_k
 def test_concat_mla_k(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("concat_mla_k")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

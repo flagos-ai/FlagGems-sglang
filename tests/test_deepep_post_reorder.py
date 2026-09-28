@@ -21,9 +21,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("deepep_post_reorder")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
 # ---------------------------------------------------------------------------
@@ -115,16 +112,17 @@ def _case(num_tokens, topk=8, hidden=4096, scaling=1.0, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(17, topk=4, seed=1),
-    _case(256, hidden=2048, scaling=2.5, seed=2),
-    _case(512, topk=2, hidden=7168, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(17, topk=4, seed=1),
+    lambda: _case(256, hidden=2048, scaling=2.5, seed=2),
+    lambda: _case(512, topk=2, hidden=7168, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda t=t: _case(t, hidden=7168, seed=9)) for t in (1, 8, 64, 512, 2048)
 ]
 
-BENCH_CASES = [_case(t, hidden=7168, seed=9) for t in (1, 8, 64, 512, 2048)]
-
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +133,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.deepep_post_reorder
 def test_deepep_post_reorder(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("deepep_post_reorder")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case
