@@ -21,9 +21,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("fused_moe_dispatch_index")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
 # ---------------------------------------------------------------------------
@@ -88,16 +85,17 @@ def _case(num_tokens, topk, num_local_experts, m_max, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 8, 32, 128),
-    _case(37, 4, 8, 256, seed=1),
-    _case(128, 8, 32, 1024, seed=2),
-    _case(512, 2, 16, 2048, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1, 8, 32, 128),
+    lambda: _case(37, 4, 8, 256, seed=1),
+    lambda: _case(128, 8, 32, 1024, seed=2),
+    lambda: _case(512, 2, 16, 2048, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda t=t: _case(t, 8, 32, 8192, seed=9)) for t in (1, 8, 64, 512, 4096)
 ]
 
-BENCH_CASES = [_case(t, 8, 32, 8192, seed=9) for t in (1, 8, 64, 512, 4096)]
-
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +106,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.fused_moe_dispatch_index
 def test_fused_moe_dispatch_index(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("fused_moe_dispatch_index")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

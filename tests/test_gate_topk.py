@@ -21,9 +21,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("gate_topk")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
 # ---------------------------------------------------------------------------
@@ -78,18 +75,19 @@ def _case(m, n, k, seed=0):
     return dict(x=x.contiguous(), k=k, check=_check)
 
 
-CORRECTNESS_CASES = [
-    _case(1, 256, 8),
-    _case(37, 128, 4, seed=1),
-    _case(512, 64, 1, seed=2),
-    _case(128, 384, 32, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1, 256, 8),
+    lambda: _case(37, 128, 4, seed=1),
+    lambda: _case(512, 64, 1, seed=2),
+    lambda: _case(128, 384, 32, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda m=m, k=k: _case(m, 256, k, seed=9))
+    for m in (1, 8, 64, 512, 4096)
+    for k in (4, 8)
 ]
 
-BENCH_CASES = [
-    _case(m, 256, k, seed=9) for m in (1, 8, 64, 512, 4096) for k in (4, 8)
-]
-
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +98,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.gate_topk
 def test_gate_topk(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("gate_topk")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

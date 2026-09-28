@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("gelu_tanh_and_mul")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -76,19 +73,21 @@ def _case(bs, d, seed=0):
     return dict(input=_x(bs, d, seed=seed), check=assert_close)
 
 
-CORRECTNESS_CASES = [
-    _case(1, 1024),
-    _case(83, 2048, seed=2),
-    _case(48, 3072, seed=4),
-    _case(512, 4096, seed=6),
+_CASE_FACTORIES = [
+    lambda: _case(1, 1024),
+    lambda: _case(83, 2048, seed=2),
+    lambda: _case(48, 3072, seed=4),
+    lambda: _case(512, 4096, seed=6),
+]
+_CASE_FACTORIES += [
+    (lambda bs=bs, d=d: _case(bs, d))
+    for bs in (1, 8, 64, 512, 4096)
+    for d in (1024, 4096, 8192)
 ]
 
-BENCH_CASES = [
-    _case(bs, d) for bs in (1, 8, 64, 512, 4096) for d in (1024, 4096, 8192)
-]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +98,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.gelu_tanh_and_mul
 def test_gelu_tanh_and_mul(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("gelu_tanh_and_mul")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

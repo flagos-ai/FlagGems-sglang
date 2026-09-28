@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("group_norm_silu")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -81,20 +78,20 @@ def _case(n, c, spatial, num_groups=32, eps=1e-5, seed=0):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 128, 16),
-    _case(2, 256, 32, seed=1),
-    _case(1, 512, 64, seed=2),
-    _case(4, 64, 8, num_groups=8, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1, 128, 16),
+    lambda: _case(2, 256, 32, seed=1),
+    lambda: _case(1, 512, 64, seed=2),
+    lambda: _case(4, 64, 8, num_groups=8, seed=3),
 ]
-
-BENCH_CASES = [
-    _case(n, c, s, seed=9)
+_CASE_FACTORIES += [
+    (lambda n=n, c=c, s=s: _case(n, c, s, seed=9))
     for n in (1, 2)
     for c, s in ((128, 64), (256, 32), (512, 16))
 ]
 
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
+
 
 # ---------------------------------------------------------------------------
 # Test
@@ -104,7 +101,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.group_norm_silu
 def test_group_norm_silu(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("group_norm_silu")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

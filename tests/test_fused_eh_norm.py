@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("fused_eh_norm")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -83,21 +80,21 @@ def _case(num_tokens, hidden, seed=0, eps=1e-6):
     )
 
 
-CORRECTNESS_CASES = [
-    _case(1, 512),
-    _case(17, 2048, seed=4),
-    _case(256, 4096, seed=8),
-    _case(64, 7168, seed=12),
+_CASE_FACTORIES = [
+    lambda: _case(1, 512),
+    lambda: _case(17, 2048, seed=4),
+    lambda: _case(256, 4096, seed=8),
+    lambda: _case(64, 7168, seed=12),
 ]
-
-BENCH_CASES = [
-    _case(bs, hidden)
+_CASE_FACTORIES += [
+    (lambda bs=bs, hidden=hidden: _case(bs, hidden))
     for bs in (1, 8, 64, 512, 4096)
     for hidden in (2048, 4096, 7168)
 ]
 
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
+
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +105,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.fused_eh_norm
 def test_fused_eh_norm(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("fused_eh_norm")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case

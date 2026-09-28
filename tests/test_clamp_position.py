@@ -22,9 +22,6 @@ from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
 
-reference = get_reference("clamp_position")
-
-
 # ---------------------------------------------------------------------------
 # Tolerance helper
 # ---------------------------------------------------------------------------
@@ -76,17 +73,19 @@ def _case(bs, dtype=torch.int32, seed=0):
     return dict(seq_lens=_seq_lens(bs, dtype, seed), check=assert_close)
 
 
-CORRECTNESS_CASES = [
-    _case(1),
-    _case(37, seed=1),
-    _case(512, seed=2),
-    _case(256, dtype=torch.int64, seed=3),
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(37, seed=1),
+    lambda: _case(512, seed=2),
+    lambda: _case(256, dtype=torch.int64, seed=3),
+]
+_CASE_FACTORIES += [
+    (lambda bs=bs: _case(bs)) for bs in (1, 8, 64, 512, 4096, 16384)
 ]
 
-BENCH_CASES = [_case(bs) for bs in (1, 8, 64, 512, 4096, 16384)]
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
 # 关键约定：bench cases 合并进 accuracy cases
-CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +96,10 @@ CORRECTNESS_CASES = CORRECTNESS_CASES + BENCH_CASES
 @pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
 @pytest.mark.clamp_position
 def test_clamp_position(case_idx):
-    case = CORRECTNESS_CASES[case_idx]
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("clamp_position")
     check = (
         case.pop("check", None)
         if isinstance(case, dict) and "check" in case
