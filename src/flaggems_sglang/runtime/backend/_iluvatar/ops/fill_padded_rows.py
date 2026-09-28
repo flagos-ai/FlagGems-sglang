@@ -14,10 +14,20 @@
 
 import triton
 import triton.language as tl
+
+__all__ = ["fill_padded_rows"]
+
+
 @triton.jit
 def _fill_padded_rows_kernel(
-    X, N, R: tl.constexpr, H: tl.constexpr, S: tl.constexpr,
-    F: tl.constexpr, B: tl.constexpr, NEG_ZERO: tl.constexpr,
+    X,
+    N,
+    R: tl.constexpr,
+    H: tl.constexpr,
+    S: tl.constexpr,
+    F: tl.constexpr,
+    B: tl.constexpr,
+    NEG_ZERO: tl.constexpr,
 ):
     n = tl.load(N)
     n = tl.where(n < 0, tl.maximum(n + R, 0), tl.minimum(n, R))
@@ -26,7 +36,11 @@ def _fill_padded_rows_kernel(
     else:
         value = tl.full((), F, X.dtype.element_ty)
     if NEG_ZERO:
-        value = tl.full((), -2147483648, tl.int32).to(tl.float32, bitcast=True).to(X.dtype.element_ty)
+        value = (
+            tl.full((), -2147483648, tl.int32)
+            .to(tl.float32, bitcast=True)
+            .to(X.dtype.element_ty)
+        )
     p = tl.program_id(0)
     v = tl.arange(0, B)
     if S == H:
@@ -34,8 +48,9 @@ def _fill_padded_rows_kernel(
         boundary = n * H
         if start + B > boundary:
             offsets = start + v
-            tl.store(X + offsets, value,
-                     (offsets >= boundary) & (offsets < R * H))
+            tl.store(
+                X + offsets, value, (offsets >= boundary) & (offsets < R * H)
+            )
     else:
         parts: tl.constexpr = (H + B - 1) // B if H > 0 else 1
         row = p // parts
@@ -43,6 +58,8 @@ def _fill_padded_rows_kernel(
         if (row >= n) & (row < R):
             cols = start + v
             tl.store(X + row * S + cols, value, cols < H)
+
+
 def fill_padded_rows(x, num_token_non_padded, fill_value):
     rows, cols = x.shape
     stride = x.stride(0)
@@ -52,7 +69,13 @@ def fill_padded_rows(x, num_token_non_padded, fill_value):
     else:
         programs = rows * max(1, triton.cdiv(cols, block))
     _fill_padded_rows_kernel[(max(1, programs),)](
-        x, num_token_non_padded, rows, cols, stride, fill_value, block,
+        x,
+        num_token_non_padded,
+        rows,
+        cols,
+        stride,
+        fill_value,
+        block,
         repr(fill_value) == "-0.0",
         num_warps=2,
     )

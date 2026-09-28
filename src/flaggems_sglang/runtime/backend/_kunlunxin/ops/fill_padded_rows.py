@@ -14,10 +14,21 @@
 
 import triton
 import triton.language as tl
+
+__all__ = ["fill_padded_rows"]
+
+
 @triton.jit
 def _fill_padded_rows_kernel(
-    X, N, R: tl.constexpr, H: tl.constexpr, S: tl.constexpr,
-    F: tl.constexpr, B: tl.constexpr, NEG_ZERO: tl.constexpr, FLAT: tl.constexpr,
+    X,
+    N,
+    R: tl.constexpr,
+    H: tl.constexpr,
+    S: tl.constexpr,
+    F: tl.constexpr,
+    B: tl.constexpr,
+    NEG_ZERO: tl.constexpr,
+    FLAT: tl.constexpr,
 ):
     if N.dtype.element_ty == tl.int64:
         words = N.to(tl.pointer_type(tl.uint32))
@@ -25,10 +36,10 @@ def _fill_padded_rows_kernel(
         high = tl.load(words + 1).to(tl.int32)
         positive = tl.minimum(low, R).to(tl.int32)
         neg_low = low.to(tl.int32)
-        negative = tl.where((high == -1) & (neg_low < 0),
-                            tl.maximum(neg_low + R, 0), 0)
-        n = tl.where(high < 0, negative,
-                     tl.where(high == 0, positive, R))
+        negative = tl.where(
+            (high == -1) & (neg_low < 0), tl.maximum(neg_low + R, 0), 0
+        )
+        n = tl.where(high < 0, negative, tl.where(high == 0, positive, R))
     else:
         n = tl.load(N).to(tl.int32)
         n = tl.where(n < 0, tl.maximum(n + R, 0), tl.minimum(n, R))
@@ -37,7 +48,11 @@ def _fill_padded_rows_kernel(
     else:
         value = tl.full((), F, X.dtype.element_ty)
     if NEG_ZERO:
-        value = tl.full((), -2147483648, tl.int32).to(tl.float32, bitcast=True).to(X.dtype.element_ty)
+        value = (
+            tl.full((), -2147483648, tl.int32)
+            .to(tl.float32, bitcast=True)
+            .to(X.dtype.element_ty)
+        )
     v = tl.arange(0, B)
     if FLAT:
         start = n * H
@@ -49,7 +64,10 @@ def _fill_padded_rows_kernel(
         base = X + start + full
         for bit in tl.static_range(0, 12):
             if rem & (1 << bit):
-                tl.store(base + (rem - rem % (2 << bit)) + tl.arange(0, 1 << bit), value)
+                tl.store(
+                    base + (rem - rem % (2 << bit)) + tl.arange(0, 1 << bit),
+                    value,
+                )
     else:
         for row in range(n, R):
             base = X + row * S
@@ -57,12 +75,25 @@ def _fill_padded_rows_kernel(
                 tl.store(base + off + v, value)
             for bit in tl.static_range(0, 12):
                 if H % B & (1 << bit):
-                    tl.store(base + (H - H % (2 << bit)) + tl.arange(0, 1 << bit), value)
+                    tl.store(
+                        base + (H - H % (2 << bit)) + tl.arange(0, 1 << bit),
+                        value,
+                    )
+
+
 def fill_padded_rows(x, num_token_non_padded, fill_value):
     rows, cols = x.shape
     _fill_padded_rows_kernel[(1,)](
-        x, num_token_non_padded, rows, cols, x.stride(0), fill_value, 4096,
-        repr(fill_value) == "-0.0", x.stride(0) == cols,
-        num_warps=4, num_stages=1,
+        x,
+        num_token_non_padded,
+        rows,
+        cols,
+        x.stride(0),
+        fill_value,
+        4096,
+        repr(fill_value) == "-0.0",
+        x.stride(0) == cols,
+        num_warps=4,
+        num_stages=1,
     )
     return x
