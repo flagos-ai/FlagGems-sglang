@@ -74,7 +74,9 @@ def _concat_mla_k_kernel(
             + heads[:, None] * out_s1
             + nope_cols[None, :] * out_s2
         )
-        tl.store(out_nope_ptrs, nope, mask=head_mask[:, None] & nope_mask[None, :])
+        tl.store(
+            out_nope_ptrs, nope, mask=head_mask[:, None] & nope_mask[None, :]
+        )
 
         rope_ptrs = rope_ptr + token * rope_s0 + rope_cols[None, :] * rope_s2
         rope = tl.load(rope_ptrs, mask=rope_mask[None, :])
@@ -85,7 +87,9 @@ def _concat_mla_k_kernel(
             + heads[:, None] * out_s1
             + (nope_dim + rope_cols)[None, :] * out_s2
         )
-        tl.store(out_rope_ptrs, rope, mask=head_mask[:, None] & rope_mask[None, :])
+        tl.store(
+            out_rope_ptrs, rope, mask=head_mask[:, None] & rope_mask[None, :]
+        )
 
 
 def concat_mla_k(k, k_nope, k_rope):
@@ -133,5 +137,6 @@ def concat_mla_k(k, k_nope, k_rope):
 def reference(k, k_nope, k_rope):
     """Compatibility entry point with the benchmark reference signature."""
     return concat_mla_k(k, k_nope, k_rope)
+
 
 __all__ = ["concat_mla_k"]

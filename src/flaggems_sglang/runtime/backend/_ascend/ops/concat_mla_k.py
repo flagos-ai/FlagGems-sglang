@@ -58,37 +58,60 @@ def _concat_mla_k_kernel_ascend(
             head_start = (tile % HEAD_TILES) * BLOCK_H
             # Explicit rectangular views include the token boundary for tail steps.
             src_nope = tl.make_block_ptr(
-                base=nope_ptr, shape=(tokens, H, N), strides=(NS0, NS1, NS2),
-                offsets=(token, head_start, 0), block_shape=(1, BLOCK_H, BLOCK_N),
+                base=nope_ptr,
+                shape=(tokens, H, N),
+                strides=(NS0, NS1, NS2),
+                offsets=(token, head_start, 0),
+                block_shape=(1, BLOCK_H, BLOCK_N),
                 order=(2, 1, 0),
             )
             dst_nope = tl.make_block_ptr(
-                base=out_ptr, shape=(tokens, H, N), strides=(H * (N + R), N + R, 1),
-                offsets=(token, head_start, 0), block_shape=(1, BLOCK_H, BLOCK_N),
+                base=out_ptr,
+                shape=(tokens, H, N),
+                strides=(H * (N + R), N + R, 1),
+                offsets=(token, head_start, 0),
+                block_shape=(1, BLOCK_H, BLOCK_N),
                 order=(2, 1, 0),
             )
-            nope = tl.load(src_nope, boundary_check=(0, 1, 2), padding_option="zero")
+            nope = tl.load(
+                src_nope, boundary_check=(0, 1, 2), padding_option="zero"
+            )
             tl.store(dst_nope, nope, boundary_check=(0, 1, 2))
             src_rope = tl.make_block_ptr(
-                base=rope_ptr, shape=(tokens, 1, R), strides=(RS0, R, RS2),
-                offsets=(token, 0, 0), block_shape=(1, 1, BLOCK_R), order=(2, 1, 0),
-            )
-            dst_rope = tl.make_block_ptr(
-                base=out_ptr + N, shape=(tokens, H, R), strides=(H * (N + R), N + R, 1),
-                offsets=(token, head_start, 0), block_shape=(1, BLOCK_H, BLOCK_R),
+                base=rope_ptr,
+                shape=(tokens, 1, R),
+                strides=(RS0, R, RS2),
+                offsets=(token, 0, 0),
+                block_shape=(1, 1, BLOCK_R),
                 order=(2, 1, 0),
             )
-            rope = tl.load(src_rope, boundary_check=(0, 1, 2), padding_option="zero")
+            dst_rope = tl.make_block_ptr(
+                base=out_ptr + N,
+                shape=(tokens, H, R),
+                strides=(H * (N + R), N + R, 1),
+                offsets=(token, head_start, 0),
+                block_shape=(1, BLOCK_H, BLOCK_R),
+                order=(2, 1, 0),
+            )
+            rope = tl.load(
+                src_rope, boundary_check=(0, 1, 2), padding_option="zero"
+            )
             rope = tl.broadcast_to(rope, (1, BLOCK_H, BLOCK_R))
             tl.store(dst_rope, rope, boundary_check=(0, 1, 2))
         else:
             nope = tl.load(
-                nope_ptr + token * NS0 + heads[:, None] * NS1 + nope_cols[None, :] * NS2,
+                nope_ptr
+                + token * NS0
+                + heads[:, None] * NS1
+                + nope_cols[None, :] * NS2,
                 mask=valid & (heads[:, None] < H) & (nope_cols[None, :] < N),
                 other=0,
             )
             tl.store(
-                out_ptr + token * H * (N + R) + heads[:, None] * (N + R) + nope_cols[None, :],
+                out_ptr
+                + token * H * (N + R)
+                + heads[:, None] * (N + R)
+                + nope_cols[None, :],
                 nope,
                 mask=valid & (heads[:, None] < H) & (nope_cols[None, :] < N),
             )
@@ -99,7 +122,11 @@ def _concat_mla_k_kernel_ascend(
             )
             rope = tl.broadcast_to(rope, (BLOCK_H, BLOCK_R))
             tl.store(
-                out_ptr + token * H * (N + R) + heads[:, None] * (N + R) + N + rope_cols[None, :],
+                out_ptr
+                + token * H * (N + R)
+                + heads[:, None] * (N + R)
+                + N
+                + rope_cols[None, :],
                 rope,
                 mask=valid & (heads[:, None] < H) & (rope_cols[None, :] < R),
             )
@@ -109,27 +136,43 @@ def concat_mla_k(k, k_nope, k_rope):
     """Copy NoPE and broadcast RoPE into new storage; all inputs are read-only."""
     tokens, heads = k.shape[:2]
     nope_dim, rope_dim = k_nope.shape[2], k_rope.shape[2]
-    out = torch.empty((tokens, heads, nope_dim + rope_dim), device=k.device, dtype=k.dtype)
+    out = torch.empty(
+        (tokens, heads, nope_dim + rope_dim), device=k.device, dtype=k.dtype
+    )
     if tokens == 0 or heads == 0:
         return out
-    block_h = min(128, max(8, triton.next_power_of_2(triton.cdiv(tokens * heads, 32))))
+    block_h = min(
+        128, max(8, triton.next_power_of_2(triton.cdiv(tokens * heads, 32)))
+    )
     head_tiles = triton.cdiv(heads, block_h)
     total_tiles = tokens * head_tiles
     programs = min(total_tiles, 32)
     grid = (programs,)
     # Select by shape/layout only; both variants execute this Triton kernel.
     use_block_ptr = (
-        heads == 128 and nope_dim == 128 and rope_dim == 64
+        heads == 128
+        and nope_dim == 128
+        and rope_dim == 64
         and k_nope.stride(0) == heads * nope_dim
-        and k_nope.stride(1) == nope_dim and k_nope.stride(2) == 1
-        and k_rope.stride(0) == rope_dim and k_rope.stride(2) == 1
+        and k_nope.stride(1) == nope_dim
+        and k_nope.stride(2) == 1
+        and k_rope.stride(0) == rope_dim
+        and k_rope.stride(2) == 1
     )
     _concat_mla_k_kernel_ascend[grid](
-        out, k_nope, k_rope,
-        H=heads, N=nope_dim, R=rope_dim,
-        NS0=k_nope.stride(0), NS1=k_nope.stride(1), NS2=k_nope.stride(2),
-        RS0=k_rope.stride(0), RS2=k_rope.stride(2),
-        HEAD_TILES=head_tiles, TOTAL_TILES=total_tiles,
+        out,
+        k_nope,
+        k_rope,
+        H=heads,
+        N=nope_dim,
+        R=rope_dim,
+        NS0=k_nope.stride(0),
+        NS1=k_nope.stride(1),
+        NS2=k_nope.stride(2),
+        RS0=k_rope.stride(0),
+        RS2=k_rope.stride(2),
+        HEAD_TILES=head_tiles,
+        TOTAL_TILES=total_tiles,
         BLOCK_H=block_h,
         BLOCK_N=triton.next_power_of_2(max(1, nope_dim)),
         BLOCK_R=triton.next_power_of_2(max(1, rope_dim)),
@@ -143,5 +186,6 @@ def concat_mla_k(k, k_nope, k_rope):
 
 def reference(k, k_nope, k_rope):
     return concat_mla_k(k, k_nope, k_rope)
+
 
 __all__ = ["concat_mla_k"]

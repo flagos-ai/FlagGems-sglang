@@ -50,12 +50,18 @@ def _concat_mla_k_kernel_metax(
     rope_cols = tl.arange(0, BLOCK_R)
 
     nope = tl.load(
-        nope_ptr + token * NS0 + heads[:, None] * NS1 + nope_cols[None, :] * NS2,
+        nope_ptr
+        + token * NS0
+        + heads[:, None] * NS1
+        + nope_cols[None, :] * NS2,
         mask=valid & (heads[:, None] < H) & (nope_cols[None, :] < N),
         other=0,
     )
     tl.store(
-        out_ptr + token * H * (N + R) + heads[:, None] * (N + R) + nope_cols[None, :],
+        out_ptr
+        + token * H * (N + R)
+        + heads[:, None] * (N + R)
+        + nope_cols[None, :],
         nope,
         mask=valid & (heads[:, None] < H) & (nope_cols[None, :] < N),
     )
@@ -66,7 +72,11 @@ def _concat_mla_k_kernel_metax(
     )
     rope = tl.broadcast_to(rope, (BLOCK_H, BLOCK_R))
     tl.store(
-        out_ptr + token * H * (N + R) + heads[:, None] * (N + R) + N + rope_cols[None, :],
+        out_ptr
+        + token * H * (N + R)
+        + heads[:, None] * (N + R)
+        + N
+        + rope_cols[None, :],
         rope,
         mask=valid & (heads[:, None] < H) & (rope_cols[None, :] < R),
     )
@@ -76,7 +86,9 @@ def concat_mla_k(k, k_nope, k_rope):
     """Copy NoPE and broadcast RoPE into new storage; all inputs are read-only."""
     tokens, heads = k.shape[:2]
     nope_dim, rope_dim = k_nope.shape[2], k_rope.shape[2]
-    out = torch.empty((tokens, heads, nope_dim + rope_dim), device=k.device, dtype=k.dtype)
+    out = torch.empty(
+        (tokens, heads, nope_dim + rope_dim), device=k.device, dtype=k.dtype
+    )
     if tokens == 0 or heads == 0:
         return out
     block_h = 8
@@ -84,11 +96,19 @@ def concat_mla_k(k, k_nope, k_rope):
     total_tiles = tokens * head_tiles
     grid = (head_tiles, tokens)
     _concat_mla_k_kernel_metax[grid](
-        out, k_nope, k_rope,
-        H=heads, N=nope_dim, R=rope_dim,
-        NS0=k_nope.stride(0), NS1=k_nope.stride(1), NS2=k_nope.stride(2),
-        RS0=k_rope.stride(0), RS2=k_rope.stride(2),
-        HEAD_TILES=head_tiles, TOTAL_TILES=total_tiles,
+        out,
+        k_nope,
+        k_rope,
+        H=heads,
+        N=nope_dim,
+        R=rope_dim,
+        NS0=k_nope.stride(0),
+        NS1=k_nope.stride(1),
+        NS2=k_nope.stride(2),
+        RS0=k_rope.stride(0),
+        RS2=k_rope.stride(2),
+        HEAD_TILES=head_tiles,
+        TOTAL_TILES=total_tiles,
         BLOCK_H=block_h,
         BLOCK_N=triton.next_power_of_2(max(1, nope_dim)),
         BLOCK_R=triton.next_power_of_2(max(1, rope_dim)),
@@ -99,5 +119,6 @@ def concat_mla_k(k, k_nope, k_rope):
 
 def reference(k, k_nope, k_rope):
     return concat_mla_k(k, k_nope, k_rope)
+
 
 __all__ = ["concat_mla_k"]

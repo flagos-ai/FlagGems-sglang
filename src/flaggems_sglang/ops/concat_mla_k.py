@@ -123,8 +123,4 @@ def concat_mla_k(k, k_nope, k_rope):
     return out
 
 
-def reference(k, k_nope, k_rope):
-    """Compatibility entry point with the benchmark reference signature."""
-    return concat_mla_k(k, k_nope, k_rope)
-
 __all__ = ["concat_mla_k"]
