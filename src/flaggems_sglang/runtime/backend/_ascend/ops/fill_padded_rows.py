@@ -14,11 +14,8 @@
 
 import triton
 import triton.language as tl
-from triton.compiler import CompiledKernel
-from triton.runtime import driver
 
 __all__ = ["fill_padded_rows"]
-_HOOKS = triton.knobs.runtime if hasattr(triton, "knobs") else CompiledKernel
 
 
 @triton.jit(do_not_specialize=("X", "N"))
@@ -60,100 +57,18 @@ def _fill_padded_rows_kernel(
 def fill_padded_rows(x, num_token_non_padded, fill_value):
     rows, cols = x.shape
     stride = x.stride(0)
-    device = x.device
-    fill_repr = repr(fill_value)
-    negative_zero = fill_repr == "-0.0"
+    negative_zero = repr(fill_value) == "-0.0"
     aligned = x.data_ptr() % 32 == 0 and stride * x.element_size() % 32 == 0
-    key = (
+    group = max(1, triton.cdiv(rows, 65535)) if aligned else max(1, rows)
+    grid = (max(1, triton.cdiv(rows, group)), 1, 1)
+    _fill_padded_rows_kernel[grid](
+        x,
+        num_token_non_padded,
         rows,
         cols,
         stride,
-        x.dtype,
-        num_token_non_padded.dtype,
-        device,
-        aligned,
-        type(fill_value),
-        fill_repr,
+        fill_value,
+        group,
+        negative_zero,
     )
-    cached = getattr(_fill_padded_rows_kernel, "_s2_handle", None)
-    if cached is not None and cached[0] == key:
-        if (
-            _HOOKS.launch_enter_hook is not None
-            or _HOOKS.launch_exit_hook is not None
-        ):
-            if cached[4]:
-                cached[9](
-                    x.data_ptr(),
-                    num_token_non_padded.data_ptr(),
-                    rows,
-                    cols,
-                    stride,
-                    fill_value,
-                    cached[3],
-                    negative_zero,
-                )
-            else:
-                cached[9](x.data_ptr(), num_token_non_padded.data_ptr())
-        else:
-            stream = cached[8](device.index)
-            if cached[4]:
-                cached[5](
-                    cached[2][0],
-                    1,
-                    1,
-                    stream,
-                    cached[6],
-                    cached[7],
-                    None,
-                    None,
-                    None,
-                    x,
-                    num_token_non_padded,
-                    rows,
-                    cols,
-                    stride,
-                    fill_value,
-                    cached[3],
-                    negative_zero,
-                )
-            else:
-                cached[5](
-                    cached[2][0],
-                    1,
-                    1,
-                    stream,
-                    cached[6],
-                    cached[7],
-                    None,
-                    None,
-                    None,
-                    x,
-                    num_token_non_padded,
-                )
-    else:
-        group = max(1, triton.cdiv(rows, 65535)) if aligned else max(1, rows)
-        grid = (max(1, triton.cdiv(rows, group)), 1, 1)
-        handle = _fill_padded_rows_kernel[grid](
-            x,
-            num_token_non_padded,
-            rows,
-            cols,
-            stride,
-            fill_value,
-            group,
-            negative_zero,
-        )
-        abi = "constexpr" in handle.src.signature.values()
-        _fill_padded_rows_kernel._s2_handle = (
-            key,
-            handle,
-            grid,
-            group,
-            abi,
-            handle.run,
-            handle.function,
-            handle.packed_metadata,
-            driver.active.get_current_stream,
-            handle[grid],
-        )
     return x
