@@ -91,8 +91,4 @@ def add3(a, b, c):
     return out
 
 
-def reference(a, b, c):
-    return add3(a, b, c)
-
-
 __all__ = ["add3"]

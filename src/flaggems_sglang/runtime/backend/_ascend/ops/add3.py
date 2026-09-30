@@ -71,7 +71,10 @@ def _launch_config():
     if backend == "gcu":
         # Enflame S60: 2 clusters x 12 SIPs; 32768-element blocks measured
         # fastest on a rented S60.
-        cores = props.get("multiprocessor_count", 2) * driver.get_current_target().warp_size
+        cores = (
+            props.get("multiprocessor_count", 2)
+            * driver.get_current_target().warp_size
+        )
         return max(1, cores), 32768
     if backend == "npu":
         # Ascend: element-wise work runs on the AI vector cores; a 4096-element
@@ -102,11 +105,6 @@ def add3(a, b, c):
         num_warps=1 if n_elements > 65536 else 4,
     )
     return out
-
-
-def reference(a, b, c):
-    """Compatibility entry point documented on the Task 76 page."""
-    return add3(a, b, c)
 
 
 __all__ = ["add3"]

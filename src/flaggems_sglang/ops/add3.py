@@ -78,9 +78,4 @@ def add3(a, b, c):
     return out
 
 
-def reference(a, b, c):
-    """Compatibility entry point documented on the Task 76 page."""
-    return add3(a, b, c)
-
-
 __all__ = ["add3"]

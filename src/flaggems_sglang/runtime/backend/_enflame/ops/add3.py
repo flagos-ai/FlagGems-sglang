@@ -48,7 +48,9 @@ def _add3_persistent_kernel(
         # forced to fp32: where the hardware adds bf16 natively (Ascend) it
         # truncates, while the task (and torch) round to nearest.
         ab_bf16 = (a.to(tl.float32) + b.to(tl.float32)).to(tl.bfloat16)
-        result_bf16 = (ab_bf16.to(tl.float32) + c.to(tl.float32)).to(tl.bfloat16)
+        result_bf16 = (ab_bf16.to(tl.float32) + c.to(tl.float32)).to(
+            tl.bfloat16
+        )
         tl.store(out_ptr + offsets, result_bf16, mask=mask)
 
 
@@ -58,7 +60,11 @@ def _num_programs():
     driver = triton.runtime.driver.active
     try:
         props = driver.utils.get_device_properties(driver.get_current_device())
-        return max(1, props["multiprocessor_count"] * driver.get_current_target().warp_size)
+        return max(
+            1,
+            props["multiprocessor_count"]
+            * driver.get_current_target().warp_size,
+        )
     except Exception:
         return 24
 
@@ -82,11 +88,6 @@ def add3(a, b, c):
         num_warps=1 if n_elements > 65536 else 4,
     )
     return out
-
-
-def reference(a, b, c):
-    """Compatibility entry point documented on the Task 76 page."""
-    return add3(a, b, c)
 
 
 __all__ = ["add3"]
