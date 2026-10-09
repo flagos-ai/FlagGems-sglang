@@ -126,9 +126,6 @@ def fill_padded_rows(x, num_token_non_padded, fill_value):
         return out
 
     if x.is_contiguous() and out.is_contiguous():
-        # Contiguous: valid rows and padded rows are two flat runs — single
-        # 1D fused copy+fill split at a device-read scalar. 32-bit indexing
-        # whenever the flat size fits, for cheaper address arithmetic.
         kernel = (
             _fill_pad_rows_flat_kernel
             if total <= 0x7FFFFFFF
