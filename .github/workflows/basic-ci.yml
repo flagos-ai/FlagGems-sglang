@@ -35,7 +35,24 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+          # No `cache: pip`. It keys on pyproject.toml here (setup-python's
+          # backup dependency glob), which says nothing about the style tools
+          # pinned below: the cache misses when they change and is thrown away
+          # when a project dependency changes. The hook environments cached in
+          # the next step are the part of this job that is actually slow.
+
+      # pre-commit builds a virtualenv per hook on first use, which costs far
+      # more than the wheels above. Keyed on the hook config, so a changed
+      # revision rebuilds only what changed.
+      - name: cache pre-commit hooks
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.cache/pre-commit
+          key: >-
+            pre-commit-${{ runner.os }}-py3.12-${{
+            hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-py3.12-
 
       - name: install style tools
         shell: bash
@@ -44,6 +61,24 @@ jobs:
       - name: run pre-commit
         shell: bash
         run: pre-commit run --all-files --show-diff-on-failure
+
+      # pre-commit covers Python only, and the CI scripts run on an
+      # accelerator runner where a syntax error costs a whole job.
+      - name: check ci scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in .github/scripts/*.sh; do
+            bash -n "${script}"
+            test -x "${script}" || {
+              echo "::error file=${script}::not executable; run chmod +x"
+              exit 1
+            }
+          done
+          # shellcheck ships with the GitHub ubuntu images; install it if a
+          # future image drops it rather than skipping the check silently.
+          command -v shellcheck >/dev/null || sudo apt-get install -y -qq shellcheck
+          shellcheck .github/scripts/*.sh
 
   select-targets:
     name: select ci targets
@@ -54,15 +89,13 @@ jobs:
       mode: ${{ steps.select.outputs.mode }}
       tests: ${{ steps.select.outputs.tests }}
       benchmarks: ${{ steps.select.outputs.benchmarks }}
-    env:
-      VIRTUAL_ENV: /home/secure/venvs/flaggems-sglang-ci
 
     steps:
       - id: checkout-attempt-1
         name: check out repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         continue-on-error: true
 
       - id: sleep-1
@@ -75,7 +108,7 @@ jobs:
         if: steps.checkout-attempt-1.outcome == 'failure'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         continue-on-error: true
 
       - id: sleep-2
@@ -88,13 +121,16 @@ jobs:
         if: steps.checkout-attempt-2.outcome == 'failure'
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: use preconfigured python environment
-        shell: bash
-        run: |
-          test -x "${VIRTUAL_ENV}/bin/python"
-          echo "${VIRTUAL_ENV}/bin" >> "$GITHUB_PATH"
+      # tools/select_tests.py imports only argparse, shlex and pathlib, so
+      # this job needs an interpreter rather than a prepared environment.
+      - name: set up python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.11"
+          # No `cache: pip`: this job installs nothing, so the cache would be
+          # restored and saved empty on every run.
 
       - name: collect ci selection inputs
         shell: bash
@@ -103,9 +139,20 @@ jobs:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [[ "${EVENT_NAME}" == "pull_request" ]]; then
+          # The checkout is shallow, so the commit we diff against is not in
+          # the clone. Fetch just that one commit: GitHub allows fetching by
+          # full 40-character SHA, and --depth=1 keeps it to a single object.
+          # If the fetch fails the diff would be meaningless, so fall back to
+          # the current commit's own changes rather than selecting nothing.
+          fetch_sha() {
+            git cat-file -e "$1^{commit}" 2>/dev/null && return 0
+            git fetch --depth=1 --no-tags origin "$1" 2>/dev/null
+          }
+
+          if [[ "${EVENT_NAME}" == "pull_request" ]] && fetch_sha "${PR_BASE_SHA}"; then
             git diff --name-only "${PR_BASE_SHA}" "${GITHUB_SHA}" > changed_files.txt
-          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]]; then
+          elif [[ -n "${BEFORE_SHA}" && "${BEFORE_SHA}" != "0000000000000000000000000000000000000000" ]] \
+               && fetch_sha "${BEFORE_SHA}"; then
             git diff --name-only "${BEFORE_SHA}" "${GITHUB_SHA}" > changed_files.txt
           else
             git diff-tree --no-commit-id --name-only -r "${GITHUB_SHA}" > changed_files.txt
@@ -144,7 +191,6 @@ jobs:
     env:
       DNN_VENDOR: nvidia
       PYTHONPATH: ${{ github.workspace }}/src
-      VIRTUAL_ENV: /home/secure/venvs/flaggems-sglang-ci
     permissions:
       contents: write
       pull-requests: write
@@ -158,12 +204,28 @@ jobs:
         shell: bash
         run: nvidia-smi
 
-      - name: use preconfigured python environment
+      - name: add cuda to path
         shell: bash
-        run: |
-          test -x "${VIRTUAL_ENV}/bin/python"
-          echo "${VIRTUAL_ENV}/bin" >> "$GITHUB_PATH"
-          echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
+        run: echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
+
+      # setup-ci-env creates and populates the environment itself, so no
+      # preconfigured venv on the runner is involved.
+      - name: prepare ci environment
+        uses: ./.github/actions/setup-ci-env
+        with:
+          # setup-python is off on purpose: the vendor torch and Triton build
+          # that this environment layers on top of belongs to the base image's
+          # interpreter, and the venv inherits it from there. A freshly
+          # installed interpreter would not see it.
+          setup-python: "0"
+          # The job runs the real suite right after, so the collection smoke
+          # check would only repeat work.
+          collect-tests: "0"
+          # h20 is self-hosted and its $HOME persists between runs, so both the
+          # uv cache and the environment itself are still there next time.
+          # Uploading a copy of the cache to the Actions service would only add
+          # time, and pruning it would throw away work the next run can reuse.
+          cache: "0"
 
       - name: run selected unit tests
         if: needs.select-targets.outputs.tests != ''
