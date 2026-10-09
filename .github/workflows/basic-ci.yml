@@ -45,6 +45,24 @@ jobs:
         shell: bash
         run: pre-commit run --all-files --show-diff-on-failure
 
+      # pre-commit covers Python only, and the CI scripts run on an
+      # accelerator runner where a syntax error costs a whole job.
+      - name: check ci scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in .github/scripts/*.sh; do
+            bash -n "${script}"
+            test -x "${script}" || {
+              echo "::error file=${script}::not executable; run chmod +x"
+              exit 1
+            }
+          done
+          # shellcheck ships with the GitHub ubuntu images; install it if a
+          # future image drops it rather than skipping the check silently.
+          command -v shellcheck >/dev/null || sudo apt-get install -y -qq shellcheck
+          shellcheck .github/scripts/*.sh
+
   select-targets:
     name: select ci targets
     needs: code-style
@@ -158,12 +176,21 @@ jobs:
         shell: bash
         run: nvidia-smi
 
-      - name: use preconfigured python environment
+      - name: add cuda to path
         shell: bash
-        run: |
-          test -x "${VIRTUAL_ENV}/bin/python"
-          echo "${VIRTUAL_ENV}/bin" >> "$GITHUB_PATH"
-          echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
+        run: echo "/usr/local/cuda/bin" >> "$GITHUB_PATH"
+
+      # setup-python is off here on purpose: the vendor torch and Triton build
+      # that this environment layers on top of lives in the preconfigured venv,
+      # and a freshly installed interpreter would not see it.
+      - name: prepare ci environment
+        uses: ./.github/actions/setup-ci-env
+        with:
+          setup-python: "0"
+          virtual-env: ${{ env.VIRTUAL_ENV }}
+          # The job runs the real suite right after, so the collection smoke
+          # check would only repeat work.
+          collect-tests: "0"
 
       - name: run selected unit tests
         if: needs.select-targets.outputs.tests != ''
