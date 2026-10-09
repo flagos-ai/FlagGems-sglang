@@ -17,16 +17,17 @@
 # Prepare a GitHub CI environment for FlagGems-sglang, using uv.
 #
 # Assumes a Python interpreter is already on PATH — in CI that comes from the
-# actions/setup-python step, or from a preconfigured venv on a self-hosted
+# actions/setup-python step, or from the base image on a self-hosted
 # accelerator runner. This script does not install an interpreter itself.
-# Everything else is layered on top, in order:
+# Everything else it builds, in order:
 #
 #   1. uv
-#   2. build tools
-#   3. FlagGems-sglang itself, plus its test dependencies
-#   4. sglang
-#   5. triton_kernels
-#   6. verification
+#   2. a virtual environment, based on that interpreter
+#   3. build tools
+#   4. FlagGems-sglang itself, plus its test dependencies
+#   5. sglang
+#   6. triton_kernels
+#   7. verification
 #
 # torch and the Triton/FlagTree compiler are NOT installed here. They are
 # vendor-specific and come from the runner's base image or an earlier FlagGems
@@ -38,8 +39,13 @@
 #   .github/scripts/prepare_ci_env.sh
 #
 # Environment:
-#   PYTHON_BIN             interpreter to install into (default: python)
+#   PYTHON_BIN             interpreter to build the environment from
+#                          (default: python)
 #   UV_VERSION             uv version to install when uv is absent
+#   VENV_PATH              venv to create and install into (default: .venv),
+#                          or empty to install into PYTHON_BIN directly
+#   VENV_SYSTEM_SITE_PACKAGES  1 (default) let the venv see the base
+#                          interpreter's packages, 0 to isolate it
 #   INSTALL_PROJECT        1 (default) / 0 to skip installing this repo
 #   EDITABLE_INSTALL       1 (default) editable install of this repo, 0 regular
 #   INSTALL_SGLANG         1 (default) / 0 to skip sglang
@@ -83,6 +89,11 @@ export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
 UV_VERSION="${UV_VERSION:-0.11.22}"
 
 # ── Settings ─────────────────────────────────────────────────
+# Relative paths are resolved against the current directory, which in CI is the
+# workspace root.
+VENV_PATH="${VENV_PATH-.venv}"
+VENV_SYSTEM_SITE_PACKAGES="${VENV_SYSTEM_SITE_PACKAGES:-1}"
+
 INSTALL_PROJECT="${INSTALL_PROJECT:-1}"
 EDITABLE_INSTALL="${EDITABLE_INSTALL:-1}"
 
@@ -217,37 +228,144 @@ if [ -n "${GITHUB_PATH:-}" ]; then
   echo "${HOME}/.local/bin" >>"${GITHUB_PATH}"
 fi
 
+# ── Virtual environment ──────────────────────────────────────
+# Everything below installs into a venv of our own rather than into the
+# interpreter found above. That keeps the runner's base image unmodified (it
+# may well be shared between jobs) while the vendor torch and Triton/FlagTree
+# compiler living there stay importable.
+if [ -n "${VENV_PATH}" ]; then
+  step "Virtual environment"
+
+  BASE_PYTHON="${PYTHON_BIN}"
+  venv_args=(--python "${BASE_PYTHON}")
+  if [ "${VENV_SYSTEM_SITE_PACKAGES}" = "1" ]; then
+    venv_args+=(--system-site-packages)
+  fi
+
+  printf "Creating %s from %s ...\n" "${VENV_PATH}" "${BASE_PYTHON}"
+  # --allow-existing reuses a venv left by an earlier step or by a previous run
+  # on a self-hosted runner, instead of failing on it.
+  uv venv --allow-existing "${venv_args[@]}" "${VENV_PATH}" || fail
+
+  VENV_PATH="$(cd "${VENV_PATH}" && pwd)"
+  PYTHON_BIN="${VENV_PATH}/bin/python"
+  export VIRTUAL_ENV="${VENV_PATH}"
+  export PATH="${VENV_PATH}/bin:${PATH}"
+
+  # Hand the environment to the remaining steps of the GitHub Actions job.
+  if [ -n "${GITHUB_PATH:-}" ]; then
+    echo "${VENV_PATH}/bin" >>"${GITHUB_PATH}"
+  fi
+  if [ -n "${GITHUB_ENV:-}" ]; then
+    echo "VIRTUAL_ENV=${VENV_PATH}" >>"${GITHUB_ENV}"
+  fi
+
+  # --system-site-packages only exposes the *base installation's*
+  # site-packages. When the interpreter we just based on is itself a venv —
+  # which is how vendor images commonly ship torch and the compiler — that
+  # resolves to the empty base behind it, and the vendor packages stay
+  # invisible. Add that interpreter's own site-packages explicitly in this
+  # case, through a .pth file: those paths land after the new venv's own
+  # site-packages in sys.path, so anything installed here still takes
+  # precedence.
+  if [ "${VENV_SYSTEM_SITE_PACKAGES}" = "1" ]; then
+    BASE_SITES="$(mktemp)"
+    "${BASE_PYTHON}" - >"${BASE_SITES}" <<'PY' || true
+import site
+import sys
+import sysconfig
+
+paths = {
+    sysconfig.get_paths().get("purelib", ""),
+    sysconfig.get_paths().get("platlib", ""),
+}
+paths.update(getattr(site, "getsitepackages", lambda: [])())
+if sys.prefix == sys.base_prefix:
+    # Not a venv, so --system-site-packages already covers these.
+    paths = set()
+# One path per line, and nothing at all when there is none to inherit: the
+# caller tests this output for emptiness, and a blank line in a .pth file is
+# an empty sys.path entry.
+for path in sorted(path for path in paths if path):
+    print(path)
+PY
+    if [ -s "${BASE_SITES}" ]; then
+      TARGET_SITE="$("${PYTHON_BIN}" -c \
+        'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+      cp "${BASE_SITES}" "${TARGET_SITE}/_ci_base_site_packages.pth"
+      printf "Inheriting site-packages from %s:\n" "${BASE_PYTHON}"
+      sed 's/^/  /' "${BASE_SITES}"
+    fi
+    rm -f "${BASE_SITES}"
+  fi
+
+  printf "Environment at %s" "${VENV_PATH}"
+  ok
+else
+  warn "VENV_PATH is empty; installing into ${PYTHON_BIN} directly"
+fi
+
 # Always target the resolved interpreter explicitly: uv refuses to install
-# without either an active venv or an explicit target, and CI runs it both
-# inside a preconfigured venv and against a bare actions/setup-python install.
+# without either an active venv or an explicit target, and this script also
+# runs outside CI against whatever interpreter is on PATH.
 uv_pip() {
   uv pip "$1" --python "${PYTHON_BIN}" "${@:2}"
 }
 
 # ── Runtime-layer guard ──────────────────────────────────────
+# List every installed distribution as `name==version`, including the ones a
+# --system-site-packages venv only inherits.
+#
+# `uv pip freeze` deliberately reports the target environment alone, so inside
+# such a venv the vendor torch and compiler are invisible to it — and an empty
+# snapshot would turn the guard below into a no-op that passes. Walking
+# importlib.metadata instead sees exactly what an import would.
+all_packages() {
+  "${PYTHON_BIN}" - <<'PY' 2>/dev/null || true
+import importlib.metadata as md
+
+seen = {}
+for dist in md.distributions():
+    name = dist.metadata["Name"]
+    if not name:
+        continue
+    # First wins: distributions() yields sys.path order, so a package shadowed
+    # in the venv reports the version that actually gets imported.
+    seen.setdefault(name.lower().replace("_", "-"), dist.version)
+
+for name, version in sorted(seen.items()):
+    print(f"{name}=={version}")
+PY
+}
+
 # triton_kernels is excluded on purpose — it is a separate distribution that
 # happens to share the "triton" prefix.
 runtime_snapshot() {
-  uv_pip freeze 2>/dev/null |
+  all_packages |
     grep -iE '^(torch|torchaudio|torchvision|triton|triton-[a-z]+|flagtree)([=@ ]|$)' |
     grep -ivE '^triton[-_]kernels' |
     sort || true
 }
 
-# Write a uv constraints file pinning the runtime layer to what is already
-# installed, and echo its path.
+# Write a uv excludes file holding the runtime layer out of resolution, and
+# echo its path.
 #
 # This is the better tool than --no-deps whenever a dependency is pure Python
-# and genuinely needs its own transitive deps resolved: uv resolves normally,
-# but cannot move torch or the compiler, because a constraint on an already
-# satisfied pin leaves it in place. Entries constraints files cannot express
-# (direct URL/@ forms, editable installs) are filtered out; those packages are
-# still covered by the snapshot diff.
-runtime_constraints() {
-  local path
-  path="$(mktemp)"
-  runtime_snapshot | grep -E '^[A-Za-z0-9._-]+==' >"${path}" || true
-  echo "${path}"
+# and genuinely needs its own transitive deps resolved: uv resolves and
+# installs normally, but drops the runtime packages from the dependency graph
+# entirely, so nothing can pull a different torch or compiler in behind our
+# back. What is already installed stays untouched and keeps satisfying the
+# imports at runtime.
+#
+# A constraints file is not enough here. It only pins a version, and uv
+# considers packages the environment merely inherits through
+# --system-site-packages as not installed — so a constrained torch would be
+# downloaded into the venv at the pinned version rather than left alone,
+# shadowing the vendor build with a generic wheel.
+#
+# Writes into ${EXCLUDES}, which the EXIT trap below cleans up.
+runtime_excludes() {
+  runtime_snapshot | sed 's/==.*//' >"${EXCLUDES}" || true
 }
 
 assert_runtime_unchanged() {
@@ -263,9 +381,9 @@ assert_runtime_unchanged() {
 
 BEFORE="$(mktemp)"
 AFTER="$(mktemp)"
-CONSTRAINTS="$(mktemp)"
+EXCLUDES="$(mktemp)"
 DEPS_FILE="$(mktemp)"
-trap 'rm -f "${BEFORE}" "${AFTER}" "${CONSTRAINTS}" "${DEPS_FILE}"' EXIT
+trap 'rm -f "${BEFORE}" "${AFTER}" "${EXCLUDES}" "${DEPS_FILE}"' EXIT
 
 # ── Environment report ───────────────────────────────────────
 step "Environment"
@@ -316,20 +434,20 @@ if [ "${INSTALL_PROJECT}" = "1" ]; then
   # ABI requirement, and their own transitive deps must be resolved: installing
   # pytest-md-report with --no-deps, for instance, leaves pytablewriter missing
   # and its pytest11 entry point then breaks every pytest invocation. So let uv
-  # resolve, and hold the runtime layer still with a constraints file instead.
+  # resolve, and hold the runtime layer out of the graph instead.
   #
   # scipy is capped below 1.18 because 1.18 requires numpy>=2.0, which breaks
   # the torch/numpy ABI on backends whose torch was built against numpy 1.x.
   # cupy-cuda12x from the project's [test] extra is intentionally left out: it
   # is CUDA-12-only and unused by the test suite.
-  CONSTRAINTS="$(runtime_constraints)"
-  if [ -s "${CONSTRAINTS}" ]; then
-    printf "Pinning the runtime layer via constraints:\n"
-    sed 's/^/  /' "${CONSTRAINTS}"
+  runtime_excludes
+  if [ -s "${EXCLUDES}" ]; then
+    printf "Holding the runtime layer out of resolution:\n"
+    sed 's/^/  /' "${EXCLUDES}"
   fi
 
   printf "Installing runtime and test dependencies ..."
-  uv_pip install -q --constraints "${CONSTRAINTS}" \
+  uv_pip install -q --excludes "${EXCLUDES}" \
     "packaging>=24.0" \
     "PyYAML==6.0.3" \
     "sqlalchemy>=1.4.31,<2.1" \
@@ -624,7 +742,7 @@ fi
 if [ "${COLLECT_TESTS}" = "1" ]; then
   step "Test collection smoke check"
   COLLECT_LOG="$(mktemp)"
-  trap 'rm -f "${BEFORE}" "${AFTER}" "${CONSTRAINTS}" "${DEPS_FILE}" "${COLLECT_LOG}"' EXIT
+  trap 'rm -f "${BEFORE}" "${AFTER}" "${EXCLUDES}" "${DEPS_FILE}" "${COLLECT_LOG}"' EXIT
 
   # Reported, not required: collection imports every test module, and a module
   # needing an absent optional reference should not fail environment setup.

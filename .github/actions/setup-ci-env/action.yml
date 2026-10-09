@@ -25,17 +25,25 @@ inputs:
   setup-python:
     description: >-
       Install Python with actions/setup-python (1) or use the interpreter
-      already on PATH (0). Set to 0 on self-hosted accelerator runners, where
-      a fresh interpreter would not have the vendor torch/Triton build that
-      this environment layers on top of; pair it with virtual-env.
+      already on PATH (0). Set to 0 on self-hosted accelerator runners whose
+      base-image interpreter owns the vendor torch/Triton build.
     required: false
     default: "1"
   virtual-env:
     description: >-
-      Path to a preconfigured virtualenv to install into. When set, its bin/
-      directory is prepended to PATH for the rest of the job.
+      Path of the virtualenv to create and install into, relative to the
+      workspace or absolute. Set to an empty string to install into the
+      interpreter on PATH instead of a venv.
     required: false
-    default: ""
+    default: ".venv"
+  system-site-packages:
+    description: >-
+      Give the created venv access to the interpreter's site-packages (1) or
+      isolate it (0). Keep this at 1 on vendor runners: torch and the
+      Triton/FlagTree compiler live in the base image, and this environment
+      layers on top of them rather than reinstalling them.
+    required: false
+    default: "1"
   sglang-version:
     description: "sglang version to install"
     required: false
@@ -77,28 +85,16 @@ runs:
         python-version: ${{ inputs.python-version }}
         cache: pip
 
-    # A preconfigured venv on a self-hosted runner is what supplies the vendor
-    # torch/Triton build, so it has to be on PATH before anything installs.
-    - name: use preconfigured virtual environment
-      if: ${{ inputs.virtual-env != '' }}
-      shell: bash
-      env:
-        TARGET_VENV: ${{ inputs.virtual-env }}
-      run: |
-        set -euo pipefail
-        if [ ! -x "${TARGET_VENV}/bin/python" ]; then
-          echo "::error::no python at ${TARGET_VENV}/bin/python"
-          exit 1
-        fi
-        echo "${TARGET_VENV}/bin" >>"${GITHUB_PATH}"
-        echo "VIRTUAL_ENV=${TARGET_VENV}" >>"${GITHUB_ENV}"
-
-    # Single script: installs uv, then layers the project, sglang and
-    # triton_kernels on top of the runner's torch/Triton runtime.
+    # Single script: installs uv, creates the environment, then layers the
+    # project, sglang and triton_kernels on top of the runner's torch/Triton
+    # runtime. It also exports VIRTUAL_ENV and PATH through $GITHUB_ENV and
+    # $GITHUB_PATH, so later steps in the job run inside that environment.
     - name: prepare ci environment
       shell: bash
       env:
         UV_VERSION: ${{ inputs.uv-version }}
+        VENV_PATH: ${{ inputs.virtual-env }}
+        VENV_SYSTEM_SITE_PACKAGES: ${{ inputs.system-site-packages }}
         SGLANG_VERSION: ${{ inputs.sglang-version }}
         TRITON_KERNELS_REF: ${{ inputs.triton-kernels-ref }}
         INSTALL_SGLANG: ${{ inputs.install-sglang }}
