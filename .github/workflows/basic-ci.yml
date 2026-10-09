@@ -35,7 +35,24 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+          # No `cache: pip`. It keys on pyproject.toml here (setup-python's
+          # backup dependency glob), which says nothing about the style tools
+          # pinned below: the cache misses when they change and is thrown away
+          # when a project dependency changes. The hook environments cached in
+          # the next step are the part of this job that is actually slow.
+
+      # pre-commit builds a virtualenv per hook on first use, which costs far
+      # more than the wheels above. Keyed on the hook config, so a changed
+      # revision rebuilds only what changed.
+      - name: cache pre-commit hooks
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+        with:
+          path: ~/.cache/pre-commit
+          key: >-
+            pre-commit-${{ runner.os }}-py3.12-${{
+            hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-py3.12-
 
       - name: install style tools
         shell: bash
@@ -112,7 +129,8 @@ jobs:
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.11"
-          cache: pip
+          # No `cache: pip`: this job installs nothing, so the cache would be
+          # restored and saved empty on every run.
 
       - name: collect ci selection inputs
         shell: bash
@@ -203,6 +221,11 @@ jobs:
           # The job runs the real suite right after, so the collection smoke
           # check would only repeat work.
           collect-tests: "0"
+          # h20 is self-hosted and its $HOME persists between runs, so both the
+          # uv cache and the environment itself are still there next time.
+          # Uploading a copy of the cache to the Actions service would only add
+          # time, and pruning it would throw away work the next run can reuse.
+          cache: "0"
 
       - name: run selected unit tests
         if: needs.select-targets.outputs.tests != ''

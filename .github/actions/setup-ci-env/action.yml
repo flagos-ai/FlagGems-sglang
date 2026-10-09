@@ -31,11 +31,14 @@ inputs:
     default: "1"
   virtual-env:
     description: >-
-      Path of the virtualenv to create and install into, relative to the
-      workspace or absolute. Set to an empty string to install into the
-      interpreter on PATH instead of a venv.
+      Path of the virtualenv to create and install into. Leave empty for the
+      script's default, which is under $HOME and so outside the workspace;
+      actions/checkout runs `git clean -ffdx`, and that deletes ignored files,
+      so a venv in the workspace is wiped before every run and has to be
+      rebuilt from scratch. Pass "none" to install into the interpreter on
+      PATH instead of a venv.
     required: false
-    default: ".venv"
+    default: ""
   system-site-packages:
     description: >-
       Give the created venv access to the interpreter's site-packages (1) or
@@ -74,6 +77,23 @@ inputs:
     description: "uv version to install when uv is not already on PATH"
     required: false
     default: "0.11.22"
+  reuse-env:
+    description: >-
+      Reuse an existing environment at the venv path when it was built from the
+      same interpreter (1), or always rebuild it from scratch (0). The install
+      steps are idempotent, so reuse turns a repeat run into a set of version
+      checks. Set to 0 to prove the environment still builds from nothing.
+    required: false
+    default: "1"
+  cache:
+    description: >-
+      Carry uv's download cache across runs with actions/cache, and prune it
+      before it is saved (1), or leave the cache entirely alone (0). Turn this
+      off on a self-hosted runner whose $HOME persists: the cache directory is
+      still there next run, so uploading a copy of it to the Actions service is
+      pure overhead and pruning only throws away work.
+    required: false
+    default: "1"
 
 runs:
   using: "composite"
@@ -83,7 +103,39 @@ runs:
       uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
       with:
         python-version: ${{ inputs.python-version }}
-        cache: pip
+        # No `cache: pip` here. Every install below runs through uv, which
+        # keeps its own cache and never populates ~/.cache/pip, so the pip
+        # cache would be saved and restored empty. uv's cache is handled by
+        # the next step instead.
+
+    # Keyed on this file plus pyproject.toml and the script, so a changed
+    # dependency set gets a fresh entry while the restore-keys prefix still
+    # seeds it from the previous one. Nothing here is a lock file, so the key
+    # cannot be exact — the cache is a download cache and a stale entry only
+    # costs a re-download of what actually changed.
+    #
+    # The path is uv's own default cache directory on Linux. Overriding
+    # UV_CACHE_DIR in the job would move the cache out from under this step.
+    #
+    # Only the downloads are carried, not the environment itself: a venv holds
+    # absolute paths and an editable install pointing into the workspace, so
+    # restoring one onto a fresh runner is fragile. On an ephemeral runner this
+    # step turns the re-install into a local copy; on a persistent one the
+    # environment is still there and gets reused outright.
+    - name: cache uv downloads
+      if: ${{ inputs.cache == '1' }}
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
+      with:
+        path: ~/.cache/uv
+        key: >-
+          uv-${{ runner.os }}-${{ runner.arch }}-py${{ inputs.python-version
+          }}-sglang${{ inputs.sglang-version }}-tk${{
+          inputs.triton-kernels-ref }}-${{
+          hashFiles('pyproject.toml', '.github/scripts/prepare_ci_env.sh',
+          '.github/actions/setup-ci-env/action.yml') }}
+        restore-keys: |
+          uv-${{ runner.os }}-${{ runner.arch }}-py${{ inputs.python-version }}-
+          uv-${{ runner.os }}-${{ runner.arch }}-
 
     # Single script: installs uv, creates the environment, then layers the
     # project, sglang and triton_kernels on top of the runner's torch/Triton
@@ -95,11 +147,15 @@ runs:
         UV_VERSION: ${{ inputs.uv-version }}
         VENV_PATH: ${{ inputs.virtual-env }}
         VENV_SYSTEM_SITE_PACKAGES: ${{ inputs.system-site-packages }}
+        VENV_REUSE: ${{ inputs.reuse-env }}
         SGLANG_VERSION: ${{ inputs.sglang-version }}
         TRITON_KERNELS_REF: ${{ inputs.triton-kernels-ref }}
         INSTALL_SGLANG: ${{ inputs.install-sglang }}
         INSTALL_TRITON_KERNELS: ${{ inputs.install-triton-kernels }}
         REQUIRE_PROJECT: ${{ inputs.require-project }}
         COLLECT_TESTS: ${{ inputs.collect-tests }}
+        # Pruning only pays off when the cache is uploaded afterwards. Where it
+        # just stays on the runner's disk, uv manages it fine on its own.
+        PRUNE_UV_CACHE: ${{ inputs.cache }}
       run: |
         bash "${GITHUB_WORKSPACE}/.github/scripts/prepare_ci_env.sh"

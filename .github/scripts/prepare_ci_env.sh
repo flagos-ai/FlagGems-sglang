@@ -42,10 +42,13 @@
 #   PYTHON_BIN             interpreter to build the environment from
 #                          (default: python)
 #   UV_VERSION             uv version to install when uv is absent
-#   VENV_PATH              venv to create and install into (default: .venv),
-#                          or empty to install into PYTHON_BIN directly
+#   VENV_PATH              venv to create and install into (default:
+#                          ~/.cache/flaggems-sglang-ci/venv), or "none" to
+#                          install into PYTHON_BIN directly
 #   VENV_SYSTEM_SITE_PACKAGES  1 (default) let the venv see the base
 #                          interpreter's packages, 0 to isolate it
+#   VENV_REUSE             1 (default) reuse an existing venv when its base
+#                          interpreter still matches, 0 to always rebuild
 #   INSTALL_PROJECT        1 (default) / 0 to skip installing this repo
 #   EDITABLE_INSTALL       1 (default) editable install of this repo, 0 regular
 #   INSTALL_SGLANG         1 (default) / 0 to skip sglang
@@ -59,6 +62,9 @@
 #   REQUIRE_PROJECT        1 (default) require `import flaggems_sglang`
 #   REQUIRE_TORCH          1 to require torch, 0 (default) to only report it
 #   COLLECT_TESTS          1 (default) run `pytest --collect-only` smoke check
+#   PRUNE_UV_CACHE         1 (default) run `uv cache prune --ci` at the end;
+#                          set to 0 where the cache stays on the runner
+#   UV_CACHE_DIR           uv's cache location, honoured by uv as usual
 #   UV_INDEX / PIP_INDEX_URL  honoured by uv as usual
 
 set -euo pipefail
@@ -89,10 +95,14 @@ export UV_HTTP_TIMEOUT="${UV_HTTP_TIMEOUT:-120}"
 UV_VERSION="${UV_VERSION:-0.11.22}"
 
 # ── Settings ─────────────────────────────────────────────────
-# Relative paths are resolved against the current directory, which in CI is the
-# workspace root.
-VENV_PATH="${VENV_PATH-.venv}"
+# Default the environment to a fixed path under $HOME rather than into the
+# workspace. actions/checkout runs `git clean -ffdx` before every run, and -x
+# deletes ignored files, so a workspace venv is destroyed each time and has to
+# be rebuilt from scratch. Under $HOME it survives on a self-hosted runner and
+# the reuse path below turns the whole preparation into a near no-op.
+VENV_PATH="${VENV_PATH:-${HOME}/.cache/flaggems-sglang-ci/venv}"
 VENV_SYSTEM_SITE_PACKAGES="${VENV_SYSTEM_SITE_PACKAGES:-1}"
+VENV_REUSE="${VENV_REUSE:-1}"
 
 INSTALL_PROJECT="${INSTALL_PROJECT:-1}"
 EDITABLE_INSTALL="${EDITABLE_INSTALL:-1}"
@@ -110,6 +120,7 @@ TRITON_KERNELS_URL="${TRITON_KERNELS_URL:-triton_kernels @ git+${TRITON_REPO}@${
 REQUIRE_PROJECT="${REQUIRE_PROJECT:-1}"
 REQUIRE_TORCH="${REQUIRE_TORCH:-0}"
 COLLECT_TESTS="${COLLECT_TESTS:-1}"
+PRUNE_UV_CACHE="${PRUNE_UV_CACHE:-1}"
 
 # Excluded on top of the built-in blacklist in tools/sglang_safe_deps.py.
 #
@@ -233,19 +244,51 @@ fi
 # interpreter found above. That keeps the runner's base image unmodified (it
 # may well be shared between jobs) while the vendor torch and Triton/FlagTree
 # compiler living there stay importable.
-if [ -n "${VENV_PATH}" ]; then
+if [ "${VENV_PATH}" != "none" ]; then
   step "Virtual environment"
 
   BASE_PYTHON="${PYTHON_BIN}"
+
+  # Identify an interpreter by what a venv actually inherits from it: the
+  # version it runs and the installation it points at. A venv built from a
+  # different base cannot be reused — its bin/python would still run the old
+  # interpreter, and `uv venv --allow-existing` happily leaves that in place,
+  # producing an environment with two python versions in lib/ and packages
+  # resolving from the wrong one.
+  interpreter_id() {
+    "$1" -c 'import sys; print(sys.version_info[0], sys.version_info[1],
+                               sys.version_info[2], sys.base_prefix)' \
+      2>/dev/null || true
+  }
+
   venv_args=(--python "${BASE_PYTHON}")
   if [ "${VENV_SYSTEM_SITE_PACKAGES}" = "1" ]; then
     venv_args+=(--system-site-packages)
   fi
 
-  printf "Creating %s from %s ...\n" "${VENV_PATH}" "${BASE_PYTHON}"
-  # --allow-existing reuses a venv left by an earlier step or by a previous run
-  # on a self-hosted runner, instead of failing on it.
-  uv venv --allow-existing "${venv_args[@]}" "${VENV_PATH}" || fail
+  BASE_ID="$(interpreter_id "${BASE_PYTHON}")"
+  VENV_ID=""
+  if [ -x "${VENV_PATH}/bin/python" ]; then
+    VENV_ID="$(interpreter_id "${VENV_PATH}/bin/python")"
+  fi
+
+  if [ "${VENV_REUSE}" = "1" ] && [ -n "${VENV_ID}" ] &&
+     [ "${VENV_ID}" = "${BASE_ID}" ]; then
+    # Everything below is idempotent, so the installs degrade to version
+    # checks and the whole preparation becomes a near no-op.
+    printf "Reusing the environment at %s\n" "${VENV_PATH}"
+    uv venv --allow-existing "${venv_args[@]}" "${VENV_PATH}" >/dev/null || fail
+  else
+    if [ -n "${VENV_ID}" ] && [ "${VENV_ID}" != "${BASE_ID}" ]; then
+      warn "the environment at ${VENV_PATH} was built from a different \
+interpreter; rebuilding it"
+    fi
+    printf "Creating %s from %s ...\n" "${VENV_PATH}" "${BASE_PYTHON}"
+    mkdir -p "$(dirname "${VENV_PATH}")"
+    # --clear rather than --allow-existing: a half-populated or mismatched
+    # directory must not be inherited silently.
+    uv venv --clear "${venv_args[@]}" "${VENV_PATH}" || fail
+  fi
 
   VENV_PATH="$(cd "${VENV_PATH}" && pwd)"
   PYTHON_BIN="${VENV_PATH}/bin/python"
@@ -302,7 +345,7 @@ PY
   printf "Environment at %s" "${VENV_PATH}"
   ok
 else
-  warn "VENV_PATH is empty; installing into ${PYTHON_BIN} directly"
+  warn "VENV_PATH=none; installing into ${PYTHON_BIN} directly"
 fi
 
 # Always target the resolved interpreter explicitly: uv refuses to install
@@ -756,6 +799,38 @@ if [ "${COLLECT_TESTS}" = "1" ]; then
     tail -30 "${COLLECT_LOG}"
     warn "pytest collection reported problems; see the log above"
   fi
+fi
+
+# ── Cache maintenance ────────────────────────────────────────
+# Shrink the cache to what is worth carrying between runs. `prune --ci` drops
+# the pre-built wheels and their unzipped copies — cheap to fetch again — and
+# keeps the registry metadata and anything built from source, which is the
+# expensive part. Measured here: 273M down to 17M. Without it the cache grows
+# every run until uploading and restoring it costs more than the downloads it
+# saves.
+#
+# Only run this where the cache is about to be uploaded and replaced. On a
+# runner that keeps its own cache directory, pruning just throws away wheels
+# the next run would have reused.
+if [ "${PRUNE_UV_CACHE}" = "1" ]; then
+  step "uv cache"
+
+  # `uv cache size` is still experimental and prints raw bytes behind a
+  # warning, so measure with du instead.
+  cache_size() {
+    local dir
+    dir="$(uv cache dir 2>/dev/null || true)"
+    if [ -n "${dir}" ] && [ -d "${dir}" ]; then
+      du -sh "${dir}" 2>/dev/null | cut -f1
+    else
+      printf "n/a"
+    fi
+  }
+
+  printf "Size before pruning: %s\n" "$(cache_size)"
+  uv cache prune --ci >/dev/null 2>&1 || warn "uv cache prune failed"
+  printf "Size after pruning:  %s" "$(cache_size)"
+  ok
 fi
 
 done_banner "CI environment ready"
