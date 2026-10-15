@@ -29,7 +29,7 @@ backends:
   BI-V150:
     enabled: true
   PPU-ZW810E:
-    enabled: false
+    enabled: true
   MLU590-M9DE:
     enabled: false
   P800:
