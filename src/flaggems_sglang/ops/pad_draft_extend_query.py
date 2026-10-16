@@ -166,7 +166,9 @@ def pad_draft_extend_query(q, padded_q, seq_lens_q, cu_seqlens_q):
 
     block = min(triton.next_power_of_2(max(hd, 16)), _MAX_BLOCK)
     nchunk = triton.cdiv(hd, block)
-    if nchunk > _MAX_CHUNKS:  # keep the unrolled loop inside the pipeline budget
+    if (
+        nchunk > _MAX_CHUNKS
+    ):  # keep the unrolled loop inside the pipeline budget
         block = triton.next_power_of_2(hd)
         nchunk = 1
 
