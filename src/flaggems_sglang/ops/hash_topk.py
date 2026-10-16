@@ -96,7 +96,9 @@ def _hash_topk_kernel(
 
     # gather the logits of this token's experts; masked lanes -> -inf so that
     # softplus(-inf) == 0 and they drop out of the reduction.
-    logit = tl.load(rl_ptr + row * NR + eid, mask=m, other=float("-inf")).to(tl.float32)
+    logit = tl.load(rl_ptr + row * NR + eid, mask=m, other=float("-inf")).to(
+        tl.float32
+    )
 
     ax = tl.maximum(logit, -logit)  # |logit| without tl.abs
     sp = tl.maximum(logit, 0.0) + tl.log(1.0 + tl.exp(-ax))
