@@ -1,0 +1,59 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build Debian Packages
+
+# Verifies that the packaging definition still builds and installs. It is
+# not a release path: packages published to the FlagOS repositories are
+# built and uploaded by flagos-ai/build-infra from a pinned ref, so no tag
+# triggers a build here.
+on:
+  pull_request:
+    branches: [master]
+    # Only what changes the package. A .deb built on a source PR is
+    # published nowhere and downloaded by no one. A build can be requested
+    # by hand.
+    paths:
+      - 'packaging/debian/**'
+      - '.github/workflows/build-deb.yml'
+  workflow_dispatch:
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build .deb
+        run: bash packaging/debian/build-helpers/build-flaggems-sglang.sh
+
+      - name: Install it in a clean container
+        run: |
+          set -euo pipefail
+          for image in ubuntu:22.04 ubuntu:24.04; do
+            docker run --rm -v "$PWD/debian-packages:/pkg:ro" "$image" bash -c '
+              set -e
+              apt-get update -qq
+              apt-get install -y -qq /pkg/*.deb
+              dpkg -L python3-flaggems-sglang | grep -c "\.py$"
+            '
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: flaggems-sglang-all-packages
+          path: debian-packages/*.deb
+          retention-days: 7

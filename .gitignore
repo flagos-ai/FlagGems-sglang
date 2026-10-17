@@ -41,3 +41,7 @@ result_*.log
 # information for Eclipse / Flash Builder.
 
 .DS_Store
+
+# local packaging build outputs
+debian-packages/
+rpm-packages/

@@ -1,0 +1,45 @@
+Source: flaggems-sglang
+Section: python
+Priority: optional
+Maintainer: FlagOS Contributors <contact@flagos.io>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all,
+               python3-setuptools,
+               python3-wheel,
+               pybuild-plugin-pyproject
+Standards-Version: 4.6.2
+Homepage: https://github.com/flagos-ai/FlagGems-sglang
+Vcs-Browser: https://github.com/flagos-ai/FlagGems-sglang
+Vcs-Git: https://github.com/flagos-ai/FlagGems-sglang.git
+Rules-Requires-Root: no
+
+Package: python3-flaggems-sglang
+Architecture: all
+Depends: python3:any,
+         ${misc:Depends},
+         python3-packaging,
+         python3-pybind11,
+         python3-sqlalchemy (>= 1.4.31),
+         python3-typing-extensions,
+         python3-yaml
+# python3-sqlalchemy: the distro packages are 1.4 on Ubuntu 22.04/24.04;
+# the module imports on 1.4 only with the compatibility shim in
+# utils/models/sql.py (FlagGems-sglang#190).
+# python3-torch is intentionally NOT declared. The distro 'python3-torch'
+# is CPU-only and unsuitable for GPU workloads; users install matching
+# torch via pip - see packaging/INSTALL.md.
+# Triton is not a hard Depends either: the upstream python3-triton is too
+# old (Ubuntu noble ships 2.0). python3-flagtree-nvidia is the
+# distro-distributable option, so we Recommend it.
+Recommends: python3-flagtree-nvidia
+Suggests: python3-pytest
+Description: FlagGems-sglang - Triton operator library for SGLang
+ FlagGems-sglang is a high-performance operator library written in the
+ Triton language for the SGLang inference engine. Operators are resolved
+ at import time through a generic / vendor / architecture registrar, so
+ one package serves every FlagOS backend.
+ .
+ Triton (provided here by python3-flagtree-nvidia or upstream
+ python3-triton) and torch are required at runtime; without them the
+ kernels cannot JIT-compile.
