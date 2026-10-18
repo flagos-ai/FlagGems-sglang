@@ -1,0 +1,43 @@
+--- a/sglang/kernels/ops/attention/dsv4_attn_metadata_kernels.py
++++ b/sglang/kernels/ops/attention/dsv4_attn_metadata_kernels.py
+@@ -157,12 +157 @@
+-def _expand_prefill_causally_kernel(
+-    req_pool_ptr,
+-    seq_lens_ptr,
+-    extend_seq_lens_ptr,
+-    seq_lens_casual_ptr,
+-    req_pool_repeated_ptr,
+-    bs,
+-    num_tokens,
+-    total_tokens,
+-    BLOCK: tl.constexpr,
+-    BS_P2: tl.constexpr,
+-):
++def _expand_prefill_causally_kernel(req_pool_ptr, seq_lens_ptr, extend_seq_lens_ptr, seq_lens_casual_ptr, req_pool_repeated_ptr, bs, num_tokens, total_tokens, BLOCK: tl.constexpr, BS_P2: tl.constexpr):
+@@ -171,6 +159,0 @@
+-
+-    b = tl.arange(0, BS_P2)
+-    bmask = b < bs
+-    extend = tl.load(extend_seq_lens_ptr + b, mask=bmask, other=0).to(tl.int32)
+-    start_locs = tl.cumsum(extend, axis=0) - extend
+-
+@@ -179,2 +162,9 @@
+-    started = (start_locs[None, :] <= t[:, None]) & bmask[None, :]
+-    r = tl.sum(started.to(tl.int32), axis=1) - 1
++    r = tl.full((BLOCK,), -1, tl.int32)
++    start_loc = tl.full((BLOCK,), 0, tl.int32)
++    prefix = tl.full((), 0, tl.int32)
++    for b in range(bs):
++        ext = tl.load(extend_seq_lens_ptr + b).to(tl.int32)
++        started = prefix <= t
++        r = tl.where(started, b, r)
++        start_loc = tl.where(started, prefix, start_loc)
++        prefix += ext
+@@ -182 +171,0 @@
+-
+@@ -185,4 +174 @@
+-    start_loc = tl.sum(tl.where(started, extend[None, :], 0).to(tl.int32), axis=1) - ext
+-    causal = (seq_len - ext + 1) + (t - start_loc)
+-    causal = tl.where(is_real, causal, 1)
+-
++    causal = tl.where(is_real, seq_len - ext + 1 + t - start_loc, 1)

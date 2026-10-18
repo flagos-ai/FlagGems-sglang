@@ -1,0 +1,38 @@
+--- a/sglang/kernels/jit/include/sgl_kernel/deepseek_v4/topk_impl.cuh
++++ b/sglang/kernels/jit/include/sgl_kernel/deepseek_v4/topk_impl.cuh
+@@ -352 +352,3 @@
+-    uint32_t key[kItems];
++    // Stable boundary: score descending, then raw logical index ascending.
++    // A score-only final atomic reservation can select different equal-score keys.
++    uint64_t key[kItems];
+@@ -360 +362 @@
+-      key[i] = extract_exact_bin(tie.value);
++      key[i] = (uint64_t(extract_exact_bin(tie.value)) << 32) | uint64_t(0xFFFFFFFFu - tie.idx);
+@@ -371,2 +373,2 @@
+-    for (int round = 0; round < 4; round++) {
+-      const uint32_t shift = 24 - round * 8;
++    for (int round = 0; round < 8; round++) {
++      const uint32_t shift = 56 - round * 8;
+@@ -380 +382 @@
+-      if (round < 3 && tx < kRadixSize) {
++      if (round < 7 && tx < kRadixSize) {
+@@ -405 +407 @@
+-      if (round < 3) total_active = equal_count;
++      if (round < 7) total_active = equal_count;
+@@ -418 +420 @@
+-        } else if (round == 3) {
++        } else if (round == 7) {
+@@ -421,4 +423,4 @@
+-        // my_bin == thr && round < 3: stay active for next round
+-      }
+-
+-      if (round == 3 || topk_remain == 0) break;
++        // my_bin == thr && round < 7: stay active for next round
++      }
++
++      if (round == 7 || topk_remain == 0) break;
+--- a/sglang/kernels/ops/attention/dsv4/topk.py
++++ b/sglang/kernels/ops/attention/dsv4/topk.py
+@@ -52 +52 @@
+-        make_name("topk_v2"),
++        make_name("topk_v2_stable_ties"),

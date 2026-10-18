@@ -17,7 +17,6 @@ import functools
 import importlib
 import inspect
 import os
-import sys
 from pathlib import Path
 
 from ..common import vendors
@@ -107,24 +106,25 @@ class BackendArchEvent:
 
     def get_arch_module(self):
         """Load backend.<arch>"""
-        path_dir = os.path.dirname(self.current_arch_path)
-        sys.path.insert(0, str(path_dir))
-        current_arch_module = importlib.import_module(self.arch)
-        sys.path.remove(str(path_dir))
+        current_arch_module = importlib.import_module(
+            f"{vendor_module.__name__}.{self.arch}"
+        )
         return current_arch_module
 
     def get_arch_ops(self):
         arch_specialized_ops = []
         modules = []
-        sys.path.append(self.current_arch_path)
-        ops_module = importlib.import_module(f"{self.arch}.ops")
+        ops_module = importlib.import_module(
+            f"{self.arch_module.__name__}.ops"
+        )
         try:
             ops_module = self.arch_module.ops
             modules.append(ops_module)
         except Exception:
             try:
-                sys.path.append(self.current_arch_path)
-                ops_module = importlib.import_module(f"{self.arch}.ops")
+                ops_module = importlib.import_module(
+                    f"{self.arch_module.__name__}.ops"
+                )
                 modules.append(ops_module)
             except Exception as err_msg:
                 self.error_msgs.append(err_msg)
@@ -141,7 +141,7 @@ def import_vendor_extra_lib(vendor_name=None):
         return
     global ops_module, fused_module
     try:
-        ops_module = importlib.import_module(f"_{vendor_name}.ops")
+        ops_module = importlib.import_module(f"{__name__}._{vendor_name}.ops")
     except ModuleNotFoundError:
         print(
             f"[Note] No specialized common operators"
@@ -153,7 +153,9 @@ def import_vendor_extra_lib(vendor_name=None):
         raise RuntimeError(f"Import vendor extra lib failed: {e}")
 
     try:
-        fused_module = importlib.import_module(f"_{vendor_name}.fused")
+        fused_module = importlib.import_module(
+            f"{__name__}._{vendor_name}.fused"
+        )
     except ModuleNotFoundError:
         print(
             f"[Note] No specialized fused operators"
@@ -229,10 +231,9 @@ fn = torch.{device_name}
 
 def get_vendor_module(vendor_name, query=False):
     def get_module(vendor_name):
-        current_file_path = os.path.abspath(__file__)
-        current_dir_path = os.path.dirname(current_file_path)
-        sys.path.append(current_dir_path)
-        return importlib.import_module(vendor_name)
+        # Resolve inside this distribution. Bare _nvidia/hopper names collide
+        # with FlagGems when both libraries are imported in the same process.
+        return importlib.import_module(f"{__name__}.{vendor_name}")
 
     if query:
         # Provide the user the requested instance

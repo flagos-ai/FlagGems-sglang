@@ -1,0 +1,27 @@
+{
+  "stable-topk": {
+    "patch": "topk-stable-ties.patch",
+    "files": [
+      {
+        "path": "sglang/kernels/jit/include/sgl_kernel/deepseek_v4/topk_impl.cuh",
+        "before": "82e2d7632aa9538c7e5bab6f4ccad8ce44bca838a8592512b804c0d848374236",
+        "after": "05391327f86281281860b2363a4fbd4ec42d38630da1bc3e953ea7d904ef3a2e"
+      },
+      {
+        "path": "sglang/kernels/ops/attention/dsv4/topk.py",
+        "before": "b90a99e105021f50ccf058b36e1e4c4e547b93c5534a6c28c44d7044ae1dc3f5",
+        "after": "479a87074829d062ef9b779e8f7638d07c7ab16b5ed8e3e365dbd3edb8a65d76"
+      }
+    ]
+  },
+  "flagtree36-metadata": {
+    "patch": "flagtree36-metadata-compat.patch",
+    "files": [
+      {
+        "path": "sglang/kernels/ops/attention/dsv4_attn_metadata_kernels.py",
+        "before": "d24e6a15b8d43e1fbaef795a2e9ce9bc8dafc24ec11bf1e6effda9840fd3f3ff",
+        "after": "d31a09a943868d53ef7114df10c7f64f29022ca0f2c625d0350bd820caa2867a"
+      }
+    ]
+  }
+}
