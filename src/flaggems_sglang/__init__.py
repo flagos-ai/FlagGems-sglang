@@ -31,6 +31,9 @@ from flaggems_sglang import runtime  # noqa: F401
 from flaggems_sglang import testing  # noqa: F401
 from flaggems_sglang.runtime.op_registrar import OpRegistrar
 
+device = runtime.device.name
+vendor_name = runtime.device.vendor_name
+
 _op_registrar = OpRegistrar()
 _op_registrar.apply(globals())
 
@@ -44,9 +47,6 @@ def get_op(name: str) -> Optional[Callable]:
     """Look up a resolved operator by name; ``None`` if not registered."""
     return _op_registrar.get(name)
 
-
-device = runtime.device.name
-vendor_name = runtime.device.vendor_name
 
 __version__ = "0.1.0"
 
