@@ -61,6 +61,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "flaggems_sglang.runtime" = ["*/**/*.yaml"]
+"flaggems_sglang_backport" = ["patches/*.patch"]
 
 [tool.scikit-build]
 build.verbose = true
