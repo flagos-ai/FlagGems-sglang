@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from backend_utils import VendorDescriptor  # noqa: F402
+from ..backend_utils import VendorDescriptor  # noqa: F402
 
 
 def get_triton_extra_name():

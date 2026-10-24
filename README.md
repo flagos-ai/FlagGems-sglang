@@ -64,4 +64,9 @@ pytest -q benchmark/test_silu_and_mul.py --level core --iter 1 --warmup 1
 - Most tests/benchmarks require a CUDA-capable GPU runtime.
 - `--collect-only` is recommended first to quickly check import and discovery.
 
+The [DeepSeek V4.1 H100 adapter](docs/dsv41-h100-operators.md)
+keeps SGLang request/candidate FP4 fusion here and calls FlagGems for
+block-FP8 GEMM, explicit-slot FP4 math and exact mHC. The optional `dsv41`
+extra pins the common operator dependency.
+
 This project is licensed under the [Apache (version 2.0) License](./LICENSE).

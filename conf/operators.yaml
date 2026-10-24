@@ -1030,6 +1030,13 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: dsv41_fp4_indexer
+    description: H100 packed E2M1/UE8M0 index scoring with six-query reuse and persistent scheduling.
+    for: [fp4_index_logits_req_to_token, fp4_index_logits_candidate_blocks]
+    labels: [fused, sglang, DeepSeekV4]
+    kind: [NeuralNetwork]
+    stages:
+      - experimental: '0.1'
   - id: tiny_k_gemm
     description: |
       Small-K, large-N GEMM: out = x @ w.T with m <= 16 and k in {128, 256}.

@@ -43,6 +43,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dsv41 = [
+    "flag_gems @ git+https://github.com/CherryLemon/FlagGems.git@2f21e073d272accb6c54666e7b5611e25c00d1dc",
+    "tilelang==0.1.12",
+]
+
 test = [
     "pytest>=7.1.0",
     "numpy>=1.26",
@@ -53,6 +58,9 @@ test = [
 [project.urls]
 Homepage = "https://github.com/flagos-ai/FlagGems-sglang"
 
+[project.entry-points."sglang.srt.plugins"]
+flaggems_dsv41 = "flaggems_sglang_plugin:load_plugin"
+
 [tool.setuptools]
 package-dir = { "" = "src" }
 
@@ -60,6 +68,8 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"flaggems_sglang_plugin" = ["patches/*.patch", "patches/*.json"]
+
 "flaggems_sglang.runtime" = ["*/**/*.yaml"]
 
 [tool.scikit-build]
