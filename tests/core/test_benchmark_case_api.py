@@ -336,6 +336,7 @@ def test_explicit_baseline_key_preserves_default_shape_records():
         torch_op=lambda x: x,
         shapes=[(2,)],
         shape_desc="probe",
+        input_fn=lambda *args: iter(()),
     )
     plain = OpBenchmark(**common)
     keyed = OpBenchmark(
