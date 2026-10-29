@@ -10,6 +10,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference.mrotary_embedding import (
     WORKLOADS,
+    baseline_key,
     build_inputs,
     case_parameters,
     describe_inputs,
@@ -21,6 +22,10 @@ from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark, is_case_listing
 
 SHAPES = [(i,) for i in range(len(WORKLOADS))]
+
+
+def _baseline_key(**kwargs):
+    return baseline_key(kwargs)
 
 
 def _input_fn(shape, cur_dtype, device):
@@ -47,6 +52,7 @@ def test_perf_mrotary_embedding():
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         shape_desc="Qwen3.6 TP4 mRoPE configuration",
+        baseline_key_fn=_baseline_key,
     )
     if not (
         is_case_listing()

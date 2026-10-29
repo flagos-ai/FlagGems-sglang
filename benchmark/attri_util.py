@@ -477,6 +477,15 @@ def lookup_base_record_ex(base_data, op_name, dtype, shape_detail):
         if not op_entry:
             return None, f"baseline 中没有算子 '{op_name}'"
         shapes = op_entry.get("shapes", {})
+        if isinstance(shape_detail, dict) and "baseline_key" in shape_detail:
+            key = shape_detail["baseline_key"]
+            rec = shapes.get(key, {}).get(str(dtype))
+            if rec is None:
+                return (
+                    None,
+                    f"baseline 没有精确匹配 '{op_name}' key={key} dtype={dtype}",
+                )
+            return rec, None
         first_shape = _first_tensor_shape(shape_detail)
         if first_shape is None:
             return None, (

@@ -54,6 +54,7 @@ class OpBenchmark(GenericBenchmark):
         shapes: Iterable[Sequence[int]],
         shape_desc: str,
         more_shapes: Optional[Iterable[Sequence[int]]] = None,
+        baseline_key_fn=None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -61,6 +62,16 @@ class OpBenchmark(GenericBenchmark):
         self.more_shapes = [tuple(shape) for shape in more_shapes or ()]
         self.shapes = list(self.core_shapes)
         self.shape_desc = shape_desc
+        self.baseline_key_fn = baseline_key_fn
+
+    def record_shapes(self, *args, **kwargs):
+        shapes = super().record_shapes(*args, **kwargs)
+        if self.baseline_key_fn is None:
+            return shapes
+        return dict(
+            inputs=shapes,
+            baseline_key=self.baseline_key_fn(*args, **kwargs),
+        )
 
     def set_shapes(self, shape_file_path: Optional[str] = None) -> None:
         self.shapes = list(self.core_shapes)
