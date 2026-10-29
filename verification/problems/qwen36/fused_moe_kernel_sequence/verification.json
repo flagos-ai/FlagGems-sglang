@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "preserve_layout": true,
+  "mutates": [
+    "hidden_states"
+  ],
+  "capture_return": true,
+  "returns_none": false,
+  "aliases": {
+    "0": "hidden_states"
+  },
+  "check": {
+    "type": "standard",
+    "atol": 0.002,
+    "rtol": 0.016,
+    "equal_nan": false
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "api_version": "v6.0",
+  "name": "_fused_moe_kernel_sequence",
+  "requires_triton_kernel": true,
+  "description": "Unquantized BF16 SiLU gated MoE kernel-sequence ABI, E256/H2048/I128/topk8. Config resolution and token alignment are input preparation, not inside the measured interface. Documented inplace=True returns hidden_states; result is TP partial sum without all-reduce. Quantized/bias/LoRA/filtered variants are outside this suite.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sorted_token_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_tokens_post_padded",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "config",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "down_config",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "down_moe_use_tma",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b1",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "b2",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "use_fp8_w8a8",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "use_int8_w8a8",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "use_int8_w8a16",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "use_int4_w4a16",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "per_channel_quant",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "w1_scale",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "w2_scale",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "w1_zp",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "w2_zp",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "a1_scale",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "a2_scale",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "block_shape",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "activation",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "is_gated",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "no_combine",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "inplace",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "apply_router_weight_on_input",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "gemm1_alpha",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "gemm1_limit",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "filter_expert",
+      "kind": "keyword_only",
+      "required": true
+    },
+    {
+      "name": "hooks",
+      "kind": "keyword_only",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [
+      "hidden_states"
+    ],
+    "returns_alias_of": {
+      "output": "hidden_states"
+    }
+  }
+}

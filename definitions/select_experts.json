@@ -1,0 +1,52 @@
+{
+  "api_version": "v6.0",
+  "name": "select_experts",
+  "requires_triton_kernel": true,
+  "description": "Documented ungrouped softmax TopKConfig(top_k=8,renormalize=True) route. Structural TopKConfig fields follow SGLang v0.5.11. Returns StandardTopKOutput(weights FP32, IDs INT32, original router_logits). Expert order may differ while ID/weight pairs must agree. Grouped, filtered and custom routes are outside this workload suite.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "router_logits",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_config",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "layer_id",
+      "kind": "keyword_only",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "num_token_non_padded",
+      "kind": "keyword_only",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "expert_location_dispatch_info",
+      "kind": "keyword_only",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "topk_weights",
+    "topk_ids",
+    "router_logits"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {
+      "router_logits": "router_logits"
+    }
+  }
+}

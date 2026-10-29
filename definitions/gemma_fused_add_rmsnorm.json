@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_fused_add_rmsnorm",
+  "requires_triton_kernel": true,
+  "description": "Add input and residual in FP32, write the BF16 sum to residual, normalize the unrounded sum with raw weight (1+w), and write input. Returns Python None. Both input and residual are observable mutations.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-06
+    },
+    {
+      "name": "enable_pdl",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [],
+  "effects": {
+    "mutates": [
+      "input",
+      "residual"
+    ],
+    "returns_alias_of": {}
+  }
+}

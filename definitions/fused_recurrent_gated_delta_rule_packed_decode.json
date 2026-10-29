@@ -1,0 +1,73 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_recurrent_gated_delta_rule_packed_decode",
+  "requires_triton_kernel": true,
+  "description": "Packed GDN single-token decode. Split q/k/v, optionally L2-normalize, compute log gate and BF16-rounded sigmoid beta, update selected FP32 state slots and BF16 out. Returns (out,initial_state), both aliases of input buffers. Negative slot indices produce zero output without state update.",
+  "parameters": [
+    {
+      "name": "mixed_qkv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "A_log",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "dt_bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "initial_state",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "ssm_state_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "use_qk_l2norm_in_kernel",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false
+    }
+  ],
+  "outputs": [
+    "out",
+    "initial_state"
+  ],
+  "effects": {
+    "mutates": [
+      "initial_state",
+      "out"
+    ],
+    "returns_alias_of": {
+      "out": "out",
+      "initial_state": "initial_state"
+    }
+  }
+}

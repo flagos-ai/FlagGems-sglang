@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "preserve_layout": true,
+  "mutates": [],
+  "capture_return": true,
+  "returns_none": false,
+  "aliases": {
+    "2": "router_logits"
+  },
+  "check": {
+    "type": "standard",
+    "atol": 2e-05,
+    "rtol": 2e-05,
+    "equal_nan": false,
+    "output_tolerances": {
+      "1": {
+        "atol": 0,
+        "rtol": 0
+      }
+    }
+  }
+}
