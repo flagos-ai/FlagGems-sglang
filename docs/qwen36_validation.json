@@ -1,0 +1,51 @@
+{
+  "schema": "qwen36-validation/v1",
+  "native_upstream": "sglang v0.5.11 / 612785ffdcaf35552f1ed433a981d596ca9fe900",
+  "native_gpu": "NVIDIA H800",
+  "target_gpu": "Ascend910B4-1",
+  "h800_native_vs_portable": {
+    "passed": 38,
+    "failed": 0
+  },
+  "new_assertion_controls": {
+    "passed": 23,
+    "failed": 0
+  },
+  "reference_as_candidate": {
+    "h800": 38,
+    "ascend": 38,
+    "ascend_cpu_reference": 38
+  },
+  "correctness_dummy_reached": 38,
+  "benchmark_core_dummy_reached": 28,
+  "ks3_prefix": "op-verify/sglang-qwen36/20261030-native-v1",
+  "ks3_manifest_sha256": "d37d49f2dab3c14108acdd0ad730cb1d11d32424f7c19f5b03045ae377ca4ece",
+  "ascend_ks3_replay": {
+    "passed": 28,
+    "failed": 0,
+    "skipped": 0
+  },
+  "h800_baseline": {
+    "operators": 7,
+    "cases": 28,
+    "ncu_reports": 28,
+    "return_mode": "median",
+    "artifact_sha256": "d27aba1e52f7ac41800b0b3e108c383dd8c044256dc7789ac4574318b39aa09f"
+  },
+  "ascend_baseline_pipeline": {
+    "cases": 28,
+    "all_keys_matched": true,
+    "all_scaling_factors_nonzero": true,
+    "mode": "reference-as-candidate; existing backend timer"
+  },
+  "companions": {
+    "op_verify": "https://github.com/lukatao/op-verify/pull/9",
+    "ops_baseline": "https://github.com/zhaojs12345/ops-baseline/pull/68"
+  },
+  "limitations": [
+    "No new backend kernel implementation is delivered.",
+    "Default unavailable candidates retain normal skip behavior.",
+    "Reference-as-candidate timings validate the comparison pipeline, not optimized kernel performance.",
+    "Ascend retains the existing do_bench_npu timer; NVIDIA collection uses median do_bench timing."
+  ]
+}
