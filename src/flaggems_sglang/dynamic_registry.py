@@ -67,6 +67,10 @@ class DynamicOpOverride:
         self._tracked: set = set()
         self._call_counts: Dict[str, int] = {}
 
+    def call_counts(self) -> Dict[str, int]:
+        """Snapshot override invocation counts for per-case execution evidence."""
+        return dict(self._call_counts)
+
     def override(
         self,
         op_name: str,

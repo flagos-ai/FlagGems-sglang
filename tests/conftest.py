@@ -209,6 +209,18 @@ def get_reason(report):
         return str(report.longrepr)
 
 
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    registry = getattr(item.config, "_override_registry", None)
+    before = registry.call_counts() if registry is not None else {}
+    yield
+    if registry is not None:
+        TEST_RESULTS[item.nodeid]["candidate_calls"] = {
+            name: count - before.get(name, 0)
+            for name, count in registry.call_counts().items()
+        }
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_logreport(report):
     result = TEST_RESULTS.setdefault(
