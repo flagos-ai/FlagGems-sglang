@@ -506,6 +506,5 @@ def baseline_key(operator, inputs):
         sort_keys=True,
         separators=(",", ":"),
     )
-    return (
-        operator + "-qwen36-v1-" + hashlib.sha256(payload.encode()).hexdigest()
-    )
+    # The operator is already part of the hashed payload and JSON group.
+    return "qwen36-v1-" + hashlib.sha256(payload.encode()).hexdigest()
