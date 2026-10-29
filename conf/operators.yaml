@@ -1576,6 +1576,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: sparse_mla_active_split
+    description: |
+      Experimental Hy4-preview SM90 BF16 selected-key sparse MLA with four active heads.
+      Splits selected positions into 32 groups of 64 and merges a single learned sink term.
+      Explicit opt-in provider; supports query rows 1 or 4 and preserves native fallback routing.
+    for:
+      - sparse_mla_active_split
+    labels:
+      - fused
+      - attention
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - experimental: '0.1'
   - id: state_passing
     description: |
       Mamba2 SSD inter-chunk state-passing scan.
