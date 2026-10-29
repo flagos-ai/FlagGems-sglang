@@ -326,3 +326,23 @@ def test_listing_run_never_builds_or_measures(monkeypatch):
 
     result = benchmark.run()
     assert len(result.cases) == 2
+
+
+def test_explicit_baseline_key_preserves_default_shape_records():
+    from benchmark.op_benchmark import OpBenchmark
+
+    common = dict(
+        op_name="probe",
+        torch_op=lambda x: x,
+        shapes=[(2,)],
+        shape_desc="probe",
+    )
+    plain = OpBenchmark(**common)
+    keyed = OpBenchmark(
+        **common, baseline_key_fn=lambda x: f"stride-{x.stride(0)}"
+    )
+    x = torch.empty_strided((2,), (3,))
+    assert plain.record_shapes(x) == [torch.Size([2])]
+    assert keyed.record_shapes(x) == dict(
+        inputs=[torch.Size([2])], baseline_key="stride-3"
+    )

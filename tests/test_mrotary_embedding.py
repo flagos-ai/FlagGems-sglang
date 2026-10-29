@@ -1,7 +1,7 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compare an injected candidate with SGLang's original Triton mRoPE."""
+"""Compare candidates with native NVIDIA or portable Torch mRoPE."""
 
 from copy import deepcopy
 
@@ -21,7 +21,7 @@ WORKLOADS = native.WORKLOADS + [dict(native.WORKLOADS[4], axis_routing=True)]
 def _make_case(case):
     if cfg.TO_CPU:
         pytest.fail(
-            "The native Triton reference requires a GPU; omit --ref cpu."
+            "This suite uses the device reference; omit --ref cpu."
         )
     inputs = native.build_inputs(case, torch.bfloat16, cfg.device)
     if case.get("axis_routing"):

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "preserve_layout": true,
+  "mutates": ["q", "k"],
+  "returns_none": true,
+  "check": {"type": "standard", "atol": 0.002, "rtol": 0.016, "equal_nan": false}
+}
