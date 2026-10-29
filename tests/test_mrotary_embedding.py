@@ -20,9 +20,7 @@ WORKLOADS = native.WORKLOADS + [dict(native.WORKLOADS[4], axis_routing=True)]
 
 def _make_case(case):
     if cfg.TO_CPU:
-        pytest.fail(
-            "This suite uses the device reference; omit --ref cpu."
-        )
+        pytest.fail("This suite uses the device reference; omit --ref cpu.")
     inputs = native.build_inputs(case, torch.bfloat16, cfg.device)
     if case.get("axis_routing"):
         inputs["positions"].add_(

@@ -98,4 +98,5 @@ def baseline_key(inputs):
         else:
             identity[name] = value
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"))
-    return "mrotary-v1-" + hashlib.sha256(encoded.encode()).hexdigest()
+    # v2 pins the median timing contract used by SGLang's kernel benchmark.
+    return "mrotary-v2-" + hashlib.sha256(encoded.encode()).hexdigest()
