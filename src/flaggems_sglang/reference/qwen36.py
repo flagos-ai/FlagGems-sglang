@@ -25,7 +25,9 @@ def gemma_rmsnorm(input, weight, eps=1e-6, out=None, enable_pdl=None):
     return out
 
 
-def gemma_fused_add_rmsnorm(input, residual, weight, eps=1e-6, enable_pdl=None):
+def gemma_fused_add_rmsnorm(
+    input, residual, weight, eps=1e-6, enable_pdl=None
+):
     del enable_pdl
     summed = input.float() + residual.float()
     y = summed * torch.rsqrt(summed.square().mean(-1, keepdim=True) + eps)
@@ -126,7 +128,9 @@ def chunk_gated_delta_rule_fwd(
             transformed = uu - ww @ stored_state.transpose(-1, -2)
             new_v = _round(transformed, v.dtype)
             score = torch.tril((qq @ kk.transpose(-1, -2)) * decay)
-            out = (qq @ stored_state.transpose(-1, -2)) * gg.exp().unsqueeze(-1)
+            out = (qq @ stored_state.transpose(-1, -2)) * gg.exp().unsqueeze(
+                -1
+            )
             out = (out + _round(score, v.dtype) @ new_v) * scale
             output[b, lo:hi] = out.transpose(0, 1).to(v.dtype)
             weighted = _round(
@@ -355,9 +359,9 @@ def _fused_moe_kernel_sequence(
 
 def silu_and_mul_out(input, out=None):
     half = input.shape[-1] // 2
-    result = (F.silu(input[..., :half].float()) * input[..., half:].float()).to(
-        input.dtype
-    )
+    result = (
+        F.silu(input[..., :half].float()) * input[..., half:].float()
+    ).to(input.dtype)
     if out is None:
         return result
     out.copy_(result)

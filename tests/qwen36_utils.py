@@ -62,7 +62,9 @@ def compare_tensor(actual, expected, device, *, tolerance=None, exact=False):
         tolerance = dict(atol=0, rtol=0)
     elif tolerance is None:
         tolerance = (
-            BF16_TOLERANCE if actual.dtype == torch.bfloat16 else FP32_TOLERANCE
+            BF16_TOLERANCE
+            if actual.dtype == torch.bfloat16
+            else FP32_TOLERANCE
         )
     torch.testing.assert_close(
         actual.cpu(), expected.cpu(), **tolerance, equal_nan=False
@@ -81,7 +83,8 @@ def compare_output(actual, expected, device, operator):
             if isinstance(wanted, torch.Tensor):
                 tolerance = None
                 if (
-                    operator == "fused_recurrent_gated_delta_rule_packed_decode"
+                    operator
+                    == "fused_recurrent_gated_delta_rule_packed_decode"
                     and index == 1
                 ):
                     tolerance = STATE_TOLERANCE
@@ -159,7 +162,9 @@ def validate_result(
             value.shape == original.shape
             and value.stride() == original.stride()
         )
-        assert value.dtype == original.dtype and value.device == original.device
+        assert (
+            value.dtype == original.dtype and value.device == original.device
+        )
         if name not in mutations:
             compare_tensor(value, original, device, exact=True)
         else:

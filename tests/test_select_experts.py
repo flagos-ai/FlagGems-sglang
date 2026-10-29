@@ -38,7 +38,9 @@ def test_select_experts(case):
     try:
         actual = candidate(**inputs)
     except NotImplementedError:
-        pytest.skip("select_experts: candidate not implemented on this backend")
+        pytest.skip(
+            "select_experts: candidate not implemented on this backend"
+        )
     validate_result(
         "select_experts", actual, expected, inputs, expected_inputs, before
     )
