@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import itertools
+import os
 from dataclasses import asdict, dataclass, fields
 from enum import Enum
 from typing import List, Optional, Tuple
@@ -545,6 +546,11 @@ def _detect_self_chip():
     reference chip. Returns "" when the device name can't be read; callers then
     fall back to vendor-only matching.
     """
+    # Some CUDA-compatible SDKs expose only the generic name "GPU". An
+    # explicit, externally verified model keeps multi-model matching exact.
+    configured = os.environ.get("FLAGGEMS_SGLANG_CHIP", "").strip()
+    if configured:
+        return configured
     try:
         return torch.cuda.get_device_name()
     except Exception:
@@ -586,8 +592,13 @@ def lookup_scaling_factor(
             return None
         if self_chip is None:
             self_chip = _SELF_CHIP
+        # Older ops-baseline snapshots spell this vendor "t-head".
+        aliases = {"t-head": "thead"}
+        vendor = aliases.get(vendor, vendor)
         candidates = [
-            c for c in sf.get("chips", []) if c.get("vendor") == vendor
+            c
+            for c in sf.get("chips", [])
+            if aliases.get(c.get("vendor"), c.get("vendor")) == vendor
         ]
         if not candidates:
             return None

@@ -50,7 +50,10 @@ def reference(operator, native=False):
         native_impl = native_module()
         fn = native_impl.get_native(operator)
     else:
-        fn = oracle(operator)
+        # Use the same vendor dispatch as correctness and benchmark tests.
+        from flaggems_sglang.reference import get_reference
+
+        fn = get_reference(operator)
 
     def invoke(**inputs):
         if native:

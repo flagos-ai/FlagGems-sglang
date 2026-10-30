@@ -7,6 +7,8 @@ Shapes come from the two model workload documents. Seeds and scaled synthetic
 values are test design choices: no original tensor dump was supplied.
 """
 
+import os
+import sys
 from dataclasses import asdict, dataclass
 
 OPERATORS = (
@@ -301,9 +303,31 @@ def build_inputs(operator, row, dtype, device):
         values = (
             torch.arange(-128, 128, device=device, dtype=torch.float32) / 16
         )
+        vendor = os.environ.get("DNN_VENDOR") or getattr(
+            sys.modules.get("flaggems_sglang"), "vendor_name", None
+        )
+        # The handoff documents unsupported device randperm on Kunlunxin.
+        # Only fixture index generation moves to CPU; reference math stays
+        # on the vendor device and fixed KS3 replay never regenerates inputs.
+        permutation_device = (
+            "cpu"
+            if vendor == "kunlunxin" and str(device) != "meta"
+            else device
+        )
+        permutation_generator = (
+            torch.Generator(device="cpu").manual_seed(row["seed"])
+            if permutation_device == "cpu" and vendor == "kunlunxin"
+            else generator
+        )
         return torch.stack(
             [
-                values[torch.randperm(256, device=device, generator=generator)]
+                values[
+                    torch.randperm(
+                        256,
+                        device=permutation_device,
+                        generator=permutation_generator,
+                    ).to(device)
+                ]
                 for _ in range(count)
             ]
         ).to(dtype)

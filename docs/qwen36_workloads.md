@@ -93,3 +93,41 @@ pipeline check, not a claim of optimized candidate performance.
 
 Validation receipts belong to the PR description. H800 native-vs-Torch checks
 passed all 38 cases, including boundary controls, before golden export.
+
+
+## Multi-backend reference validation
+
+Golden replay uses the same `get_reference` dispatch as correctness and
+benchmark: `reference/vendors/_<vendor>/<operator>.py` takes precedence over the
+shared Torch oracle. No vendor-specific mathematical oracle was needed on the
+verified Ascend, MetaX, Iluvatar, Hygon, MThreads, T-Head and Kunlunxin devices.
+
+For the handoff's Kunlunxin `tj_gems` environment, preserve its existing
+`python310_torch25_cuda` and set `XPU_EVENT_KL3_ENABLE=1`. One unrelated installed
+candidate uses a Triton decorator unsupported by that SDK. The explicit opt-in
+`FLAGGEMS_SGLANG_REFERENCE_ONLY=1` skips built-in candidate registration while
+retaining actual device detection and reference dispatch. Ordinary imports are
+unchanged. Use this only for reference validation or explicitly injected
+candidates; it does not validate built-in optimized candidates.
+
+Kunlunxin routing fixture indices are generated with an isolated CPU permutation
+and transferred to the real target device, as required by the machine handoff's
+known device-randperm limitation. This is outside timed reference execution;
+mathematical reference operations stay on the target, and fixed KS3 inputs are
+never regenerated.
+
+Cross-chip scaling accepts the historical `t-head` baseline label as `thead`.
+When a vendor SDK reports only the generic device name `GPU`, set
+`FLAGGEMS_SGLANG_CHIP` to the model independently observed with its device tool
+(e.g. `P800` from `xpu-smi`). This chooses a scaling record, not a device; retain
+the normal visibility mask to select a card. Without this opt-in, actual device
+name detection and missing-factor behavior remain unchanged.
+
+Suiyuan is skipped in this validation run at the user's request. Other machines
+outside the handoff plus the explicitly added T-Head/MThreads targets are not
+part of acceptance. See `docs/qwen36_multibackend_validation.json`.
+
+The current P800 hardware table has no bandwidth scaling factor. These memory-
+bottleneck cases therefore retain `factor=None` and report the raw H800/target
+latency ratio. P900 factors are never substituted. This does not affect golden
+correctness or exact baseline-case matching.
