@@ -26,7 +26,7 @@ description: 为 FlagGems-sglang 新算子开发 test、benchmark、definition�
 - 每个算子包含 `tests/test_<op>.py`、`benchmark/test_<op>.py`、`definitions/<op>.json`。正确性与 benchmark 尽量共享 workload/input builder，benchmark core 覆盖文档 workload，正确性包括这些 workload 和必要边界。
 - 保留完整 ABI：shape、dtype、stride、storage offset、标量配置、返回结构、None、mutation、alias、只读输入及未选中状态。记录合成输入与真实 tensor dump 的区别。不能只按 shape 或 case 数声称覆盖一致。
 - 显式定义 reference；正确性使用 `get_candidate(op_name, reference=reference)`，benchmark 提供同一语义的 `torch_op`。复用已有 override/dummy/ref-as-candidate 选择机制，缺 reference 时让公共机制明确报错。保持默认测试方式和注入入口兼容。
-- reference 首选共享 Torch 组网。只有复现后端能力差异后才增加 `src/flaggems_sglang/reference/vendors/_<vendor>/<op>.py` 的 `reference`，经 `get_reference` 分发；golden replay 必须调用同一分发。不要另写一套验证专用数学实现。
+- reference 首选共享 Torch 组网。只有复现后端能力差异后才增加 `src/flaggems_sglang/reference/vendors/_<vendor>/<op>.py` 的 `reference`，经 `get_reference` 分发；国产后端 golden replay 复用该分发。NVIDIA 上先确认分发结果：若它返回原生实现（如 mRoPE），验证 portable Torch reference 时必须显式加载 Torch 实现，避免原生实现自比较；原生 golden 导出仍使用 native 入口。不要另写一套验证专用数学实现。
 - 不假定 NVIDIA 原始实现均为 Triton：检查实际 CUDA、FlashInfer、SGLang kernel 或 Triton 入口、依赖和调用参数，需要时建立独立 SGLang 环境并固定源码/轮子摘要。原生入口缺失应失败，不能静默换成 Torch reference。
 - 精度阈值按算子、dtype、输出制定并说明来源，在 pytest 与 KS3 manifest 中保持语义一致。结构、索引和副作用契约单独检查；不要为了让某台机器通过而临时放宽阈值。
 - 全链路结果区分：已列举、dummy 已触达、数值通过、实际计时完成、基线匹配、可折算。skip、未运行、缺少缩放因子均单独报告。

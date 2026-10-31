@@ -51,7 +51,9 @@ pytest benchmark/test_mrotary_embedding.py -m mrotary_embedding --level core \
 
 在 `verification/problems/<group>/<problem>/` 提供 cases、native 和目标 reference adapter，并按当前 op-verify schema 定义验证契约。对 mutation 在调用前保存输入；捕获所需返回与变更 tensor，显式处理 None、alias、只读值、布局和状态池未选中部分。对没有顺序保证的 TopK，可同时按 ID 重排权重和索引后比较，不能分别排序破坏配对。
 
-在 H800 上先验证 Torch reference 与原始 SGLang 的一致性，再生成 golden。若数据集只导出 core，保留全面 correctness/边界检查作为独立证据，报告两者不同的覆盖范围。
+在 H800 上先验证 Torch reference 与原始 SGLang 的一致性，再生成 golden。检查实际分发，不能仅凭函数名认定 `get_reference()` 返回 Torch：mRoPE 的 NVIDIA vendor override 返回原生 Triton，普通 `--ref-as-candidate` 会让原生实现与自身比较。下面显式将 portable Torch 实现注入 candidate，正确性测试的 expected 仍来自 NVIDIA 原生 reference，因此检查的是两个不同实现。该方法适用于 mRoPE 当前接线；其他算子先确认 expected 来源，再选择对应独立验证路径。
+
+若数据集只导出 core，保留全面 correctness/边界检查作为独立证据，报告两者不同的覆盖范围。
 
 ```sh
 # SGLANG_SOURCE 是相应版本的 FlagGems-sglang checkout。
@@ -60,7 +62,12 @@ export OP_VERIFY_PROBLEMS_DIR="$SGLANG_SOURCE/verification/problems"
 # 使用新任务的唯一 prefix；所有参与机随后使用同一个值。
 export OP_VERIFY_KS3_PREFIX="$GOLDEN_PREFIX"
 
-# 在 NVIDIA 原生环境离线导出；显式指定 problem，避免意外导出全部。
+# 在已确认的 H800 原生环境、SGLang 仓库根目录运行。
+# expected = 原生 Triton；candidate = 显式 portable Torch（不叠加 --ref-as-candidate）。
+pytest tests/test_mrotary_embedding.py -m mrotary_embedding \
+  --override "mrotary_embedding:$SGLANG_SOURCE/src/flaggems_sglang/reference/mrotary_embedding_torch.py:reference"
+
+# 独立精度验证通过后，从 native 入口离线导出 golden。
 op-verify export -p rope/mrotary_embedding --reference-source native \
   --compress --output-dir "$GOLDEN_BUNDLE"
 
@@ -73,6 +80,8 @@ op-verify upload --input-dir "$GOLDEN_BUNDLE"
 ## 4. 各后端重放并验证 reference
 
 在用户指定的每个目标上检查真实设备、容器、Python、厂商 Torch 插件及当前任务设备选择；按现有运行时要求加载插件和环境。不从设备别名猜硬件型号。
+
+国产后端的 reference adapter 应复用 `get_reference` 的 vendor/default 分发。若在 NVIDIA 上重放以验证 portable Torch reference，则像 mRoPE 的 `verification/problems/rope/mrotary_embedding/reference_torch.py` 一样显式选择 Torch 实现，避免走 NVIDIA native override；需要先核对实际 adapter 的实现。
 
 设置与导出相同的 problems/source/KS3 prefix，以及任务独立的缓存目录，再运行：
 
