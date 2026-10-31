@@ -488,6 +488,19 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: deterministic_moe_combine
+    description: |
+      Ordered FP32 routed reduction and shared-expert gate combine for the S5000 BF16 contract.
+    for:
+      - deterministic_moe_combine
+    labels:
+      - fused
+      - sglang
+      - mthreads
+    kind:
+      - NeuralNetwork
+    stages:
+      - experimental: '0.1'
   - id: draft_topk1
     description: |
       Top-1 draft token selection for speculative decoding.
@@ -684,6 +697,19 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_moe_bf16_gemm
+    description: |
+      BF16 routed expert GEMM with optional canonical-W13 SwiGLU epilogue on MUSA.
+    for:
+      - fused_moe_bf16_gemm
+    labels:
+      - fused
+      - sglang
+      - mthreads
+    kind:
+      - NeuralNetwork
+    stages:
+      - experimental: '0.1'
   - id: fused_moe_dispatch_index
     description: |
       Builds the permuted grouped-GEMM destination indices for masked/DeepGEMM MoE in a single launch.
@@ -797,6 +823,19 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_shared_expert_gate_tail
+    description: |
+      MUSA M4/H2048 shared-expert gate projection, BF16 sigmoid and multiply.
+    for:
+      - fused_shared_expert_gate_tail
+    labels:
+      - fused
+      - sglang
+      - mthreads
+    kind:
+      - NeuralNetwork
+    stages:
+      - experimental: '0.1'
   - id: fused_sigmoid_mul
     description: |
       Attention output gating: out = attn_output * sigmoid(gate).
