@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "preserve_layout": true,
+  "mutates": [
+    "input",
+    "residual"
+  ],
+  "capture_return": true,
+  "returns_none": true,
+  "aliases": {},
+  "check": {
+    "type": "standard",
+    "atol": 0.002,
+    "rtol": 0.016,
+    "equal_nan": false
+  }
+}

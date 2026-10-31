@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "preserve_layout": true,
+  "mutates": [
+    "out",
+    "initial_state"
+  ],
+  "capture_return": true,
+  "returns_none": false,
+  "aliases": {
+    "0": "out",
+    "1": "initial_state"
+  },
+  "check": {
+    "type": "standard",
+    "atol": 0.002,
+    "rtol": 0.016,
+    "equal_nan": false
+  }
+}

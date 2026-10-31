@@ -1,0 +1,71 @@
+{
+  "schema": "qwen36-multibackend/v1",
+  "scope": "handoff six platforms plus explicitly added T-Head and MThreads",
+  "skipped": {
+    "enflame": "user requested skip"
+  },
+  "previously_verified": {
+    "ascend": {
+      "golden_cases": 35,
+      "reference": "shared Torch",
+      "evidence": "original mRoPE acceptance plus qwen36_validation.json"
+    }
+  },
+  "newly_verified": {
+    "musa": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "MTT S5000"
+    },
+    "metax": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "MetaX C550"
+    },
+    "iluvatar": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "Iluvatar BI-V150"
+    },
+    "hygon": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "BW"
+    },
+    "ppu": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "PPU-ZW810E"
+    },
+    "kunlunxin": {
+      "golden_passed": 35,
+      "correctness_passed": 45,
+      "dummy_reached": 45,
+      "benchmark_cases": 34,
+      "hardware": "P800 OAM (xpu-smi); SDK reports GPU",
+      "normalized_scaling": false,
+      "reason": "P800 bandwidth factor absent; preserve raw latency ratio, never borrow P900"
+    }
+  },
+  "shared_math_identical_sha256": {
+    "qwen36.py": "5f4c2271086ab176093238d7590d778c5265410269a13a0e551b379bc75f9c4c",
+    "mrotary_embedding_torch.py": "d238e35b95367162efa2f3431ee1de85290f39adbcf134c0dc1778c42819e9c8"
+  },
+  "vendor_math_specializations_added": false,
+  "notes": [
+    "Each new platform replayed identical NV inputs/goldens: 28 Qwen core plus 7 mRoPE cases, no skips.",
+    "Each ran 45 correctness/reference cases, 45 dummy reaches and 34 core timings/baseline matches.",
+    "Kunlunxin uses reference-only package import, fixture-only CPU permutation and XPU_EVENT_KL3_ENABLE=1.",
+    "T-Head historical vendor label normalized; P800 missing bandwidth factor remains unavailable."
+  ]
+}

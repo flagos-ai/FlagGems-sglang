@@ -97,6 +97,12 @@ def baseline_key(inputs):
             )
         else:
             identity[name] = value
+    from pathlib import Path
+
+    spec = json.loads(
+        (Path(__file__).parents[1] / "testing/reset_timing.json").read_text()
+    )
+    identity["timing"] = spec["timing"]
     encoded = json.dumps(identity, sort_keys=True, separators=(",", ":"))
-    # v2 pins the median timing contract used by SGLang's kernel benchmark.
-    return "mrotary-v2-" + hashlib.sha256(encoded.encode()).hexdigest()
+    # v3 restores original read-write inputs outside each timed call.
+    return "mrotary-v3-" + hashlib.sha256(encoded.encode()).hexdigest()

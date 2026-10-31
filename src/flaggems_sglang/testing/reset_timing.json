@@ -1,0 +1,20 @@
+{
+  "timing": {
+    "schema": "flaggems.reset-excluded/v1",
+    "method": "device_event_median",
+    "reset_excluded": true,
+    "cache_policy": "restore_then_flush_256MiB_before_call",
+    "cache_bytes": 268435456,
+    "ncu_cache_control": "all",
+    "warmup_ms": 25,
+    "rep_ms": 100,
+    "max_samples": 10000
+  },
+  "read_write": {
+    "gemma_fused_add_rmsnorm": {"input": null, "residual": null},
+    "chunk_gated_delta_rule_fwd": {"initial_state": "initial_state_indices"},
+    "fused_recurrent_gated_delta_rule_packed_decode": {"initial_state": "ssm_state_indices"},
+    "_fused_moe_kernel_sequence": {"hidden_states": null},
+    "mrotary_embedding": {"q": null, "k": null}
+  }
+}

@@ -1,0 +1,90 @@
+[
+  {
+    "filename": "sglang-0.5.11-cp312-cp312-manylinux_2_34_x86_64.whl",
+    "url": "https://files.pythonhosted.org/packages/f0/e9/33bfdbbf010843ce96e69be6711d221a5569429bea0fc8645fba7494b0ac/sglang-0.5.11-cp312-cp312-manylinux_2_34_x86_64.whl",
+    "size": 7307932,
+    "digests": {
+      "blake2b_256": "f0e933bfdbbf010843ce96e69be6711d221a5569429bea0fc8645fba7494b0ac",
+      "md5": "0fc3d70c29624b089c5bc7d1b508de68",
+      "sha256": "0cdf73e8d463df53010c33017c7baa68ce5f2d0bf7d015923d6b37b809ca7c50"
+    }
+  },
+  {
+    "filename": "sglang_kernel-0.4.2-cp310-abi3-manylinux2014_x86_64.whl",
+    "url": "https://files.pythonhosted.org/packages/1b/43/66513757d480140d9e9b0f234995a47f7165513e498932ed21f05adeb81c/sglang_kernel-0.4.2-cp310-abi3-manylinux2014_x86_64.whl",
+    "size": 326259979,
+    "digests": {
+      "blake2b_256": "1b4366513757d480140d9e9b0f234995a47f7165513e498932ed21f05adeb81c",
+      "md5": "8c9d938e056632809f298ed5551a2d7a",
+      "sha256": "11e8198d6f6ff47df2ff445e3add666897d7d75fddbed9ff862e7b42fd75530c"
+    }
+  },
+  {
+    "filename": "flashinfer_python-0.6.8.post1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/73/6d/1e8a8533913e33a50a486332ce0673f4fdb860f6eb9ed450327c5c1762cb/flashinfer_python-0.6.8.post1-py3-none-any.whl",
+    "size": 9385316,
+    "digests": {
+      "blake2b_256": "736d1e8a8533913e33a50a486332ce0673f4fdb860f6eb9ed450327c5c1762cb",
+      "md5": "a523e06475944f62e6fc3012b3855d84",
+      "sha256": "818f9b8cc2fe66c42a1f6264be4841ac8821ada703685a02cfccb2b5124a710b"
+    }
+  },
+  {
+    "filename": "flashinfer_cubin-0.6.8.post1-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/11/b7/5e3b1a8c67031b421a8bd29c2bc29b900a550bb3392e8bda18bb15b5e476/flashinfer_cubin-0.6.8.post1-py3-none-any.whl",
+    "size": 295154113,
+    "digests": {
+      "blake2b_256": "11b75e3b1a8c67031b421a8bd29c2bc29b900a550bb3392e8bda18bb15b5e476",
+      "md5": "1df16820ce2e27c67d04d8e7679f9adb",
+      "sha256": "43636d4cd39e694a83d76a89f87fefcdf4cecb4c4f7dd22dac25ec368c1e901f"
+    }
+  },
+  {
+    "filename": "nvidia_cutlass_dsl-4.4.2-py3-none-any.whl",
+    "url": "https://files.pythonhosted.org/packages/a9/03/678dab0383db1ddfc449da216220f40404189eb36eeed9d87a4fa4bdb0e6/nvidia_cutlass_dsl-4.4.2-py3-none-any.whl",
+    "size": 10167,
+    "digests": {
+      "blake2b_256": "a903678dab0383db1ddfc449da216220f40404189eb36eeed9d87a4fa4bdb0e6",
+      "md5": "dbffe896804a5a60af313bf84428c1bb",
+      "sha256": "7cfb9ef19062b055b9372c7a627004724e2755e4c8b16c3cc88807d64501a4ae"
+    }
+  },
+  {
+    "filename": "nvidia_cutlass_dsl_libs_base-4.4.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+    "url": "https://files.pythonhosted.org/packages/56/98/e264964741d9cc9816625d9600d17a5249fd5cbd8c2d166fb0d0c34dfe5a/nvidia_cutlass_dsl_libs_base-4.4.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+    "size": 74355593,
+    "digests": {
+      "blake2b_256": "5698e264964741d9cc9816625d9600d17a5249fd5cbd8c2d166fb0d0c34dfe5a",
+      "md5": "9f6dde279352f6da7d57a25c74ce9228",
+      "sha256": "22e37b58f7a6f2f43bba533c4df8a088012122e0b4e9a632eca23937adeafb39"
+    }
+  },
+  {
+    "filename": "nvidia_cutlass_dsl_libs_cu13-4.4.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+    "url": "https://files.pythonhosted.org/packages/29/b8/c70356a84a7bea64a66490097920539f76843a2bc869640ac30efededc8d/nvidia_cutlass_dsl_libs_cu13-4.4.2-cp312-cp312-manylinux_2_28_x86_64.whl",
+    "size": 78389411,
+    "digests": {
+      "blake2b_256": "29b8c70356a84a7bea64a66490097920539f76843a2bc869640ac30efededc8d",
+      "md5": "c53dc50833afdc6e3b79a88d21810dee",
+      "sha256": "b67535ce55160207330a877ccb90837088dc79b730e9e2e66450fcc955365529"
+    }
+  },
+  {
+    "filename": "xgrammar-0.1.32-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "url": "https://files.pythonhosted.org/packages/69/62/65e664d861cdadf2d788c03dd8fe67f1faaa7bd4bd2317a2ab850aebee20/xgrammar-0.1.32-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "size": 37711100,
+    "digests": {
+      "blake2b_256": "696265e664d861cdadf2d788c03dd8fe67f1faaa7bd4bd2317a2ab850aebee20",
+      "md5": "cdfa8705d19fa2fee88c383525ed1a3e",
+      "sha256": "f96c7a4fcbd68e18b13cb3b6ed5d24b5326b256933f476bdaf2cc8e609c228db"
+    }
+  },
+  {
+    "filename": "flashinfer_jit_cache-0.6.8.post1+cu130-cp39-abi3-manylinux_2_28_x86_64.whl",
+    "url": "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.6.8.post1/flashinfer_jit_cache-0.6.8.post1+cu130-cp39-abi3-manylinux_2_28_x86_64.whl",
+    "size": 2090910620,
+    "digests": {
+      "sha256": "d060f085318d1f55278ce42724fd58e2d4fa2e34b6135e7f6982e1ea374fac6a"
+    }
+  }
+]

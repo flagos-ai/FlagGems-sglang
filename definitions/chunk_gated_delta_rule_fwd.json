@@ -1,0 +1,74 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_gated_delta_rule_fwd",
+  "requires_triton_kernel": true,
+  "description": "SGLang v0.5.11 low-level chunk64 GDN prefill. q/k are already L2 normalized and contiguous. Returns exactly (g_cumsum,o,A,None,h,None) at suppression level0; all intermediate tensor slots and selected state-pool mutation are tested. initial_state is [pool,HV,V,K]. Optional indices describe packed sequence boundaries, not the plugin dispatch ABI.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "initial_state",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "initial_state_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cu_seqlens",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "chunk_indices",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "g",
+    "o",
+    "A",
+    "w",
+    "h",
+    "v_new"
+  ],
+  "effects": {
+    "mutates": [
+      "initial_state"
+    ],
+    "returns_alias_of": {}
+  }
+}

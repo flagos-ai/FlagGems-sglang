@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "preserve_layout": true,
+  "mutates": [
+    "initial_state"
+  ],
+  "capture_return": true,
+  "returns_none": false,
+  "aliases": {},
+  "check": {
+    "type": "standard",
+    "atol": 0.002,
+    "rtol": 0.016,
+    "equal_nan": false,
+    "output_tolerances": {
+      "0": {
+        "atol": 2e-05,
+        "rtol": 2e-05
+      }
+    }
+  }
+}

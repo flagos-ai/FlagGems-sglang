@@ -25,6 +25,7 @@ namespace, so callers use ``flaggems_sglang.<op>(...)`` regardless of the
 underlying vendor.
 """
 
+import os
 from typing import Callable, List, Optional
 
 from flaggems_sglang import runtime  # noqa: F401
@@ -35,7 +36,11 @@ device = runtime.device.name
 vendor_name = runtime.device.vendor_name
 
 _op_registrar = OpRegistrar()
-_op_registrar.apply(globals())
+# Opt-in for Torch-reference validation on an existing vendor SDK whose
+# unrelated candidate modules may require a different Triton version.
+# Normal imports still register all candidates exactly as before.
+if os.environ.get("FLAGGEMS_SGLANG_REFERENCE_ONLY") != "1":
+    _op_registrar.apply(globals())
 
 
 def all_registered_ops() -> List[str]:

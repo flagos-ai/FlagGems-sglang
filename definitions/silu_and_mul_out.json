@@ -1,0 +1,28 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_and_mul_out",
+  "requires_triton_kernel": true,
+  "description": "SGLang native SiLU times up with optional output buffer. input is read-only; when out is supplied writes and returns that exact Tensor, otherwise returns a fresh Tensor. Existing single-input silu_and_mul API is unchanged.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "out"
+    ],
+    "returns_alias_of": {}
+  }
+}

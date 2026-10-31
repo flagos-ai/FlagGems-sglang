@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_rmsnorm",
+  "requires_triton_kernel": true,
+  "description": "Gemma RMSNorm with raw weight w and multiplier (1+w), FP32 normalization, input dtype output. Returns a fresh contiguous tensor when out=None; otherwise writes and returns out. Workloads include the non-contiguous K-norm view. out is mutated only when supplied.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-06
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "enable_pdl",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "out"
+    ],
+    "returns_alias_of": {}
+  }
+}
