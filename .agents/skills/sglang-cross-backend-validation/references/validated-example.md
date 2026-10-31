@@ -1,6 +1,6 @@
 # 已验证实例：Qwen3.6 与 mRoPE
 
-这是本 skill 提取流程时的历史样例，不授权后续任务使用所有机器，也不代表每个后端都已有优化 candidate。复用前检查相关 PR 的当前状态、commit、接口及原始日志。
+以下为历史样例。复用前检查相关 PR 的当前状态、commit、接口及原始日志。
 
 ## 功能来源与依赖
 
@@ -8,8 +8,6 @@
 - [FlagGems-sglang #251](https://github.com/flagos-ai/FlagGems-sglang/pull/251)：其余七个 workload 接口、共享 Torch reference、native adapters 和多后端验证，整理本 skill 时仍未合并，验证源码为 `0617e9a60057716e4408c2e6b8a2a473352ca692`。
 - [op-verify #9](https://github.com/lukatao/op-verify/pull/9)：v2 返回/变更/alias 契约、逐输出阈值、压缩 bundle、目标平台支持；整理时未合并，验证源码为 `9b4703b896a48aa6792198eb19cd21a0ffb57e51`。
 - [ops-baseline #68](https://github.com/zhaojs12345/ops-baseline/pull/68)：独立 `ops/sglang_qwen36` recipes 和 H800 artifact，整理时未合并，验证源码为 `c43874649248de6024e4b492e08a7a48ebed512c`。
-
-不要仅安装目标分支就假定拥有上述未合并能力；以实际版本确认依赖。不要将这些 feature commits 的实现拷入文档 PR。
 
 ## Workload 与数据
 
@@ -37,7 +35,7 @@ MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `qwen36/f
 - 七个新接口 H800 artifact：ops-baseline 的 `op_sglang_qwen36_h800_perf_baseline.json`，SHA256 `d27aba1e52f7ac41800b0b3e108c383dd8c044256dc7789ac4574318b39aa09f`，28 latency + 28 有效 NCU 记录。
 - 已有 mRoPE artifact：ops-baseline 的 `op_sglang_mrotary_h800_perf_baseline.json`。
 
-七个新接口的原生环境使用 SGLang v0.5.11 commit `612785ffdcaf35552f1ed433a981d596ca9fe900`、Torch 2.11.0+cu130、sglang-kernel 0.4.2、FlashInfer 0.6.8.post1、Triton 3.6.0。mRoPE 最初采集使用另一套环境，见本仓库 `docs/mrotary_cross_machine.md`；不能合写成相同运行环境。
+原生环境详情见 #251 的 `docs/qwen36_workloads.md` 与已合并的 `docs/mrotary_cross_machine.md`；两次采集使用不同环境。
 
 ## 精度策略
 
@@ -56,7 +54,7 @@ MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `qwen36/f
 
 本次验证覆盖 Ascend、Iluvatar、Kunlunxin、Hygon、MetaX，以及用户追加的 T-Head PPU 和 MThreads MUSA。Suiyuan 按用户要求跳过；没有验收 Cambricon。共享数学 Torch reference 在上述七类目标上均可使用，无需新增 vendor 数学特化。
 
-六个新目标（除先前单独验证的 Ascend）逐台完成 35 golden、45 ref-as-candidate correctness、45 correctness dummy 触达、34 实际 core 计时与基线匹配，并核对每台下载的 70 个输入/输出 payload 引用摘要。Ascend 证据来自此前分别完成的 Qwen 与 mRoPE 验证。参阅 #251 中的 `docs/qwen36_multibackend_validation.json` 和 `docs/qwen36_workloads.md`；这些结果验证 reference/测试管线，不代表六台均完成优化 candidate 性能评估。
+逐机结果见 #251 的 `docs/qwen36_multibackend_validation.json`；这些记录验证 reference/测试管线，不代表优化 candidate 性能评估。
 
 有复用价值的环境差异：
 
@@ -65,5 +63,3 @@ MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `qwen36/f
 - 基线历史 vendor 标签 `t-head` 与 runtime 的 `thead` 需一致归一化。
 - 若 SDK 仅报告 `GPU`，可用实际设备工具确认型号后显式 `FLAGGEMS_SGLANG_CHIP=P800`。它选择缩放型号，不能代替设备可见性配置。
 - P800 缺少 bandwidth factor，而这批 34 个基线均为 memory bottleneck，因此报告 `factor=None` 和原始延迟比。不能借用 P900 factor，也不能声称已完成硬件归一化。
-
-具体 IP、容器、接入和运行目录从用户当前 handoff 获取；不要将本次环境差异当成新任务的强制机器配置。
