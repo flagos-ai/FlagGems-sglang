@@ -68,10 +68,15 @@ class OpBenchmark(GenericBenchmark):
         shapes = super().record_shapes(*args, **kwargs)
         if self.baseline_key_fn is None:
             return shapes
-        return dict(
+        result = dict(
             inputs=shapes,
             baseline_key=self.baseline_key_fn(*args, **kwargs),
         )
+        if self._active_input_reset is not None:
+            from flaggems_sglang.testing.reset_timing import TIMING
+
+            result["timing"] = dict(TIMING)
+        return result
 
     def set_shapes(self, shape_file_path: Optional[str] = None) -> None:
         self.shapes = list(self.core_shapes)

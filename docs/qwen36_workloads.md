@@ -91,6 +91,27 @@ these benchmarks. Target benchmarks consume the collected artifact through
 `--base-data`; target candidates are timed locally. Reference-as-candidate is a
 pipeline check, not a claim of optimized candidate performance.
 
+Read-write workloads opt into `input_reset_factory`. One original snapshot is
+captured before either the reference or candidate timer; every first call,
+calibration, warmup and measured call restores those values. Device events
+bracket only the operator. Restoration and a 256 MiB cache flush occur before
+the start event. The selected state-pool slots are restored through integer
+index views, keeping full pool capacity and all tensor strides/offsets intact.
+Write-only output buffers are not copied. The shared implementation and timing
+specification live in `testing/reset_timing.py` and `reset_timing.json`; the
+native collector uses this same code. Unsupported device-event timing fails
+explicitly. These workloads require forward kernel timing mode and use the shared fixed
+25/100 ms warmup/sample budgets, independent of `--warmup`/`--iter`. Profile-only
+runs restore before every warmup and capture; each captured invocation has its
+own scope, with restoration and cache work outside that scope.
+
+Ten Qwen read-write records use `qwen36-v2-*` keys; the eighteen read-only
+records retain `qwen36-v1-*` keys and their existing timers. The six mRoPE keys
+become `mrotary-v3-*`. Old read-write snapshots cannot match the new keys.
+Benchmarks without this explicit hook retain their existing timing path.
+The matching H800 snapshots must be recollected before this migration is ready
+for performance comparisons; historical correctness evidence remains valid.
+
 Validation receipts belong to the PR description. H800 native-vs-Torch checks
 passed all 38 cases, including boundary controls, before golden export.
 

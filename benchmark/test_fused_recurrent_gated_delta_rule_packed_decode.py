@@ -16,6 +16,7 @@ from flaggems_sglang.testing.qwen36_workloads import (
     parameters,
     workloads,
 )
+from flaggems_sglang.testing.reset_timing import reset_factory
 
 from . import conftest
 from .cases import BenchmarkCasePlan, single_input_builder
@@ -58,6 +59,7 @@ def test_perf_fused_recurrent_gated_delta_rule_packed_decode():
         more_shapes=MORE_SHAPES,
         shape_desc="explicit Qwen3.6 workload index",
         baseline_key_fn=_baseline_key,
+        input_reset_factory=reset_factory(OPERATOR),
     )
     if not (
         is_case_listing()

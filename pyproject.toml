@@ -57,6 +57,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
+"flaggems_sglang.testing" = ["*.json"]
 "flaggems_sglang.runtime" = ["*/**/*.yaml"]
 
 [tool.scikit-build]

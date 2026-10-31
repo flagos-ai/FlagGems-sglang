@@ -526,9 +526,25 @@ def baseline_key(operator, inputs):
         )
 
     payload = json.dumps(
-        dict(operator=operator, inputs=encode(inputs), timing="median"),
+        dict(
+            operator=operator,
+            inputs=encode(inputs),
+            timing=timing_contract(operator) or "median",
+        ),
         sort_keys=True,
         separators=(",", ":"),
     )
     # The operator is already part of the hashed payload and JSON group.
-    return "qwen36-v1-" + hashlib.sha256(payload.encode()).hexdigest()
+    return (
+        "qwen36-v2-" if timing_contract(operator) else "qwen36-v1-"
+    ) + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def timing_contract(operator):
+    import json
+    from pathlib import Path
+
+    spec = json.loads(
+        Path(__file__).with_name("reset_timing.json").read_text()
+    )
+    return spec["timing"] if operator in spec["read_write"] else None

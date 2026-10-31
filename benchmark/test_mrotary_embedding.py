@@ -16,6 +16,7 @@ from flaggems_sglang.reference.mrotary_embedding import (
     describe_inputs,
 )
 from flaggems_sglang.reference_candidate import reference_mode_enabled
+from flaggems_sglang.testing.reset_timing import reset_factory
 
 from . import conftest
 from .cases import BenchmarkCasePlan, single_input_builder
@@ -53,6 +54,7 @@ def test_perf_mrotary_embedding():
         shapes=SHAPES,
         shape_desc="Qwen3.6 TP4 mRoPE configuration",
         baseline_key_fn=_baseline_key,
+        input_reset_factory=reset_factory("mrotary_embedding"),
     )
     if not (
         is_case_listing()

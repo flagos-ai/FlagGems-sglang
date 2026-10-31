@@ -176,6 +176,7 @@ class Benchmark:
         dtypes=None,
         is_backward=False,
         is_inplace=False,
+        input_reset_factory=None,
         **kwargs,
     ):
         self.op_name = op_name
@@ -202,6 +203,12 @@ class Benchmark:
         self.torch_op = torch_op
         self.gems_op = None
         self.is_backward = is_backward
+        self.input_reset_factory = input_reset_factory
+        self._active_input_reset = None
+        if input_reset_factory is not None and is_backward:
+            raise ValueError(
+                "Reset-excluded timing supports forward workloads only"
+            )
         self._validate_reference_candidate()
         self.is_inplace = is_inplace
         self._input_iter = None
@@ -446,6 +453,16 @@ class Benchmark:
 
     def get_latency(self, op, *args, **kwargs):
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
+        if getattr(self, "_active_input_reset", None) is not None:
+            if Config.mode != BenchMode.KERNEL or xs is not None:
+                raise ValueError(
+                    "Reset-excluded timing requires forward kernel mode"
+                )
+            from flaggems_sglang.testing.reset_timing import measure_with_reset
+
+            return measure_with_reset(
+                fn, self._active_input_reset, torch_device_fn
+            )
         return self._time_callable(fn, xs)
 
     def _benchmark_callable(self, op, *args, **kwargs):
@@ -662,6 +679,11 @@ class Benchmark:
         metric = BenchmarkMetrics(case_id=case_id)
         try:
             args, kwargs = self.unpack_to_args_kwargs(input)
+            # One template BEFORE either reference or candidate can mutate it.
+            if getattr(self, "input_reset_factory", None) is not None:
+                self._active_input_reset = self.input_reset_factory(
+                    *args, **kwargs
+                )
             metric.shape_detail = self.record_shapes(*args, **kwargs)
             if "latency_base" in self.to_bench_metrics:
                 metric.latency_base = self.get_latency(
@@ -707,6 +729,10 @@ class Benchmark:
             metric.error_msg = str(e)
             pytest.fail(str(e))  # raise exception again
         finally:
+            reset = getattr(self, "_active_input_reset", None)
+            self._active_input_reset = None
+            if reset is not None:
+                reset()
             gc.collect()
         return metric
 
@@ -890,11 +916,19 @@ class Benchmark:
             capture_args, capture_kwargs = self.unpack_to_args_kwargs(
                 capture_input
             )
+            reset_factory = getattr(self, "input_reset_factory", None)
+            warmup_reset = (
+                reset_factory(*args, **kwargs) if reset_factory else None
+            )
+            capture_reset = (
+                reset_factory(*capture_args, **capture_kwargs)
+                if reset_factory
+                else None
+            )
+            cache = capture_reset.make_cache() if capture_reset else None
             op, dispatch, _ = self._candidate_call()
-            with dispatch:
-                for _ in range(Config.profile_warmup):
-                    op(*args, **kwargs)
-                torch_device_fn.synchronize()
+
+            def profile_scope():
                 scope = (
                     Config.profile_hook(
                         backend=vendor_name, case_id=case.case_id
@@ -902,10 +936,34 @@ class Benchmark:
                     if Config.profile_hook is not None
                     else None
                 )
-                with scope if scope is not None else nullcontext():
-                    for _ in range(Config.profile_iterations):
-                        op(*capture_args, **capture_kwargs)
+                return scope if scope is not None else nullcontext()
+
+            with dispatch:
+                try:
+                    for _ in range(Config.profile_warmup):
+                        if warmup_reset is not None:
+                            warmup_reset.prepare(cache)
+                        op(*args, **kwargs)
                     torch_device_fn.synchronize()
+                    if capture_reset is None:
+                        with profile_scope():
+                            for _ in range(Config.profile_iterations):
+                                op(*capture_args, **capture_kwargs)
+                            torch_device_fn.synchronize()
+                    else:
+                        # A separate range for each invocation keeps reset and
+                        # cache work outside every captured operator range.
+                        for _ in range(Config.profile_iterations):
+                            capture_reset.prepare(cache)
+                            torch_device_fn.synchronize()
+                            with profile_scope():
+                                op(*capture_args, **capture_kwargs)
+                                torch_device_fn.synchronize()
+                finally:
+                    if capture_reset is not None:
+                        capture_reset()
+                    if warmup_reset is not None:
+                        warmup_reset()
             executed.append(case.case_id)
         Config.executed_case_ids.update(executed)
         return executed
