@@ -1,0 +1,159 @@
+{
+  "schema": "flaggems.reset-excluded-validation/v1",
+  "source": {
+    "sglang": "b674fd7cacb86f2483d35ceb296f8d1edef04f74",
+    "ops_baseline": "a8c24305f03ecf2b8783227b3593a5dcffe3d76c",
+    "source_archive_sha256": "31068fba2a8369a131f9bf43764ce9094ad47dcad3e6828d28b0e31dd5fc678b",
+    "source_manifest_sha256": "58eec0542e90edaf681dba95165204fe5eeb836214095268ba3fcb59b58cfbbc",
+    "remote_source_files_verified": 2590
+  },
+  "timing": {
+    "schema": "flaggems.reset-excluded/v1",
+    "method": "device_event_median",
+    "reset_excluded": true,
+    "cache_policy": "restore_then_flush_256MiB_before_call",
+    "cache_bytes": 268435456,
+    "ncu_cache_control": "all",
+    "warmup_ms": 25,
+    "rep_ms": 100,
+    "max_samples": 10000
+  },
+  "key_migration": {
+    "read_write_old_keys_rejected": 16,
+    "readonly_keys_unchanged": 18
+  },
+  "h800": {
+    "native_source": "SGLang v0.5.11 original CUDA/FlashInfer/Triton implementations",
+    "upstream_commit": "612785ffdcaf35552f1ed433a981d596ca9fe900",
+    "records": 34,
+    "original_input_cases": 16,
+    "repetitions_per_input": 8,
+    "event_exclusion_control": {
+      "operator_ms": 0.10476800054311752,
+      "excluded_sleep_ms": 3.1559360027313232,
+      "prepares": 17,
+      "original_restored": true
+    },
+    "evidence_archive_sha256": "65515859ce4706af7219b1ebffa21f8fbfff13e9d217b39cf80b1c9b8c0fcca6",
+    "core_contract_tests_passed": 106,
+    "reference_correctness_cases_passed": 45,
+    "reference_benchmark_records": 34,
+    "default_silu_correctness_tests_plus_benchmark_functions_passed": 5,
+    "override_silu_correctness_tests_plus_benchmark_functions_passed": 5,
+    "dummy_silu_cases_reached": 9,
+    "dummy_moe_cases_reached": 5,
+    "list_benchmark_functions_passed": 8,
+    "ops_collector_tests_passed": 10,
+    "suite_evidence_sha256": "40f6ed80b2a69f7d2a9a89682e473304e33791149e5a8d52ce00b5dcba7741c8"
+  },
+  "artifacts": {
+    "qwen36": {
+      "file": "op_sglang_qwen36_h800_perf_baseline.json",
+      "sha256": "53f827df2787bb549564014c7e4f14fb6eb9e8d0cb84d6ed06179d1adf2ba69d",
+      "records": 28
+    },
+    "mrope": {
+      "file": "op_sglang_mrotary_h800_perf_baseline.json",
+      "sha256": "d4f84c4f0f1602fdb1e5199bb545f3fe647604ac034e6a0d2b492b9623593e76",
+      "records": 6
+    }
+  },
+  "backend_checks": [
+    {
+      "backend": "musa",
+      "device": "MTT S5000",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "6f718f1cd546b18ec0dbac14f1657496f8c678f10eb0242bec789eee95d8cec9",
+        "mrope": "705d625c7a181667c8c15da8263b2e131c745f09506b4b82e121b8fb09b9e399"
+      }
+    },
+    {
+      "backend": "metax",
+      "device": "MetaX C550",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "552b5d78d03468739474adc8b29be94b47fb07cb01b1cce9f2e8c1530083b19b",
+        "mrope": "8540aae7994b773da3d9713ba9829217fe1f64cfe974eb857a4db500d9aa2a4b"
+      }
+    },
+    {
+      "backend": "iluvatar",
+      "device": "Iluvatar BI-V150",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "bf8e4a60d0f0c9e14ed865c1eed098861a4074c7d6b24b6796d6579e7777f5b9",
+        "mrope": "59ac43a3d806d17087ae52efcd9c81f58d4197d7d5e5d9eb0007d71d6a375e61"
+      }
+    },
+    {
+      "backend": "hygon",
+      "device": "BW",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "6d9f7bdcceacd75be2cd6981b843091eb039a5dfae6db6df526d91699e1260b8",
+        "mrope": "1b84e0b6d5750f67f13e3aab79daab3678388262d35ce42f5f49dfc0896ab15e"
+      }
+    },
+    {
+      "backend": "ppu",
+      "device": "PPU-ZW810E",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "9ad8e7e3cfb837e09530725fc61485451887d62a4801fb07f28c491918353044",
+        "mrope": "bd0599f16db4aebfdb2b4b9a2fbd69738072b3b7ff8848f53eb56b9ebb7cbf55"
+      }
+    },
+    {
+      "backend": "kunlunxin",
+      "device": "GPU",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "raw_only_missing_P800_bandwidth_factor",
+      "timing_json_sha256": {
+        "qwen36": "db9270670f4c8c48361d06f0408703e894b9b1840069c2ea860b265f8668a79d",
+        "mrope": "dc9c24e44b5b2c97e6b127def1d9051c7fb445b9bfd26ce470219b9df64d0707"
+      }
+    },
+    {
+      "backend": "ascend",
+      "device": "Ascend910B4-1",
+      "timing_records": 34,
+      "read_write_records": 16,
+      "baseline_keys_matched": 34,
+      "ratio": "scaled_by_matching_resource_factor",
+      "timing_json_sha256": {
+        "qwen36": "7173ad62a641fc83a818cb764bf68be2c00e72ad98c377445ed45c241a0aa200",
+        "mrope": "6ef4a4bc33a97bb2faba0272b2c51c7b8b9edec8a06adb6164a2a652ce21b622"
+      }
+    }
+  ],
+  "limits": [
+    "These backend timings use reference-as-candidate and validate the pipeline, not optimized candidate performance.",
+    "Read-write timing supports forward kernel mode with fixed 25/100ms budgets; other benchmarks keep their existing timer.",
+    "Kunlunxin P800 has no memory-bandwidth scaling factor; all 34 comparisons retain raw ratios and print factor=None.",
+    "Suiyuan skipped at user request; no other backend added.",
+    "Mathematical reference and fixed NVIDIA golden tensors are unchanged; no golden dataset was regenerated."
+  ],
+  "wheel": {
+    "wheel_sha256": "d085db52e8da4a2eeba39867e37ae47ec06487c4c82a44ddafd554923b923619",
+    "source_files_matched": 906,
+    "json_included": true
+  }
+}

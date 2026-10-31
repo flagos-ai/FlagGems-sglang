@@ -109,8 +109,11 @@ Ten Qwen read-write records use `qwen36-v2-*` keys; the eighteen read-only
 records retain `qwen36-v1-*` keys and their existing timers. The six mRoPE keys
 become `mrotary-v3-*`. Old read-write snapshots cannot match the new keys.
 Benchmarks without this explicit hook retain their existing timing path.
-The matching H800 snapshots must be recollected before this migration is ready
-for performance comparisons; historical correctness evidence remains valid.
+Both H800 snapshots have been recollected from original SGLang implementations
+with latency and NCU counters (34 records). Seven target backends matched every
+key and produced 34 reference timings each. See `reset_timing_validation.json`
+for exact source versions, checks and raw-evidence hashes. Historical numerical
+correctness evidence remains valid; the mathematical references are unchanged.
 
 Validation receipts belong to the PR description. H800 native-vs-Torch checks
 passed all 38 cases, including boundary controls, before golden export.
