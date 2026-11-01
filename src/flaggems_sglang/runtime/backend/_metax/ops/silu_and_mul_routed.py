@@ -53,7 +53,9 @@ def _routed_tile(
         mask = cols[None, :] < N
     else:
         mask = (rows[:, None] < M) & (cols[None, :] < N)
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 0:
         q = tl.arange(0, 2 * BN)
@@ -78,7 +80,9 @@ def _routed_tile(
         if INTERLEAVED:
             gate, up = tl.split(tl.reshape(pair, (BM, BN, 2)))
         else:
-            gate, up = tl.split(tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1)))
+            gate, up = tl.split(
+                tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1))
+            )
     else:
         if INTERLEAVED:
             offsets = rows[:, None] * S + 2 * cols[None, :]
@@ -105,13 +109,20 @@ def _routed_tile(
     result = (gate * _sigmoid(gate, SIGMOID)) * up
     if WEIGHT:
         if EVEN_M:
-            weight = tl.load(W + rows, eviction_policy="evict_last").to(tl.float32)
+            weight = tl.load(W + rows, eviction_policy="evict_last").to(
+                tl.float32
+            )
         else:
             weight = tl.load(
                 W + rows, rows < M, other=0, eviction_policy="evict_last"
             ).to(tl.float32)
         result = result * weight[:, None]
-    tl.store(Y + rows[:, None] * N + cols[None, :], result, mask, cache_modifier=STORE)
+    tl.store(
+        Y + rows[:, None] * N + cols[None, :],
+        result,
+        mask,
+        cache_modifier=STORE,
+    )
 
 
 @triton.jit
@@ -138,7 +149,9 @@ def _routed_flat(
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     rows = offsets // N
     cols = offsets % N
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 0:
         q = tl.arange(0, 2 * BLOCK)
@@ -202,10 +215,14 @@ def _normalize_config(config):
     family, bm, bn, warps, load, cache, stages, scenario, fusion = config
     if family not in ("flat", "tile") or (family == "flat" and bm != 1):
         raise ValueError("Invalid kernel family or flat row tile")
-    if any(type(v) is not int or v < 1 or v & (v - 1) for v in (bm, bn, warps)):
+    if any(
+        type(v) is not int or v < 1 or v & (v - 1) for v in (bm, bn, warps)
+    ):
         raise ValueError("Tiles and warps must be positive powers of two")
     if warps not in (1, 2, 4, 8, 16) or bm * bn > 16384:
-        raise ValueError("Configuration exceeds the finite MetaX search bounds")
+        raise ValueError(
+            "Configuration exceeds the finite MetaX search bounds"
+        )
     if load not in (0, 1) or cache not in ("", ".ca", ".cg"):
         raise ValueError("Unsupported load policy")
     if (
@@ -249,7 +266,20 @@ def _routed_tunable(
         M = tl.cast(M, tl.int64)
     if FLAT:
         _routed_flat(
-            X, W, Y, M * N, N, S, WEIGHT, INTERLEAVED, BN, INDEX64, CACHE, LOAD, 0, ""
+            X,
+            W,
+            Y,
+            M * N,
+            N,
+            S,
+            WEIGHT,
+            INTERLEAVED,
+            BN,
+            INDEX64,
+            CACHE,
+            LOAD,
+            0,
+            "",
         )
     else:
         _routed_tile(
@@ -277,7 +307,16 @@ def _native_configs():
     configs = []
 
     def append(
-        flat, bm, bn, warps, *, load=-1, cache="", stages=1, scenario="", fusion=True
+        flat,
+        bm,
+        bn,
+        warps,
+        *,
+        load=-1,
+        cache="",
+        stages=1,
+        scenario="",
+        fusion=True,
     ):
         configs.append(
             triton.Config(
@@ -326,7 +365,9 @@ def _native_configs():
         for warp in warps:
             append(0, bm, bn, warp)
     for flat in (0, 1):
-        append(flat, 1, 1024, 4, load=2)  # Opposite of the layout's default load.
+        append(
+            flat, 1, 1024, 4, load=2
+        )  # Opposite of the layout's default load.
         for cache in (".ca", ".cg"):
             append(flat, 1, 1024, 4, cache=cache)
         append(flat, 1, 1024, 4, stages=2)
@@ -342,7 +383,9 @@ def _checked_backend():
     target = triton.runtime.driver.active.get_current_target()
     backend = make_backend(target)
     if type(backend).__module__ != "triton.backends.metax.compiler":
-        raise RuntimeError("This kernel requires the MetaX MACA Triton backend")
+        raise RuntimeError(
+            "This kernel requires the MetaX MACA Triton backend"
+        )
     return target, backend
 
 
@@ -352,14 +395,18 @@ def _native_config(options, warps, stages):
     def verify_metadata(meta):
         # AABS may alter tiles: never accept a tile whose cached grid changed.
         if (meta["BM"], meta["BN"], meta["FLAT"]) != (bm, bn, flat):
-            raise RuntimeError("MACA backend changed an explicitly pruned tile")
+            raise RuntimeError(
+                "MACA backend changed an explicitly pruned tile"
+            )
         count = (
             triton.cdiv(meta["M"] * meta["N"], bn)
             if flat
             else triton.cdiv(meta["M"], bm) * triton.cdiv(meta["N"], bn)
         )
         if meta.get("grid") != (count, 1, 1):
-            raise RuntimeError("MACA launch grid no longer matches the tuned tile")
+            raise RuntimeError(
+                "MACA launch grid no longer matches the tuned tile"
+            )
 
     return triton.Config(
         options, num_warps=warps, num_stages=stages, pre_hook=verify_metadata
@@ -369,7 +416,9 @@ def _native_config(options, warps, stages):
 def _prune_native(configs, named_args, **kwargs):
     args = {**named_args, **kwargs}
     if torch.cuda.is_current_stream_capturing():
-        raise RuntimeError("Warm up this autotune signature before graph capture")
+        raise RuntimeError(
+            "Warm up this autotune signature before graph capture"
+        )
     _, backend = _checked_backend()
     m, n = args["M"], args["N"]
     result, checked, seen = [], set(), set()
@@ -409,7 +458,9 @@ def _prune_native(configs, named_args, **kwargs):
                 not hasattr(parsed, k) or getattr(parsed, k) != v
                 for k, v in profile.items()
             ):
-                raise RuntimeError("MACA backend ignored/changed a compiler option")
+                raise RuntimeError(
+                    "MACA backend ignored/changed a compiler option"
+                )
             checked.add(profile_key)
         meta["EVEN_M"] = m % bm == 0
         meta["grid"] = (
@@ -559,7 +610,7 @@ def _launch(x, weights, out, config, interleaved=True):
             load,
             0,
             "",
-            **options
+            **options,
         )
     return _routed_tile[(((m + bm - 1) // bm) * ((n + bn - 1) // bn),)](
         x,
@@ -578,7 +629,7 @@ def _launch(x, weights, out, config, interleaved=True):
         load,
         0,
         "",
-        **options
+        **options,
     )
 
 
@@ -654,7 +705,13 @@ def _select_config(x, weights, out, interleaved):
 
 
 def _run_selected(x, weights, out, interleaved):
-    _launch(x, weights, out, _select_config(x, weights, out, interleaved), interleaved)
+    _launch(
+        x,
+        weights,
+        out,
+        _select_config(x, weights, out, interleaved),
+        interleaved,
+    )
 
 
 def _iter_configs(m, n, interleaved):
@@ -680,7 +737,17 @@ def _iter_configs(m, n, interleaved):
         for warps in (1, 2, 4, 8):
             if 1 <= bm * bn / (64 * warps) <= 32:
                 geometry.append(
-                    (family, bm, bn, warps, 0 if interleaved else 1, "", 1, "", True)
+                    (
+                        family,
+                        bm,
+                        bn,
+                        warps,
+                        0 if interleaved else 1,
+                        "",
+                        1,
+                        "",
+                        True,
+                    )
                 )
     anchors = [
         ("flat", 1, 1024, 4, 0 if interleaved else 1, "", 1, "", True),
@@ -724,7 +791,7 @@ def _autotune(
     configs=None,
     max_configs=64,
     max_seconds=15.0,
-    validate=None
+    validate=None,
 ):
     """Explicit, call-local diagnostic search; public calls use the native tuner.
 
@@ -741,10 +808,14 @@ def _autotune(
     from triton.runtime.errors import OutOfResources
 
     if not x.numel() or torch.cuda.current_device() != x.device.index:
-        raise ValueError("Use valid nonempty input in its current device context")
+        raise ValueError(
+            "Use valid nonempty input in its current device context"
+        )
     if torch.cuda.is_current_stream_capturing():
         raise RuntimeError("Explicit tuning requires non-capturing execution")
-    if max_configs is not None and (type(max_configs) is not int or max_configs < 1):
+    if max_configs is not None and (
+        type(max_configs) is not int or max_configs < 1
+    ):
         raise ValueError("max_configs must be positive or None")
     if max_seconds is not None and (
         isinstance(max_seconds, bool)
@@ -762,11 +833,13 @@ def _autotune(
 
     m, width = x.shape
     generated = (
-        _iter_configs(m, width // 2, interleaved) if configs is None else iter(configs)
+        _iter_configs(m, width // 2, interleaved)
+        if configs is None
+        else iter(configs)
     )
-    stream, caller = torch.cuda.Stream(device=x.device), torch.cuda.current_stream(
-        x.device
-    )
+    stream, caller = torch.cuda.Stream(
+        device=x.device
+    ), torch.cuda.current_stream(x.device)
     buffer = torch.empty(out.numel() + 128, dtype=out.dtype, device=out.device)
     delta = (
         (out.data_ptr() % 256 - buffer.data_ptr() % 256) % 256
@@ -807,9 +880,9 @@ def _autotune(
                     if not available():
                         break
                     target.fill_(float("nan"))
-                    begin, end = torch.cuda.Event(enable_timing=True), torch.cuda.Event(
+                    begin, end = torch.cuda.Event(
                         enable_timing=True
-                    )
+                    ), torch.cuda.Event(enable_timing=True)
                     count = 0
                     begin.record(stream)
                     for _ in range(8):
@@ -860,7 +933,7 @@ def silu_and_mul_routed(
     *,
     out=None,
     autotune=True,
-    compiler_tuning=True
+    compiler_tuning=True,
 ):
     """Compute ``(gate * sigmoid(gate)) * up * optional_weight``.
 
@@ -886,7 +959,9 @@ def silu_and_mul_routed(
         raise ValueError("gateup_output must be CUDA FP16, BF16, or FP32")
     m, width = x.shape
     if width % 2 or (x.numel() and x.stride(1) != 1):
-        raise ValueError("gateup_output needs an even width and contiguous columns")
+        raise ValueError(
+            "gateup_output needs an even width and contiguous columns"
+        )
     if not isinstance(use_interleaved, bool):
         raise TypeError("use_interleaved must be bool")
     n = width // 2
@@ -902,7 +977,9 @@ def silu_and_mul_routed(
             or w.device != x.device
             or w.dtype not in supported
         ):
-            raise ValueError("topk_weights must be contiguous [M] on the input device")
+            raise ValueError(
+                "topk_weights must be contiguous [M] on the input device"
+            )
     allocated_output = out is None
     if allocated_output:
         out = torch.empty((m, n), device=x.device, dtype=dtype)
@@ -923,10 +1000,14 @@ def silu_and_mul_routed(
                 topk_weights is not None
                 and output_storage == topk_weights.untyped_storage().data_ptr()
             ):
-                raise ValueError("out must not share storage with input or weights")
+                raise ValueError(
+                    "out must not share storage with input or weights"
+                )
         if torch.cuda.current_device() == x.device.index:
             if autotune:
-                _run_autotuned(x, topk_weights, out, use_interleaved, compiler_tuning)
+                _run_autotuned(
+                    x, topk_weights, out, use_interleaved, compiler_tuning
+                )
             else:
                 _run_selected(x, topk_weights, out, use_interleaved)
         else:

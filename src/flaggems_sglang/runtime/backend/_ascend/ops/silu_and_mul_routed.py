@@ -60,14 +60,20 @@ def _routed_ascend_tile(
             gate, up = tl.split(tl.reshape(pair, (BM, BN, 2)))
         else:
             c = (pid % tiles) * BN + q % BN
-            p = rows[:, None] * S + c[None, :] + tl.where(q < BN, 0, N)[None, :]
+            p = (
+                rows[:, None] * S
+                + c[None, :]
+                + tl.where(q < BN, 0, N)[None, :]
+            )
             pair = tl.load(
                 X + p,
                 (rows[:, None] < M) & (c[None, :] < N),
                 other=0,
                 cache_modifier=CACHE,
             )
-            gate, up = tl.split(tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1)))
+            gate, up = tl.split(
+                tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1))
+            )
     else:
         if INTERLEAVED:
             gate_offsets = rows[:, None] * S + 2 * cols[None, :]
@@ -161,7 +167,9 @@ def _routed_ascend_flat(
                 tl.reshape(result, (block_rows, N)) * weight[:, None], (BLOCK,)
             )
         else:
-            result = result * tl.load(W + rows, offsets < total, other=0).to(tl.float32)
+            result = result * tl.load(W + rows, offsets < total, other=0).to(
+                tl.float32
+            )
     tl.store(Y + offsets, result, offsets < total)
 
 
@@ -188,7 +196,9 @@ def _routed_ascend_tile_persistent(
     start = tl.program_id(0)
     if INDEX64:
         start = start.to(tl.int64)
-    for pid in range(start, tl.cdiv(M, BM) * tl.cdiv(N, BN), tl.num_programs(0)):
+    for pid in range(
+        start, tl.cdiv(M, BM) * tl.cdiv(N, BN), tl.num_programs(0)
+    ):
         if INDEX64:
             pid = pid.to(tl.int64)
         tiles: tl.constexpr = tl.cdiv(N, BN)
@@ -208,7 +218,11 @@ def _routed_ascend_tile_persistent(
                 gate, up = tl.split(tl.reshape(pair, (BM, BN, 2)))
             else:
                 c = (pid % tiles) * BN + q % BN
-                p = rows[:, None] * S + c[None, :] + tl.where(q < BN, 0, N)[None, :]
+                p = (
+                    rows[:, None] * S
+                    + c[None, :]
+                    + tl.where(q < BN, 0, N)[None, :]
+                )
                 pair = tl.load(
                     X + p,
                     (rows[:, None] < M) & (c[None, :] < N),
@@ -225,7 +239,9 @@ def _routed_ascend_tile_persistent(
             else:
                 gate_offsets = rows[:, None] * S + cols[None, :]
                 up_offsets = gate_offsets + N
-            gate = tl.load(X + gate_offsets, mask, other=0, cache_modifier=CACHE)
+            gate = tl.load(
+                X + gate_offsets, mask, other=0, cache_modifier=CACHE
+            )
             up = tl.load(X + up_offsets, mask, other=0, cache_modifier=CACHE)
         gate = gate.to(tl.float32)
         up = up.to(tl.float32)
@@ -291,8 +307,12 @@ def _routed_ascend_flat_persistent(
                 else:
                     gp = rows * S + cols
                 uptr = gp + N
-            gate = tl.load(X + gp, offsets < total, other=0, cache_modifier=CACHE)
-            up = tl.load(X + uptr, offsets < total, other=0, cache_modifier=CACHE)
+            gate = tl.load(
+                X + gp, offsets < total, other=0, cache_modifier=CACHE
+            )
+            up = tl.load(
+                X + uptr, offsets < total, other=0, cache_modifier=CACHE
+            )
         gate = gate.to(tl.float32)
         up = up.to(tl.float32)
         if FORMULA == 0:
@@ -305,18 +325,21 @@ def _routed_ascend_flat_persistent(
         if WEIGHT:
             if N % BLOCK == 0:
                 row = pid // (N // BLOCK)
-                result = result * tl.load(W + row, row < M, other=0).to(tl.float32)
+                result = result * tl.load(W + row, row < M, other=0).to(
+                    tl.float32
+                )
             elif BLOCK % N == 0:
                 block_rows: tl.constexpr = BLOCK // N
                 row = pid * block_rows + tl.arange(0, block_rows)
                 weight = tl.load(W + row, row < M, other=0).to(tl.float32)
                 result = tl.reshape(
-                    tl.reshape(result, (block_rows, N)) * weight[:, None], (BLOCK,)
+                    tl.reshape(result, (block_rows, N)) * weight[:, None],
+                    (BLOCK,),
                 )
             else:
-                result = result * tl.load(W + rows, offsets < total, other=0).to(
-                    tl.float32
-                )
+                result = result * tl.load(
+                    W + rows, offsets < total, other=0
+                ).to(tl.float32)
         tl.store(Y + offsets, result, offsets < total)
 
 
@@ -349,20 +372,70 @@ def _routed_ascend_tunable(
     if FLAT:
         if PERSISTENT or tl.cdiv(M * N, BN) > 65535:
             _routed_ascend_flat_persistent(
-                X, W, Y, M, N, S, INTERLEAVED, WEIGHT, BN, MERGED, 0, INDEX64, ""
+                X,
+                W,
+                Y,
+                M,
+                N,
+                S,
+                INTERLEAVED,
+                WEIGHT,
+                BN,
+                MERGED,
+                0,
+                INDEX64,
+                "",
             )
         else:
             _routed_ascend_flat(
-                X, W, Y, M, N, S, INTERLEAVED, WEIGHT, BN, MERGED, 0, INDEX64, ""
+                X,
+                W,
+                Y,
+                M,
+                N,
+                S,
+                INTERLEAVED,
+                WEIGHT,
+                BN,
+                MERGED,
+                0,
+                INDEX64,
+                "",
             )
     else:
         if PERSISTENT or tl.cdiv(M, BM) * tl.cdiv(N, BN) > 65535:
             _routed_ascend_tile_persistent(
-                X, W, Y, M, N, S, INTERLEAVED, WEIGHT, BM, BN, MERGED, 0, INDEX64, ""
+                X,
+                W,
+                Y,
+                M,
+                N,
+                S,
+                INTERLEAVED,
+                WEIGHT,
+                BM,
+                BN,
+                MERGED,
+                0,
+                INDEX64,
+                "",
             )
         else:
             _routed_ascend_tile(
-                X, W, Y, M, N, S, INTERLEAVED, WEIGHT, BM, BN, MERGED, 0, INDEX64, ""
+                X,
+                W,
+                Y,
+                M,
+                N,
+                S,
+                INTERLEAVED,
+                WEIGHT,
+                BM,
+                BN,
+                MERGED,
+                0,
+                INDEX64,
+                "",
             )
 
 
@@ -370,7 +443,8 @@ def _native_grid(meta):
     programs = (
         triton.cdiv(meta["M"] * meta["N"], meta["BN"])
         if meta["FLAT"]
-        else triton.cdiv(meta["M"], meta["BM"]) * triton.cdiv(meta["N"], meta["BN"])
+        else triton.cdiv(meta["M"], meta["BM"])
+        * triton.cdiv(meta["N"], meta["BN"])
     )
     if meta["PERSISTENT"] or programs > 65535:
         programs = min(programs, max(1, meta["CORES"] // meta["CORE_DIVISOR"]))
@@ -435,7 +509,9 @@ def _native_configs():
         (32, 256),
     )
     configs = [
-        _native_config(0, bm, bn, merged) for bm, bn in tiles for merged in (0, 1)
+        _native_config(0, bm, bn, merged)
+        for bm, bn in tiles
+        for merged in (0, 1)
     ]
     configs.extend(
         _native_config(1, 1, block, merged)
@@ -444,7 +520,12 @@ def _native_configs():
     )
     # Four anchor geometries keep policy search bounded. Pruning retains
     # only the layout's natural load path for these additional variants.
-    for flat, bm, bn in ((0, 1, 1024), (0, 4, 1024), (0, 16, 256), (1, 1, 4096)):
+    for flat, bm, bn in (
+        (0, 1, 1024),
+        (0, 4, 1024),
+        (0, 16, 256),
+        (1, 1, 4096),
+    ):
         for merged in (0, 1):
             configs.extend(
                 (
@@ -513,7 +594,9 @@ def _bounded_native_configs(configs, m, n):
             # Preserve one CTA per row and a grouped-row alternative rather
             # than allowing all four slots to select similar multi-row tiles.
             for single_row in (True, False):
-                choices = [c for c in ranked if (c.kwargs["BM"] == 1) == single_row]
+                choices = [
+                    c for c in ranked if (c.kwargs["BM"] == 1) == single_row
+                ]
                 if choices:
                     group.append(choices[0])
         for candidate in ranked:
@@ -582,14 +665,18 @@ def _is_compilation_failure(error):
 
 def _prune_native(configs, named_args, **kwargs):
     if torch.npu.is_current_stream_capturing():
-        raise RuntimeError("Warm up this autotune signature before NPU graph capture")
+        raise RuntimeError(
+            "Warm up this autotune signature before NPU graph capture"
+        )
     _, backend = _checked_ascend_backend()
     m, n = named_args["M"], named_args["N"]
     interleaved = named_args["INTERLEAVED"]
     eligible = []
     for candidate in configs:
         meta = candidate.kwargs
-        flat, bm, bn, merged = (meta[key] for key in ("FLAT", "BM", "BN", "MERGED"))
+        flat, bm, bn, merged = (
+            meta[key] for key in ("FLAT", "BM", "BN", "MERGED")
+        )
         if flat:
             if bn > max(256, triton.next_power_of_2(m * n)):
                 continue
@@ -625,14 +712,16 @@ def _prune_native(configs, named_args, **kwargs):
     # Reserve two slots before compilation, even when compiler tuning is off.
     # An invalid aggressive candidate cannot displace the conservative baseline.
     candidates = (
-        _conservative_native_configs() + _bounded_native_configs(eligible, m, n)[:22]
+        _conservative_native_configs()
+        + _bounded_native_configs(eligible, m, n)[:22]
     )
     result, checked, rejected = [], [], []
     for candidate in candidates:
         options = {
             key: value
             for key, value in candidate.all_kwargs().items()
-            if key not in ("FLAT", "BM", "BN", "MERGED", "PERSISTENT", "CORE_DIVISOR")
+            if key
+            not in ("FLAT", "BM", "BN", "MERGED", "PERSISTENT", "CORE_DIVISOR")
         }
         signature = tuple(sorted(options.items()))
         if signature not in checked:
@@ -669,7 +758,11 @@ def _prune_native(configs, named_args, **kwargs):
             continue
         result.append(candidate)
     if not result:
-        detail = rejected[-1] if rejected else "shape pruning removed all candidates"
+        detail = (
+            rejected[-1]
+            if rejected
+            else "shape pruning removed all candidates"
+        )
         raise RuntimeError("No supported Ascend configurations: " + detail)
     return result
 
@@ -793,7 +886,9 @@ def _launch_spec(x, weights, out, config, interleaved):
 
 
 def _launch(x, weights, out, config, interleaved=True, *, compile_only=False):
-    kernel, grid, args, options = _launch_spec(x, weights, out, config, interleaved)
+    kernel, grid, args, options = _launch_spec(
+        x, weights, out, config, interleaved
+    )
     if compile_only:
         return kernel.warmup(*args, grid=grid, **options)
     return kernel[grid](*args, **options)
@@ -803,7 +898,9 @@ def _select_metadata_config(x, weights, out, interleaved):
     """Use measured configurations only for their tested tensor metadata."""
     m, width = x.shape
     n = width // 2
-    fallback = _select_config(m, n, interleaved, weights is not None, x.element_size())
+    fallback = _select_config(
+        m, n, interleaved, weights is not None, x.element_size()
+    )
     # The measured cases used contiguous, aligned X/W/Y with matching dtypes
     # and one weight per row. Other metadata keeps the conservative fallback.
     if (
@@ -824,10 +921,50 @@ def _select_metadata_config(x, weights, out, interleaved):
     # values from the measured 910B4-1 cases; no results persist across calls.
     configurations = {
         (8, 768, torch.bfloat16, True): ("tile", 1, 1024, 4, 1, 0, ""),
-        (256, 1024, torch.bfloat16, True): ("tile", 8, 1024, 4, 1, 0, "", True, True),
-        (1536, 2048, torch.bfloat16, False): ("tile", 4, 2048, 4, 0, 1, "", True, True),
-        (1536, 2048, torch.bfloat16, True): ("flat", 1, 8192, 4, 1, 0, "", True, True),
-        (256, 8192, torch.bfloat16, True): ("tile", 1, 8192, 4, 1, 0, "", True, True),
+        (256, 1024, torch.bfloat16, True): (
+            "tile",
+            8,
+            1024,
+            4,
+            1,
+            0,
+            "",
+            True,
+            True,
+        ),
+        (1536, 2048, torch.bfloat16, False): (
+            "tile",
+            4,
+            2048,
+            4,
+            0,
+            1,
+            "",
+            True,
+            True,
+        ),
+        (1536, 2048, torch.bfloat16, True): (
+            "flat",
+            1,
+            8192,
+            4,
+            1,
+            0,
+            "",
+            True,
+            True,
+        ),
+        (256, 8192, torch.bfloat16, True): (
+            "tile",
+            1,
+            8192,
+            4,
+            1,
+            0,
+            "",
+            True,
+            True,
+        ),
         (49152, 3072, torch.bfloat16, False): (
             "tile",
             2,
@@ -850,8 +987,28 @@ def _select_metadata_config(x, weights, out, interleaved):
             False,
             True,
         ),
-        (256, 1024, torch.float16, False): ("tile", 16, 512, 4, 0, 0, "", False, False),
-        (256, 1024, torch.float16, True): ("tile", 8, 1024, 4, 1, 0, "", True, True),
+        (256, 1024, torch.float16, False): (
+            "tile",
+            16,
+            512,
+            4,
+            0,
+            0,
+            "",
+            False,
+            False,
+        ),
+        (256, 1024, torch.float16, True): (
+            "tile",
+            8,
+            1024,
+            4,
+            1,
+            0,
+            "",
+            True,
+            True,
+        ),
         (256, 1024, torch.float32, False): ("tile", 32, 256, 4, 0, 0, ""),
         (256, 1024, torch.float32, True): ("flat", 1, 8192, 4, 1, 0, ""),
     }
@@ -878,7 +1035,7 @@ def _geometry_configs(m, n, interleaved, weighted, element_size):
     for block in (128, 256, 512, 1024, 2048, 4096, 8192, 16384):
         if block > max(256, triton.next_power_of_2(m * n)):
             continue
-        for merged in ((0, 1) if interleaved else (0,)):
+        for merged in (0, 1) if interleaved else (0,):
             configs.append(("flat", 1, block, 4, merged, 0, ""))
     return list(dict.fromkeys(configs))
 
@@ -889,7 +1046,10 @@ def _event_samples(fn, cache, count):
     # The 1 GiB write workload is outside the measured range. These are NPU
     # event measurements; no claim of a hardware-verified L2 flush is made.
     pairs = [
-        (torch.npu.Event(enable_timing=True), torch.npu.Event(enable_timing=True))
+        (
+            torch.npu.Event(enable_timing=True),
+            torch.npu.Event(enable_timing=True),
+        )
         for _ in range(count)
     ]
     for start, end in pairs:
@@ -922,7 +1082,9 @@ def _autotune(x, weights, out, interleaved):
     if torch.npu.is_current_stream_capturing():
         raise RuntimeError("Call _autotune outside NPU graph capture")
     if not x.numel() or not out.numel():
-        raise ValueError("_autotune requires nonempty input and output tensors")
+        raise ValueError(
+            "_autotune requires nonempty input and output tensors"
+        )
     started = time.perf_counter()
     m, width = x.shape
     n = width // 2
@@ -943,7 +1105,9 @@ def _autotune(x, weights, out, interleaved):
     seeds = [
         canonical(_select_metadata_config(x, weights, out, interleaved)),
         canonical(
-            _select_config(m, n, interleaved, weights is not None, x.element_size())
+            _select_config(
+                m, n, interleaved, weights is not None, x.element_size()
+            )
         ),
     ]
     candidates = list(
@@ -960,7 +1124,9 @@ def _autotune(x, weights, out, interleaved):
     # Preserve the caller's output alignment while keeping tuning writes in
     # private storage. The logical output is always contiguous.
     backing = torch.empty(
-        out.numel() + 32 // out.element_size(), dtype=out.dtype, device=out.device
+        out.numel() + 32 // out.element_size(),
+        dtype=out.dtype,
+        device=out.device,
     )
     offset = ((out.data_ptr() - backing.data_ptr()) % 32) // out.element_size()
     temporary = backing[offset : offset + out.numel()].view(out.shape)
@@ -975,7 +1141,9 @@ def _autotune(x, weights, out, interleaved):
         attempted.add(config)
         stage_counts[stage] += 1
         try:
-            _launch(x, weights, temporary, config, interleaved, compile_only=True)
+            _launch(
+                x, weights, temporary, config, interleaved, compile_only=True
+            )
         except Exception as error:
             # Only compile-time failures are skipped. Device/runtime failures
             # below propagate to the caller rather than being hidden by tuning.
@@ -985,14 +1153,18 @@ def _autotune(x, weights, out, interleaved):
         torch.npu.synchronize()
         timings[config] = statistics.median(
             _event_samples(
-                lambda: _launch(x, weights, temporary, config, interleaved), cache, 3
+                lambda: _launch(x, weights, temporary, config, interleaved),
+                cache,
+                3,
             )
         )
 
     for config in candidates:
         measure(config, "geometry")
     if not timings:
-        raise RuntimeError("No Ascend Triton configuration compiled: " + str(skipped))
+        raise RuntimeError(
+            "No Ascend Triton configuration compiled: " + str(skipped)
+        )
     anchors = []
     # Refine two distinct geometries per load method AND kernel family. This
     # avoids excluding flat scheduling or a useful tile shape after one noisy
@@ -1015,7 +1187,9 @@ def _autotune(x, weights, out, interleaved):
     for anchor in anchors:
         for multibuffer in (False, True):
             for persistent in (False, True):
-                measure((*anchor[:5], 0, "", multibuffer, persistent), "policy")
+                measure(
+                    (*anchor[:5], 0, "", multibuffer, persistent), "policy"
+                )
     # The explicit exp form and sigmoid generated identical 910B binaries in
     # prior probes, so new policies use sigmoid. Keep measured seed variants;
     # never search/select exp2, whose changed FP32 bits break layout equality.
@@ -1054,7 +1228,8 @@ def _autotune(x, weights, out, interleaved):
                     _launch(x, weights, temporary, config, interleaved)
 
             samples[config].extend(
-                value / repetitions for value in _event_samples(launch_batch, cache, 1)
+                value / repetitions
+                for value in _event_samples(launch_batch, cache, 1)
             )
     final_times = {
         config: statistics.median(values) for config, values in samples.items()
@@ -1086,7 +1261,12 @@ def _check_storage_format(tensor, name):
     # strides. Internal formats (for example FRACTAL_NZ) can appear logically
     # contiguous while using a blocked physical layout, which raw pointers
     # cannot interpret. Format checks perform no tensor arithmetic/conversion.
-    if tensor.numel() and int(torch_npu.get_npu_format(tensor)) not in (0, 1, 2, 30):
+    if tensor.numel() and int(torch_npu.get_npu_format(tensor)) not in (
+        0,
+        1,
+        2,
+        30,
+    ):
         raise ValueError(
             name + " requires a base NPU storage format; "
             "convert internal formats with torch_npu.npu_format_cast(tensor, 2)"
@@ -1120,12 +1300,19 @@ def silu_and_mul_routed(
     supported = (torch.float16, torch.bfloat16, torch.float32)
     if not isinstance(x, torch.Tensor) or x.ndim != 2:
         raise ValueError("gateup_output must be a two-dimensional tensor")
-    if x.device.type not in ("npu", "privateuseone") or x.dtype not in supported:
-        raise ValueError("gateup_output must be Ascend NPU FP16, BF16, or FP32")
+    if (
+        x.device.type not in ("npu", "privateuseone")
+        or x.dtype not in supported
+    ):
+        raise ValueError(
+            "gateup_output must be Ascend NPU FP16, BF16, or FP32"
+        )
     _check_storage_format(x, "gateup_output")
     m, width = x.shape
     if width % 2 or (x.numel() and x.stride(1) != 1):
-        raise ValueError("gateup_output needs an even width and contiguous columns")
+        raise ValueError(
+            "gateup_output needs an even width and contiguous columns"
+        )
     if not isinstance(use_interleaved, bool):
         raise TypeError("use_interleaved must be bool")
     n = width // 2
@@ -1141,7 +1328,9 @@ def silu_and_mul_routed(
             or w.device != x.device
             or w.dtype not in supported
         ):
-            raise ValueError("topk_weights must be contiguous [M] on the input device")
+            raise ValueError(
+                "topk_weights must be contiguous [M] on the input device"
+            )
         _check_storage_format(w, "topk_weights")
     allocated_output = out is None
     if allocated_output:
@@ -1164,11 +1353,15 @@ def silu_and_mul_routed(
                 topk_weights is not None
                 and ptr == topk_weights.untyped_storage().data_ptr()
             ):
-                raise ValueError("out must not share storage with input or weights")
+                raise ValueError(
+                    "out must not share storage with input or weights"
+                )
         with torch.npu.device(x.device):
             if autotune:
                 target, _ = _checked_ascend_backend()
-                cores = torch.npu.get_device_properties(x.device).vector_core_num
+                cores = torch.npu.get_device_properties(
+                    x.device
+                ).vector_core_num
                 index64 = max((m - 1) * x.stride(0) + width, m * n) >= 2**31
                 try:
                     _native_tuner.run(
@@ -1185,7 +1378,11 @@ def silu_and_mul_routed(
                         x.device.index,
                         str(target.arch),
                         x.data_ptr() % 32,
-                        topk_weights.data_ptr() % 32 if topk_weights is not None else 0,
+                        (
+                            topk_weights.data_ptr() % 32
+                            if topk_weights is not None
+                            else 0
+                        ),
                         out.data_ptr() % 32,
                         compiler_tuning,
                         grid=_native_grid,
@@ -1196,7 +1393,9 @@ def silu_and_mul_routed(
                     # Release transient tensor references on errors as well.
                     _native_tuner.nargs = None
             else:
-                config = _select_metadata_config(x, topk_weights, out, use_interleaved)
+                config = _select_metadata_config(
+                    x, topk_weights, out, use_interleaved
+                )
                 _launch(x, topk_weights, out, config, use_interleaved)
     return out
 

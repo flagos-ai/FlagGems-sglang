@@ -66,7 +66,9 @@ def _configs():
             variants = profiles if bn in (256, 4096) else profiles[:1]
             for profile in variants:
                 for vectorization_off in (
-                    (False, True) if not flat and not packed and bn > 256 else (False,)
+                    (False, True)
+                    if not flat and not packed and bn > 256
+                    else (False,)
                 ):
                     result.append(
                         triton.Config(
@@ -233,12 +235,12 @@ def _routed_xpu(
                 else:
                     offsets = row * S + cols
                     up_offsets = offsets + N
-                gate = tl.load(X + offsets, mask, other=0, cache_modifier=CACHE).to(
-                    tl.float32
-                )
-                up = tl.load(X + up_offsets, mask, other=0, cache_modifier=CACHE).to(
-                    tl.float32
-                )
+                gate = tl.load(
+                    X + offsets, mask, other=0, cache_modifier=CACHE
+                ).to(tl.float32)
+                up = tl.load(
+                    X + up_offsets, mask, other=0, cache_modifier=CACHE
+                ).to(tl.float32)
             if MATH == 3:
                 sigmoid = 1.0 / (1.0 + libdevice.fast_expf(-gate))
             elif MATH == 1:
@@ -293,8 +295,18 @@ def _routed_flat(
             other=0,
             cache_modifier=CACHE,
         )
-        gate = (words & 65535).to(tl.uint16).to(tl.float16, bitcast=True).to(tl.float32)
-        up = (words >> 16).to(tl.uint16).to(tl.float16, bitcast=True).to(tl.float32)
+        gate = (
+            (words & 65535)
+            .to(tl.uint16)
+            .to(tl.float16, bitcast=True)
+            .to(tl.float32)
+        )
+        up = (
+            (words >> 16)
+            .to(tl.uint16)
+            .to(tl.float16, bitcast=True)
+            .to(tl.float32)
+        )
     else:
         if INTERLEAVED:
             gidx = row * S + 2 * col
@@ -302,8 +314,12 @@ def _routed_flat(
         else:
             gidx = row * S + col
             uidx = gidx + N
-        gate = tl.load(X + gidx, valid, other=0, cache_modifier=CACHE).to(tl.float32)
-        up = tl.load(X + uidx, valid, other=0, cache_modifier=CACHE).to(tl.float32)
+        gate = tl.load(X + gidx, valid, other=0, cache_modifier=CACHE).to(
+            tl.float32
+        )
+        up = tl.load(X + uidx, valid, other=0, cache_modifier=CACHE).to(
+            tl.float32
+        )
     if MATH == 3:
         sigmoid = 1.0 / (1.0 + libdevice.fast_expf(-gate))
     elif MATH == 1:
@@ -345,11 +361,36 @@ def _routed_tunable(
     # One native tuner compares both paths without changing their arithmetic.
     if FLAT:
         _routed_flat(
-            X, W, Y, M, N, S, WEIGHT, INTERLEAVED, BN, PACKED, MATH, CACHE, INDEX64
+            X,
+            W,
+            Y,
+            M,
+            N,
+            S,
+            WEIGHT,
+            INTERLEAVED,
+            BN,
+            PACKED,
+            MATH,
+            CACHE,
+            INDEX64,
         )
     else:
         _routed_xpu(
-            X, W, Y, M, N, S, WEIGHT, INTERLEAVED, INDEX64, BM, BN, PACKED, MATH, CACHE
+            X,
+            W,
+            Y,
+            M,
+            N,
+            S,
+            WEIGHT,
+            INTERLEAVED,
+            INDEX64,
+            BM,
+            BN,
+            PACKED,
+            MATH,
+            CACHE,
         )
 
 
@@ -380,7 +421,9 @@ def _native_config(options):
             else triton.cdiv(meta["M"], bm) * triton.cdiv(meta["N"], bn)
         )
         if meta.get("grid") != (count, 1, 1):
-            raise RuntimeError("XPU launch grid no longer matches the tuned tile")
+            raise RuntimeError(
+                "XPU launch grid no longer matches the tuned tile"
+            )
 
     return triton.Config(
         options,
@@ -395,7 +438,9 @@ def _prune_native(configs, named_args, **kwargs):
     args = {**named_args, **kwargs}
     interface = getattr(torch, args["X"].device.type)
     if getattr(interface, "is_current_stream_capturing", lambda: False)():
-        raise RuntimeError("Warm up this autotune signature before graph capture")
+        raise RuntimeError(
+            "Warm up this autotune signature before graph capture"
+        )
     _, backend = _checked_xpu_backend()
     base = _compiler_profiles()[0]
     result, checked_profiles = [], []
@@ -414,7 +459,9 @@ def _prune_native(configs, named_args, **kwargs):
             continue
         if meta["buffer_size_limit"] < triton.cdiv(meta["BN"], 64) * 4:
             continue
-        if not args["COMPILER_TUNING"] and any(meta[k] != v for k, v in base.items()):
+        if not args["COMPILER_TUNING"] and any(
+            meta[k] != v for k, v in base.items()
+        ):
             continue
         options = {k: meta[k] for k in (*base, "isCloseVectorization")}
         profile = tuple(sorted(options.items()))
@@ -431,13 +478,16 @@ def _prune_native(configs, named_args, **kwargs):
         count = (
             triton.cdiv(args["M"] * args["N"], meta["BN"])
             if meta["FLAT"]
-            else triton.cdiv(args["M"], meta["BM"]) * triton.cdiv(args["N"], meta["BN"])
+            else triton.cdiv(args["M"], meta["BM"])
+            * triton.cdiv(args["N"], meta["BN"])
         )
         # The XPU JIT consumes grid before evaluating callable launch grids.
         # Fresh Configs keep cached grids independent across shape changes.
         result.append(_native_config({**meta, "grid": (count, 1, 1)}))
     if not result:
-        raise RuntimeError("No supported XPU configurations after shape pruning")
+        raise RuntimeError(
+            "No supported XPU configurations after shape pruning"
+        )
     return result
 
 
@@ -481,7 +531,9 @@ def _make_native_tuner():
 _native_tuner = _make_native_tuner()
 
 
-def _launch_fixed(x, weights, out, config, interleaved=True, **backend_options):
+def _launch_fixed(
+    x, weights, out, config, interleaved=True, **backend_options
+):
     """Fixed launch; native defaults use Triton's own positional launch path."""
     if config.get("PACKED", 0) and x.dtype != torch.float16:
         raise ValueError("Packed input is supported only for FP16")
@@ -490,7 +542,8 @@ def _launch_fixed(x, weights, out, config, interleaved=True, **backend_options):
     if (
         not backend_options
         and not config.get("FLAT", 0)
-        and config.get("isCloseVectorization", False) == XPUOptions.isCloseVectorization
+        and config.get("isCloseVectorization", False)
+        == XPUOptions.isCloseVectorization
         and config.keys()
         <= {
             "BM",
@@ -540,7 +593,9 @@ def _launch_fixed(x, weights, out, config, interleaved=True, **backend_options):
     index64 = max((m - 1) * x.stride(0) + width, m * n) >= 2**31
     if flat:
         if out.dtype == torch.bfloat16:
-            raise ValueError("Flat BF16 output is disabled: vendor RTNE is incorrect")
+            raise ValueError(
+                "Flat BF16 output is disabled: vendor RTNE is incorrect"
+            )
         args.pop("BM")
         return _routed_flat[(triton.cdiv(m * n, bn),)](
             x,
@@ -642,16 +697,31 @@ def _select_config(
     safe = (1, 128, 0, False)
     options = safe
     choices = None
-    if output_alignment == 0 and weight_alignment == 0 and weight_dtype in (None, fp32):
-        choices = measured.get((m, n, input_dtype, output_dtype, stride, x_alignment))
+    if (
+        output_alignment == 0
+        and weight_alignment == 0
+        and weight_dtype in (None, fp32)
+    ):
+        choices = measured.get(
+            (m, n, input_dtype, output_dtype, stride, x_alignment)
+        )
         if choices is not None:
-            options = choices[2 * int(interleaved) + int(weight_dtype is not None)]
+            options = choices[
+                2 * int(interleaved) + int(weight_dtype is not None)
+            ]
     bm, bn, packed, vectorization_off = options
     packed_ok = (
-        interleaved and input_dtype == fp16 and x_alignment % 4 == 0 and stride % 2 == 0
+        interleaved
+        and input_dtype == fp16
+        and x_alignment % 4 == 0
+        and stride % 2 == 0
     )
     if (packed and not packed_ok) or (
-        interleaved and bm == 1 and bn > 256 and not vectorization_off and not packed
+        interleaved
+        and bm == 1
+        and bn > 256
+        and not vectorization_off
+        and not packed
     ):
         bm, bn, packed, vectorization_off = safe
     config = {
@@ -683,7 +753,9 @@ def _select_config(
     return config
 
 
-def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=15.0):
+def _autotune(
+    x, weights, out, interleaved=True, *, max_configs=64, max_seconds=15.0
+):
     """Offline, call-local tuning; normal public calls never invoke this helper.
 
     At most 64 candidate entries and 15 seconds by default. Either limit may
@@ -724,13 +796,19 @@ def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=
     interface = getattr(torch, x.device.type)
     with interface.device(x.device):
         if getattr(interface, "is_current_stream_capturing", lambda: False)():
-            raise RuntimeError("Autotuning is unavailable during graph capture")
-        backend = make_backend(triton.runtime.driver.active.get_current_target())
+            raise RuntimeError(
+                "Autotuning is unavailable during graph capture"
+            )
+        backend = make_backend(
+            triton.runtime.driver.active.get_current_target()
+        )
         if (
             type(backend).__module__ != "triton.backends.xpu.compiler"
             or backend.binary_ext != "xpubin"
         ):
-            raise RuntimeError("This tuner requires the Kunlunxin XPU compiler")
+            raise RuntimeError(
+                "This tuner requires the Kunlunxin XPU compiler"
+            )
         candidates = _prune(
             _configs(),
             {
@@ -770,16 +848,24 @@ def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=
             weights.data_ptr() % 16 if weights is not None else 0,
             out.data_ptr() % 16,
         )
-        options_stream = [seed] + [candidate.all_kwargs() for candidate in candidates]
+        options_stream = [seed] + [
+            candidate.all_kwargs() for candidate in candidates
+        ]
         best, best_time, records, seen = None, float("inf"), [], set()
         for index, options in enumerate(options_stream):
             if max_configs is not None and index >= max_configs:
                 break
-            if index and deadline is not None and time.perf_counter() >= deadline:
+            if (
+                index
+                and deadline is not None
+                and time.perf_counter() >= deadline
+            ):
                 break
             key = tuple(sorted(options.items()))
             if key in seen:
-                records.append({"config": dict(options), "status": "duplicate"})
+                records.append(
+                    {"config": dict(options), "status": "duplicate"}
+                )
                 continue
             seen.add(key)
             compiler = {
@@ -822,11 +908,17 @@ def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=
                 interface.synchronize()
                 actual = out.cpu()
                 for classify in (torch.isnan, torch.isposinf, torch.isneginf):
-                    assert torch.equal(classify(actual), classify(reference_cpu))
+                    assert torch.equal(
+                        classify(actual), classify(reference_cpu)
+                    )
                 finite = torch.isfinite(reference_cpu)
-                bits_type = torch.int32 if out.dtype == torch.float32 else torch.int16
+                bits_type = (
+                    torch.int32 if out.dtype == torch.float32 else torch.int16
+                )
                 actual_bits = actual[finite].view(bits_type).to(torch.int64)
-                reference_bits = reference_cpu[finite].view(bits_type).to(torch.int64)
+                reference_bits = (
+                    reference_cpu[finite].view(bits_type).to(torch.int64)
+                )
                 max_ulp = (
                     int((actual_bits - reference_bits).abs().max())
                     if actual_bits.numel()
@@ -837,7 +929,11 @@ def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=
                 ), f"max_ulp={max_ulp}"
             except (OutOfResources, CompilationError, AssertionError) as error:
                 records.append(
-                    {"config": dict(options), "status": "rejected", "error": str(error)}
+                    {
+                        "config": dict(options),
+                        "status": "rejected",
+                        "error": str(error),
+                    }
                 )
                 continue
             # A validated seed remains available even if compilation used the budget.
@@ -859,7 +955,9 @@ def _autotune(x, weights, out, interleaved=True, *, max_configs=64, max_seconds=
             if times is not None and times[0] < best_time:
                 best_time, best = times[0], dict(options)
         if best is None:
-            raise RuntimeError("No supported Kunlunxin configuration passed validation")
+            raise RuntimeError(
+                "No supported Kunlunxin configuration passed validation"
+            )
         _launch_fixed(x, weights, out, best, interleaved)
         interface.synchronize()
     return best, records
@@ -897,7 +995,9 @@ def silu_and_mul_routed(
         raise ValueError("gateup_output must be Kunlunxin FP16, BF16, or FP32")
     m, width = x.shape
     if width % 2 or (x.numel() and x.stride(1) != 1):
-        raise ValueError("gateup_output needs an even width and contiguous columns")
+        raise ValueError(
+            "gateup_output needs an even width and contiguous columns"
+        )
     if not isinstance(use_interleaved, bool):
         raise TypeError("use_interleaved must be bool")
     n = width // 2
@@ -913,7 +1013,9 @@ def silu_and_mul_routed(
             or w.device != x.device
             or w.dtype not in supported
         ):
-            raise ValueError("topk_weights must be contiguous [M] on the input device")
+            raise ValueError(
+                "topk_weights must be contiguous [M] on the input device"
+            )
     allocated_output = out is None
     if allocated_output:
         out = torch.empty((m, n), device=x.device, dtype=dtype)
@@ -934,7 +1036,9 @@ def silu_and_mul_routed(
                 topk_weights is not None
                 and storage == topk_weights.untyped_storage().data_ptr()
             ):
-                raise ValueError("out must not share storage with input or weights")
+                raise ValueError(
+                    "out must not share storage with input or weights"
+                )
         interface = getattr(torch, x.device.type)
         with interface.device(x.device):
             if autotune:
@@ -961,7 +1065,11 @@ def silu_and_mul_routed(
                     x.device.index,
                     str(target.arch),
                     x.data_ptr() % 16,
-                    topk_weights.data_ptr() % 16 if topk_weights is not None else 0,
+                    (
+                        topk_weights.data_ptr() % 16
+                        if topk_weights is not None
+                        else 0
+                    ),
                     out.data_ptr() % 16,
                     compiler_tuning,
                     warmup=False,
@@ -976,7 +1084,11 @@ def silu_and_mul_routed(
                     out.dtype,
                     use_interleaved,
                     x.data_ptr() % 16,
-                    topk_weights.data_ptr() % 16 if topk_weights is not None else 0,
+                    (
+                        topk_weights.data_ptr() % 16
+                        if topk_weights is not None
+                        else 0
+                    ),
                     out.data_ptr() % 16,
                 )
                 _launch_fixed(x, topk_weights, out, config, use_interleaved)

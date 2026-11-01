@@ -31,7 +31,9 @@ def _sigmoid(gate, MODE: tl.constexpr):
         # sigmoid values with FP32 denormals preserved. Keep exp2 before the
         # scaling so overflow and special-value behavior match those modes.
         scale: tl.constexpr = 5.421010862427522e-20
-        scaled_denominator = tl.fma(tl.exp2(-gate * 1.4426950408889634), scale, scale)
+        scaled_denominator = tl.fma(
+            tl.exp2(-gate * 1.4426950408889634), scale, scale
+        )
         reciprocal = tl.inline_asm_elementwise(
             "v_rcp_f32 $0, $1",
             constraints="=v,v",
@@ -67,7 +69,9 @@ def _sigmoid(gate, MODE: tl.constexpr):
         if MODE == 5:
             correction = tl.fma(-scaled_denominator, reciprocal, 1.0)
             refined = tl.fma(reciprocal, correction, reciprocal)
-            reciprocal = tl.where(denominator == float("inf"), reciprocal, refined)
+            reciprocal = tl.where(
+                denominator == float("inf"), reciprocal, refined
+            )
         return reciprocal * scale
 
 
@@ -95,17 +99,23 @@ def _routed_tile(X, W, Y, M, META: tl.constexpr):
         mask = cols[None, :] < N
     else:
         mask = (rows[:, None] < M) & (cols[None, :] < N)
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 2:
         packed = tl.load(
-            X.to(tl.pointer_type(tl.uint32)) + rows[:, None] * (S // 2) + cols[None, :],
+            X.to(tl.pointer_type(tl.uint32))
+            + rows[:, None] * (S // 2)
+            + cols[None, :],
             mask,
             other=0,
             cache_modifier=modifier,
             eviction_policy=eviction,
         )
-        gate = (packed & 65535).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
+        gate = (
+            (packed & 65535).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
+        )
         up = (packed >> 16).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
     elif LOAD == 0:
         q = tl.arange(0, 2 * BN)
@@ -130,7 +140,9 @@ def _routed_tile(X, W, Y, M, META: tl.constexpr):
         if INTERLEAVED:
             gate, up = tl.split(tl.reshape(pair, (BM, BN, 2)))
         else:
-            gate, up = tl.split(tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1)))
+            gate, up = tl.split(
+                tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1))
+            )
     else:
         if INTERLEAVED:
             offsets = rows[:, None] * S + 2 * cols[None, :]
@@ -157,13 +169,20 @@ def _routed_tile(X, W, Y, M, META: tl.constexpr):
     result = (gate * _sigmoid(gate, SIGMOID)) * up
     if WEIGHT:
         if EVEN_M:
-            weight = tl.load(W + rows, eviction_policy="evict_last").to(tl.float32)
+            weight = tl.load(W + rows, eviction_policy="evict_last").to(
+                tl.float32
+            )
         else:
             weight = tl.load(
                 W + rows, rows < M, other=0, eviction_policy="evict_last"
             ).to(tl.float32)
         result = result * weight[:, None]
-    tl.store(Y + rows[:, None] * N + cols[None, :], result, mask, cache_modifier=STORE)
+    tl.store(
+        Y + rows[:, None] * N + cols[None, :],
+        result,
+        mask,
+        cache_modifier=STORE,
+    )
 
 
 @triton.jit
@@ -185,7 +204,9 @@ def _routed_flat(X, W, Y, TOTAL, META: tl.constexpr):
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     rows = offsets // N
     cols = offsets % N
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 2:
         packed = tl.load(
@@ -195,7 +216,9 @@ def _routed_flat(X, W, Y, TOTAL, META: tl.constexpr):
             cache_modifier=modifier,
             eviction_policy=eviction,
         )
-        gate = (packed & 65535).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
+        gate = (
+            (packed & 65535).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
+        )
         up = (packed >> 16).to(tl.uint16).to(X.dtype.element_ty, bitcast=True)
     elif LOAD == 0:
         q = tl.arange(0, 2 * BLOCK)
@@ -254,7 +277,9 @@ def _routed_flat(X, W, Y, TOTAL, META: tl.constexpr):
 
 def _launch(x, weights, out, config, interleaved=True, *, metadata=None):
     if len(config) != 9:
-        return _launch_extended(x, weights, out, config, interleaved, metadata=metadata)
+        return _launch_extended(
+            x, weights, out, config, interleaved, metadata=metadata
+        )
     # Metadata supplied by the validated public path is local to this call.
     if metadata is None:
         m, width = x.shape
@@ -268,13 +293,17 @@ def _launch(x, weights, out, config, interleaved=True, *, metadata=None):
         or x.data_ptr() % 4
         or stride % 2
     ):
-        raise ValueError("Packed load requires aligned interleaved 16-bit input")
+        raise ValueError(
+            "Packed load requires aligned interleaved 16-bit input"
+        )
     if warps > 16:
         raise ValueError(
             "Unsupported Hygon configuration: more than 1024 threads/block"
         )
     if bm * bn > (524288 if load == 0 else 1048576):
-        raise ValueError("Unsupported Hygon configuration: Triton tensor size limit")
+        raise ValueError(
+            "Unsupported Hygon configuration: Triton tensor size limit"
+        )
     total = m * n
     index64 = max((m - 1) * stride + width, total) >= 2**31
     if family == "flat":
@@ -328,7 +357,9 @@ def _launch(x, weights, out, config, interleaved=True, *, metadata=None):
     )
 
 
-def _launch_extended(x, weights, out, config, interleaved=True, *, metadata=None):
+def _launch_extended(
+    x, weights, out, config, interleaved=True, *, metadata=None
+):
     # Metadata supplied by the validated public path is local to this call.
     if metadata is None:
         m, width = x.shape
@@ -342,7 +373,9 @@ def _launch_extended(x, weights, out, config, interleaved=True, *, metadata=None
     if reason is not None:
         raise ValueError(reason)
     family, bm, bn, warps, cache, load, sigmoid, store, waves = config[:9]
-    stages, ctas, fusion, epilogue, schedule, latency, single_buffer = config[9]
+    stages, ctas, fusion, epilogue, schedule, latency, single_buffer = config[
+        9
+    ]
     compiler = dict(
         num_warps=warps,
         num_stages=stages,
@@ -361,7 +394,9 @@ def _launch_extended(x, weights, out, config, interleaved=True, *, metadata=None
         or x.data_ptr() % 4
         or stride % 2
     ):
-        raise ValueError("Packed load requires aligned interleaved 16-bit input")
+        raise ValueError(
+            "Packed load requires aligned interleaved 16-bit input"
+        )
     total = m * n
     index64 = max((m - 1) * stride + width, total) >= 2**31
     if family == "flat":
@@ -416,29 +451,89 @@ def _select_config(x, weights, out, interleaved, *, metadata=None):
         m, width, n, stride, dtype, output_dtype = metadata
     # Immutable literals avoid rebuilding a local dict on every invocation.
     # Only metadata is reused within this call; every invocation launches.
-    if m == 17 and n == 513 and dtype == torch.float16 and interleaved is False:
+    if (
+        m == 17
+        and n == 513
+        and dtype == torch.float16
+        and interleaved is False
+    ):
         selected = ("tile", 1, 256, 2, ".cv", 0, 2, "", 0)
-    elif m == 1536 and n == 3072 and dtype == torch.float16 and interleaved is False:
+    elif (
+        m == 1536
+        and n == 3072
+        and dtype == torch.float16
+        and interleaved is False
+    ):
         selected = ("tile", 1, 1024, 4, ".cv", 1, 6, ".cs", 0)
-    elif m == 1536 and n == 3072 and dtype == torch.float16 and interleaved is True:
+    elif (
+        m == 1536
+        and n == 3072
+        and dtype == torch.float16
+        and interleaved is True
+    ):
         selected = ("tile", 1, 1024, 4, ".ca", 0, 6, ".wt", 0)
-    elif m == 1 and n == 2048 and dtype == torch.bfloat16 and interleaved is True:
+    elif (
+        m == 1
+        and n == 2048
+        and dtype == torch.bfloat16
+        and interleaved is True
+    ):
         selected = ("flat", 1, 512, 8, "", 0, 6, ".cs", 0)
-    elif m == 256 and n == 1024 and dtype == torch.float32 and interleaved is False:
+    elif (
+        m == 256
+        and n == 1024
+        and dtype == torch.float32
+        and interleaved is False
+    ):
         selected = ("tile", 2, 1024, 8, ".cv", 1, 6, ".wt", 0)
-    elif m == 256 and n == 1024 and dtype == torch.float32 and interleaved is True:
+    elif (
+        m == 256
+        and n == 1024
+        and dtype == torch.float32
+        and interleaved is True
+    ):
         selected = ("tile", 2, 512, 8, ".ca", 0, 6, ".wt", 0)
-    elif m == 4096 and n == 64 and dtype == torch.float16 and interleaved is False:
+    elif (
+        m == 4096
+        and n == 64
+        and dtype == torch.float16
+        and interleaved is False
+    ):
         selected = ("flat", 1, 2048, 4, "", 1, 6, "", 4)
-    elif m == 4096 and n == 64 and dtype == torch.float16 and interleaved is True:
+    elif (
+        m == 4096
+        and n == 64
+        and dtype == torch.float16
+        and interleaved is True
+    ):
         selected = ("tile", 32, 64, 8, ".cg", 0, 6, ".cg", 4)
-    elif m == 8192 and n == 4096 and dtype == torch.bfloat16 and interleaved is False:
+    elif (
+        m == 8192
+        and n == 4096
+        and dtype == torch.bfloat16
+        and interleaved is False
+    ):
         selected = ("tile", 2, 1024, 4, ".ca", 0, 4, ".wt", 0)
-    elif m == 8192 and n == 4096 and dtype == torch.bfloat16 and interleaved is True:
+    elif (
+        m == 8192
+        and n == 4096
+        and dtype == torch.bfloat16
+        and interleaved is True
+    ):
         selected = ("flat", 1, 8192, 16, ".cv", 0, 6, ".wt", 0)
-    elif m == 128 and n == 8192 and dtype == torch.bfloat16 and interleaved is True:
+    elif (
+        m == 128
+        and n == 8192
+        and dtype == torch.bfloat16
+        and interleaved is True
+    ):
         selected = ("tile", 2, 1024, 4, "", 0, 6, "", 0)
-    elif m == 128 and n == 8192 and dtype == torch.bfloat16 and interleaved is False:
+    elif (
+        m == 128
+        and n == 8192
+        and dtype == torch.bfloat16
+        and interleaved is False
+    ):
         selected = ("tile", 1, 2048, 4, "", 0, 6, "", 0)
     else:
         selected = None
@@ -450,7 +545,9 @@ def _select_config(x, weights, out, interleaved, *, metadata=None):
         and output_dtype == dtype
         and (
             weights is None
-            or (weights.dtype == torch.float32 and weights.data_ptr() % 16 == 0)
+            or (
+                weights.dtype == torch.float32 and weights.data_ptr() % 16 == 0
+            )
         )
     ):
         return selected
@@ -484,11 +581,17 @@ def _staged_geometry_configs(m, n, interleaved):
             continue
         for bn in (32, 64, 128, 256, 512, 1024, 2048, 4096, 8192):
             area = bm * bn
-            if area < 128 or area > 32768 or bn > max(64, triton.next_power_of_2(n)):
+            if (
+                area < 128
+                or area > 32768
+                or bn > max(64, triton.next_power_of_2(n))
+            ):
                 continue
             if total >= 32768 and triton.cdiv(m, bm) * triton.cdiv(n, bn) < 40:
                 continue
-            preferred = min(8, max(1, triton.next_power_of_2(triton.cdiv(area, 512))))
+            preferred = min(
+                8, max(1, triton.next_power_of_2(triton.cdiv(area, 512)))
+            )
             for warps in sorted(
                 {max(1, preferred // 2), preferred, min(16, preferred * 2)}
             ):
@@ -522,9 +625,9 @@ def _geometry_configs(m, n, interleaved, *, exhaustive=False, element_size=2):
         ("tile", 2, 16384, 16),
     ):
         extent = m * n if family == "flat" else n
-        if bn > max(256, triton.next_power_of_2(extent)) or bm > triton.next_power_of_2(
-            m
-        ):
+        if bn > max(
+            256, triton.next_power_of_2(extent)
+        ) or bm > triton.next_power_of_2(m):
             continue
         for load in loads:
             configs.append((family, bm, bn, warps, "", load, 0, "", 0))
@@ -537,7 +640,10 @@ def _geometry_configs(m, n, interleaved, *, exhaustive=False, element_size=2):
     import itertools
 
     ordered = (
-        c for row in itertools.zip_longest(*groups) for c in row if c is not None
+        c
+        for row in itertools.zip_longest(*groups)
+        for c in row
+        if c is not None
     )
     return list(dict.fromkeys(ordered))
 
@@ -546,7 +652,9 @@ def _normalize_config(config):
     """Canonical immutable 9-item or extended 10-item configuration."""
     config = tuple(config)
     if len(config) not in (9, 10):
-        raise ValueError("Hygon configs require 9 items or a 10th compiler tuple")
+        raise ValueError(
+            "Hygon configs require 9 items or a 10th compiler tuple"
+        )
     family, bm, bn, warps, cache, load, sigmoid, store, waves = config[:9]
     if family not in ("flat", "tile"):
         raise ValueError("Unknown kernel family")
@@ -554,24 +662,36 @@ def _normalize_config(config):
         not isinstance(v, int) or isinstance(v, bool) or v < 1 or v & (v - 1)
         for v in (bm, bn, warps)
     ):
-        raise ValueError("BM, BN, and num_warps must be positive powers of two")
+        raise ValueError(
+            "BM, BN, and num_warps must be positive powers of two"
+        )
     if family == "flat" and bm != 1:
         raise ValueError("Flat configurations require BM=1")
     if cache not in ("", ".ca", ".cg", ".cv", "hint", "stream"):
         raise ValueError("Unknown load-cache policy")
     if store not in ("", ".wb", ".cg", ".cs", ".wt"):
         raise ValueError("Unknown store-cache policy")
-    if load not in (0, 1, 2) or sigmoid not in range(8) or waves not in range(11):
+    if (
+        load not in (0, 1, 2)
+        or sigmoid not in range(8)
+        or waves not in range(11)
+    ):
         raise ValueError("Unsupported load/math/waves configuration")
     if len(config) == 10:
         compiler = tuple(config[9])
         if len(compiler) != 7:
             raise ValueError("Compiler tuple requires seven entries")
-        stages, ctas, fusion, epilogue, schedule, latency, single_buffer = compiler
+        stages, ctas, fusion, epilogue, schedule, latency, single_buffer = (
+            compiler
+        )
         if stages not in range(1, 9) or ctas not in (1, 2, 4, 8):
             raise ValueError("Unsupported stage count or CTA-cluster size")
-        if not all(isinstance(v, bool) for v in (fusion, epilogue, single_buffer)):
-            raise TypeError("Compiler fusion/epilogue/async options must be bool")
+        if not all(
+            isinstance(v, bool) for v in (fusion, epilogue, single_buffer)
+        ):
+            raise TypeError(
+                "Compiler fusion/epilogue/async options must be bool"
+            )
         if schedule not in (
             "none",
             "local-prefetch",
@@ -740,17 +860,23 @@ def _compiler_variants(config):
     )
     for index, values in enumerate(dimensions):
         for value in values:
-            yield (*config[:9], (*default[:index], value, *default[index + 1 :]))
+            yield (
+                *config[:9],
+                (*default[:index], value, *default[index + 1 :]),
+            )
 
 
 def _neighbor_configs(config, m, n):
     """Small nearby geometries under the same moderate density limits."""
     family, bm, bn, warps, cache, load, sigmoid, store, waves = config[:9]
     configs = []
-    for next_bm in ((1,) if family == "flat" else (bm // 2, bm, bm * 2)):
+    for next_bm in (1,) if family == "flat" else (bm // 2, bm, bm * 2):
         for next_bn in (bn // 2, bn, bn * 2):
             for next_warps in (warps // 2, warps, warps * 2):
-                if next_warps not in (1, 2, 4, 8, 16) or not 1 <= next_bm <= 64:
+                if (
+                    next_warps not in (1, 2, 4, 8, 16)
+                    or not 1 <= next_bm <= 64
+                ):
                     continue
                 if not 64 <= next_bn <= (32768 if family == "flat" else 16384):
                     continue
@@ -841,11 +967,17 @@ def _autotune(
         candidates = (
             iter(configs)
             if configs is not None
-            else _iter_configs(m, n, interleaved, element_size=x.element_size())
+            else _iter_configs(
+                m, n, interleaved, element_size=x.element_size()
+            )
         )
         padding = 256 // out.element_size()
-        storage = torch.empty(out.numel() + padding, device=out.device, dtype=out.dtype)
-        offset = ((out.data_ptr() - storage.data_ptr()) % 256) // out.element_size()
+        storage = torch.empty(
+            out.numel() + padding, device=out.device, dtype=out.dtype
+        )
+        offset = (
+            (out.data_ptr() - storage.data_ptr()) % 256
+        ) // out.element_size()
         temporary = storage[offset : offset + out.numel()].view(out.shape)
         times, rejected, attempted, validated = {}, [], set(), {}
         progress = {"consumed": 0}
@@ -902,7 +1034,11 @@ def _autotune(
                 return
             attempted.add(config)
             reason = _config_rejection(
-                config, interleaved, x.element_size(), x.stride(0), x.data_ptr()
+                config,
+                interleaved,
+                x.element_size(),
+                x.stride(0),
+                x.data_ptr(),
             )
             if reason is not None:
                 rejected.append((config, reason))
@@ -945,7 +1081,9 @@ def _autotune(
                     if timed_out():
                         break
                     if not prepare_candidate(config):
-                        rejected.append((config, "finalist numerical validation"))
+                        rejected.append(
+                            (config, "finalist numerical validation")
+                        )
                         times.pop(config, None)
                         continue
                     values = []
@@ -1032,7 +1170,18 @@ def _routed_tunable(
             W,
             Y,
             TOTAL,
-            (N, S, WEIGHT, INTERLEAVED, BN, INDEX64, CACHE, LOAD, SIGMOID, STORE),
+            (
+                N,
+                S,
+                WEIGHT,
+                INTERLEAVED,
+                BN,
+                INDEX64,
+                CACHE,
+                LOAD,
+                SIGMOID,
+                STORE,
+            ),
         )
     else:
         _routed_tile(
@@ -1084,7 +1233,9 @@ def _native_config(meta, warps, profile):
 
     def check_grid(args):
         if (args["BM"], args["BN"], args["FLAT"]) != (bm, bn, flat):
-            raise RuntimeError("Backend changed an explicitly pruned Hygon tile")
+            raise RuntimeError(
+                "Backend changed an explicitly pruned Hygon tile"
+            )
         count = (
             triton.cdiv(args["M"] * args["N"], bn)
             if flat
@@ -1096,7 +1247,11 @@ def _native_config(meta, warps, profile):
     options = {**meta, **profile}
     stages = options.pop("num_stages")
     return triton.Config(
-        options, num_warps=warps, num_stages=stages, num_ctas=1, pre_hook=check_grid
+        options,
+        num_warps=warps,
+        num_stages=stages,
+        num_ctas=1,
+        pre_hook=check_grid,
     )
 
 
@@ -1136,15 +1291,25 @@ def _native_configs():
         )
         for load in loads:
             meta = dict(
-                FLAT=flat, BM=bm, BN=bn, CACHE="", LOAD=load, SIGMOID=6, STORE=""
+                FLAT=flat,
+                BM=bm,
+                BN=bn,
+                CACHE="",
+                LOAD=load,
+                SIGMOID=6,
+                STORE="",
             )
             result.append(_native_config(meta, warps, profiles[0]))
     for flat, bm, bn, load in ((1, 1, 2048, 0), (0, 1, 1024, 1)):
-        meta = dict(FLAT=flat, BM=bm, BN=bn, CACHE="", LOAD=load, SIGMOID=6, STORE="")
+        meta = dict(
+            FLAT=flat, BM=bm, BN=bn, CACHE="", LOAD=load, SIGMOID=6, STORE=""
+        )
         for profile in profiles[1:]:
             result.append(_native_config(meta, 4, profile))
         for cache in (".cg", ".ca", "stream"):
-            result.append(_native_config({**meta, "CACHE": cache}, 4, profiles[0]))
+            result.append(
+                _native_config({**meta, "CACHE": cache}, 4, profiles[0])
+            )
     return result
 
 
@@ -1164,7 +1329,9 @@ def _checked_hcu_backend():
 def _prune_native(configs, named_args, **kwargs):
     args = {**named_args, **kwargs}
     if torch.cuda.is_current_stream_capturing():
-        raise RuntimeError("Warm up this autotune signature before HIP graph capture")
+        raise RuntimeError(
+            "Warm up this autotune signature before HIP graph capture"
+        )
     _, backend = _checked_hcu_backend()
     m, n = args["M"], args["N"]
     base, result, checked = _native_profiles()[0], [], []
@@ -1181,7 +1348,9 @@ def _prune_native(configs, named_args, **kwargs):
             continue
         options = config.all_kwargs()
         profile = {
-            key: value for key, value in options.items() if key not in kernel_keys
+            key: value
+            for key, value in options.items()
+            if key not in kernel_keys
         }
         if not args["COMPILER_TUNING"] and any(
             profile[key] != value for key, value in base.items()
@@ -1194,10 +1363,14 @@ def _prune_native(configs, named_args, **kwargs):
                 not hasattr(parsed, key) or getattr(parsed, key) != value
                 for key, value in profile.items()
             ):
-                raise RuntimeError("HCU backend ignored or changed a compiler option")
+                raise RuntimeError(
+                    "HCU backend ignored or changed a compiler option"
+                )
             checked.append(profile_key)
         count = (
-            triton.cdiv(m * n, bn) if flat else triton.cdiv(m, bm) * triton.cdiv(n, bn)
+            triton.cdiv(m * n, bn)
+            if flat
+            else triton.cdiv(m, bm) * triton.cdiv(n, bn)
         )
         # Never mutate a Config shared by another shape's native cache entry.
         fresh = {key: meta[key] for key in kernel_keys}
@@ -1313,7 +1486,13 @@ def _run_native(x, weights, out, interleaved, compiler_tuning, metadata):
 
 
 def _run_selected(x, weights, out, interleaved):
-    _launch(x, weights, out, _select_config(x, weights, out, interleaved), interleaved)
+    _launch(
+        x,
+        weights,
+        out,
+        _select_config(x, weights, out, interleaved),
+        interleaved,
+    )
 
 
 def silu_and_mul_routed(
@@ -1346,11 +1525,17 @@ def silu_and_mul_routed(
     if not isinstance(x, torch.Tensor) or x.ndim != 2:
         raise ValueError("gateup_output must be a two-dimensional tensor")
     device, input_dtype = x.device, x.dtype
-    if device.type != "cuda" or not torch.version.hip or input_dtype not in supported:
+    if (
+        device.type != "cuda"
+        or not torch.version.hip
+        or input_dtype not in supported
+    ):
         raise ValueError("gateup_output must be Hygon DCU FP16, BF16, or FP32")
     m, width = x.shape
     if width % 2 or (m and width and x.stride(1) != 1):
-        raise ValueError("gateup_output needs an even width and contiguous columns")
+        raise ValueError(
+            "gateup_output needs an even width and contiguous columns"
+        )
     if not isinstance(use_interleaved, bool):
         raise TypeError("use_interleaved must be bool")
     n = width // 2
@@ -1366,7 +1551,9 @@ def silu_and_mul_routed(
             or w.device != device
             or w.dtype not in supported
         ):
-            raise ValueError("topk_weights must be contiguous [M] on the input device")
+            raise ValueError(
+                "topk_weights must be contiguous [M] on the input device"
+            )
     allocated_output = out is None
     if allocated_output:
         out = torch.empty((m, n), device=device, dtype=dtype)
@@ -1387,19 +1574,31 @@ def silu_and_mul_routed(
                 topk_weights is not None
                 and output_storage == topk_weights.untyped_storage().data_ptr()
             ):
-                raise ValueError("out must not share storage with input or weights")
+                raise ValueError(
+                    "out must not share storage with input or weights"
+                )
         metadata = (m, width, n, x.stride(0), input_dtype, dtype)
         with torch.cuda.device(device):
             if autotune:
                 _run_native(
-                    x, topk_weights, out, use_interleaved, compiler_tuning, metadata
+                    x,
+                    topk_weights,
+                    out,
+                    use_interleaved,
+                    compiler_tuning,
+                    metadata,
                 )
             else:
                 config = _select_config(
                     x, topk_weights, out, use_interleaved, metadata=metadata
                 )
                 _launch(
-                    x, topk_weights, out, config, use_interleaved, metadata=metadata
+                    x,
+                    topk_weights,
+                    out,
+                    config,
+                    use_interleaved,
+                    metadata=metadata,
                 )
     return out
 

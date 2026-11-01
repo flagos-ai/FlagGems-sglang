@@ -84,7 +84,9 @@ def _routed_tile(
         mask = cols[None, :] < N
     else:
         mask = (rows[:, None] < M) & (cols[None, :] < N)
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 0:
         q = tl.arange(0, 2 * BN)
@@ -109,7 +111,9 @@ def _routed_tile(
         if INTERLEAVED:
             gate, up = tl.split(tl.reshape(pair, (BM, BN, 2)))
         else:
-            gate, up = tl.split(tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1)))
+            gate, up = tl.split(
+                tl.permute(tl.reshape(pair, (BM, 2, BN)), (0, 2, 1))
+            )
     else:
         if INTERLEAVED:
             offsets = rows[:, None] * S + 2 * cols[None, :]
@@ -136,13 +140,20 @@ def _routed_tile(
     result = (gate * _sigmoid(gate, SIGMOID)) * up
     if WEIGHT:
         if EVEN_M:
-            weight = tl.load(W + rows, eviction_policy="evict_last").to(tl.float32)
+            weight = tl.load(W + rows, eviction_policy="evict_last").to(
+                tl.float32
+            )
         else:
             weight = tl.load(
                 W + rows, rows < M, other=0, eviction_policy="evict_last"
             ).to(tl.float32)
         result = result * weight[:, None]
-    tl.store(Y + rows[:, None] * N + cols[None, :], result, mask, cache_modifier=STORE)
+    tl.store(
+        Y + rows[:, None] * N + cols[None, :],
+        result,
+        mask,
+        cache_modifier=STORE,
+    )
 
 
 @triton.jit
@@ -169,7 +180,9 @@ def _routed_flat(
     offsets = pid * BLOCK + tl.arange(0, BLOCK)
     rows = offsets // N
     cols = offsets % N
-    modifier: tl.constexpr = "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    modifier: tl.constexpr = (
+        "" if CACHE == "hint" or CACHE == "stream" else CACHE
+    )
     eviction: tl.constexpr = "evict_first" if CACHE == "stream" else ""
     if LOAD == 0:
         q = tl.arange(0, 2 * BLOCK)
@@ -273,7 +286,13 @@ def _select_config(m, n, interleaved, weighted, element_size):
         if weighted and m >= 16384 and n >= 4096:
             return ("tile", 1, 1024, 2, "")
         if n < 1024:
-            return ("tile", 1, triton.next_power_of_2(n), 1 if m >= 4096 else 2, "")
+            return (
+                "tile",
+                1,
+                triton.next_power_of_2(n),
+                1 if m >= 4096 else 2,
+                "",
+            )
         bn = min(4096, triton.next_power_of_2(n))
         if m < 4096 and total >= 6291456:
             return ("tile", 1, 1024, 1, "")
@@ -389,7 +408,9 @@ def _select_measured_config(x, weights, out, interleaved):
     """
     m, width = x.shape
     n = width // 2
-    fallback = _select_config(m, n, interleaved, weights is not None, x.element_size())
+    fallback = _select_config(
+        m, n, interleaved, weights is not None, x.element_size()
+    )
     if (
         "H20" not in torch.cuda.get_device_name(x.device)
         or x.stride(0) != width
@@ -403,18 +424,126 @@ def _select_measured_config(x, weights, out, interleaved):
     ):
         return fallback
     configs = {
-        (4096, 64, torch.float16, False, True): ("tile", 8, 64, 4, ".cg", 1, 3, ".wt"),
-        (8, 768, torch.bfloat16, True, True): ("flat", 1, 512, 8, ".cg", 0, 3, ""),
-        (8, 768, torch.bfloat16, False, True): ("flat", 1, 256, 4, ".ca", 1, 2, ""),
-        (8, 768, torch.float16, True, True): ("flat", 1, 512, 8, ".cg", 0, 2, ""),
-        (8, 768, torch.float16, False, True): ("flat", 1, 512, 8, ".ca", 1, 2, ""),
-        (8, 768, torch.float32, True, True): ("flat", 1, 512, 8, ".cg", 0, 3, ""),
-        (8, 768, torch.float32, False, True): ("flat", 1, 512, 8, ".cg", 1, 2, ".cs"),
-        (256, 1024, torch.bfloat16, True, True): ("flat", 1, 512, 4, ".ca", 0, 3, ""),
-        (256, 1024, torch.bfloat16, False, True): ("tile", 1, 512, 4, ".cg", 1, 2, ""),
-        (256, 1024, torch.float16, True, True): ("flat", 1, 512, 4, "", 0, 3, ""),
-        (256, 1024, torch.float16, False, True): ("tile", 1, 512, 4, "", 1, 3, ""),
-        (256, 1024, torch.float32, True, True): ("flat", 1, 512, 8, "stream", 0, 3, ""),
+        (4096, 64, torch.float16, False, True): (
+            "tile",
+            8,
+            64,
+            4,
+            ".cg",
+            1,
+            3,
+            ".wt",
+        ),
+        (8, 768, torch.bfloat16, True, True): (
+            "flat",
+            1,
+            512,
+            8,
+            ".cg",
+            0,
+            3,
+            "",
+        ),
+        (8, 768, torch.bfloat16, False, True): (
+            "flat",
+            1,
+            256,
+            4,
+            ".ca",
+            1,
+            2,
+            "",
+        ),
+        (8, 768, torch.float16, True, True): (
+            "flat",
+            1,
+            512,
+            8,
+            ".cg",
+            0,
+            2,
+            "",
+        ),
+        (8, 768, torch.float16, False, True): (
+            "flat",
+            1,
+            512,
+            8,
+            ".ca",
+            1,
+            2,
+            "",
+        ),
+        (8, 768, torch.float32, True, True): (
+            "flat",
+            1,
+            512,
+            8,
+            ".cg",
+            0,
+            3,
+            "",
+        ),
+        (8, 768, torch.float32, False, True): (
+            "flat",
+            1,
+            512,
+            8,
+            ".cg",
+            1,
+            2,
+            ".cs",
+        ),
+        (256, 1024, torch.bfloat16, True, True): (
+            "flat",
+            1,
+            512,
+            4,
+            ".ca",
+            0,
+            3,
+            "",
+        ),
+        (256, 1024, torch.bfloat16, False, True): (
+            "tile",
+            1,
+            512,
+            4,
+            ".cg",
+            1,
+            2,
+            "",
+        ),
+        (256, 1024, torch.float16, True, True): (
+            "flat",
+            1,
+            512,
+            4,
+            "",
+            0,
+            3,
+            "",
+        ),
+        (256, 1024, torch.float16, False, True): (
+            "tile",
+            1,
+            512,
+            4,
+            "",
+            1,
+            3,
+            "",
+        ),
+        (256, 1024, torch.float32, True, True): (
+            "flat",
+            1,
+            512,
+            8,
+            "stream",
+            0,
+            3,
+            "",
+        ),
         (256, 1024, torch.float32, False, True): (
             "tile",
             1,
@@ -425,7 +554,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             "",
         ),
-        (1536, 2048, torch.bfloat16, True, True): ("tile", 1, 2048, 8, ".cg", 0, 2, ""),
+        (1536, 2048, torch.bfloat16, True, True): (
+            "tile",
+            1,
+            2048,
+            8,
+            ".cg",
+            0,
+            2,
+            "",
+        ),
         (1536, 2048, torch.bfloat16, False, True): (
             "tile",
             1,
@@ -446,7 +584,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             ".cs",
         ),
-        (1536, 2048, torch.float16, False, True): ("tile", 1, 1024, 4, ".cg", 1, 2, ""),
+        (1536, 2048, torch.float16, False, True): (
+            "tile",
+            1,
+            1024,
+            4,
+            ".cg",
+            1,
+            2,
+            "",
+        ),
         (1536, 2048, torch.float32, True, True): (
             "tile",
             2,
@@ -497,7 +644,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             ".cs",
         ),
-        (8192, 768, torch.float16, False, True): ("tile", 1, 1024, 1, "hint", 1, 2, ""),
+        (8192, 768, torch.float16, False, True): (
+            "tile",
+            1,
+            1024,
+            1,
+            "hint",
+            1,
+            2,
+            "",
+        ),
         (8192, 768, torch.float32, True, True): (
             "tile",
             1,
@@ -518,7 +674,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             ".cs",
         ),
-        (8192, 4096, torch.bfloat16, True, True): ("tile", 1, 4096, 8, ".cg", 0, 2, ""),
+        (8192, 4096, torch.bfloat16, True, True): (
+            "tile",
+            1,
+            4096,
+            8,
+            ".cg",
+            0,
+            2,
+            "",
+        ),
         (8192, 4096, torch.bfloat16, False, True): (
             "tile",
             1,
@@ -529,10 +694,46 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             ".cs",
         ),
-        (8192, 4096, torch.float16, True, True): ("tile", 1, 512, 2, ".cg", 0, 2, ""),
-        (8192, 4096, torch.float16, False, True): ("tile", 1, 2048, 4, "", 1, 2, ""),
-        (8192, 4096, torch.float32, True, True): ("tile", 2, 512, 4, ".ca", 0, 2, ""),
-        (8192, 4096, torch.float32, False, True): ("tile", 2, 256, 4, ".ca", 1, 2, ""),
+        (8192, 4096, torch.float16, True, True): (
+            "tile",
+            1,
+            512,
+            2,
+            ".cg",
+            0,
+            2,
+            "",
+        ),
+        (8192, 4096, torch.float16, False, True): (
+            "tile",
+            1,
+            2048,
+            4,
+            "",
+            1,
+            2,
+            "",
+        ),
+        (8192, 4096, torch.float32, True, True): (
+            "tile",
+            2,
+            512,
+            4,
+            ".ca",
+            0,
+            2,
+            "",
+        ),
+        (8192, 4096, torch.float32, False, True): (
+            "tile",
+            2,
+            256,
+            4,
+            ".ca",
+            1,
+            2,
+            "",
+        ),
         (49152, 3072, torch.bfloat16, True, True): (
             "tile",
             1,
@@ -553,7 +754,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             ".cs",
         ),
-        (49152, 3072, torch.float16, True, True): ("tile", 1, 4096, 4, ".ca", 0, 1, ""),
+        (49152, 3072, torch.float16, True, True): (
+            "tile",
+            1,
+            4096,
+            4,
+            ".ca",
+            0,
+            1,
+            "",
+        ),
         (49152, 3072, torch.float16, False, True): (
             "tile",
             1,
@@ -574,7 +784,16 @@ def _select_measured_config(x, weights, out, interleaved):
             1,
             ".cs",
         ),
-        (49152, 3072, torch.float32, False, True): ("flat", 1, 2048, 8, "", 1, 3, ""),
+        (49152, 3072, torch.float32, False, True): (
+            "flat",
+            1,
+            2048,
+            8,
+            "",
+            1,
+            3,
+            "",
+        ),
         (1536, 2048, torch.bfloat16, True, False): (
             "tile",
             1,
@@ -585,7 +804,16 @@ def _select_measured_config(x, weights, out, interleaved):
             2,
             "",
         ),
-        (1536, 2048, torch.bfloat16, False, False): ("tile", 1, 2048, 8, "", 0, 3, ""),
+        (1536, 2048, torch.bfloat16, False, False): (
+            "tile",
+            1,
+            2048,
+            8,
+            "",
+            0,
+            3,
+            "",
+        ),
         (1536, 2048, torch.float16, True, False): (
             "tile",
             1,
@@ -627,7 +855,9 @@ def _select_measured_config(x, weights, out, interleaved):
             ".cs",
         ),
     }
-    return configs.get((m, n, x.dtype, interleaved, weights is not None), fallback)
+    return configs.get(
+        (m, n, x.dtype, interleaved, weights is not None), fallback
+    )
 
 
 def _spread_configs(configs, limit):
@@ -647,10 +877,16 @@ def _spread_configs(configs, limit):
             sampled.append(group)
         else:
             sampled.append(
-                [group[i * (len(group) - 1) // max(1, count - 1)] for i in range(count)]
+                [
+                    group[i * (len(group) - 1) // max(1, count - 1)]
+                    for i in range(count)
+                ]
             )
     result = [
-        c for row in itertools.zip_longest(*sampled) for c in row if c is not None
+        c
+        for row in itertools.zip_longest(*sampled)
+        for c in row
+        if c is not None
     ]
     if len(result) < limit:
         selected = set(result)
@@ -658,7 +894,9 @@ def _spread_configs(configs, limit):
     return result[:limit]
 
 
-def _geometry_configs(m, n, interleaved, weighted, element_size, *, exhaustive=False):
+def _geometry_configs(
+    m, n, interleaved, weighted, element_size, *, exhaustive=False
+):
     """At most 384 shape-appropriate geometries, shared by both search modes.
 
     BM 1..128, BN 16..16384, flat blocks 32..16384, warps 1/2/4/8.
@@ -684,11 +922,17 @@ def _geometry_configs(m, n, interleaved, weighted, element_size, *, exhaustive=F
             continue
         for bn in (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384):
             area = bm * bn
-            if bn > max(64, triton.next_power_of_2(n)) or area > 16384 or area < 64:
+            if (
+                bn > max(64, triton.next_power_of_2(n))
+                or area > 16384
+                or area < 64
+            ):
                 continue
             if total >= 32768 and triton.cdiv(m, bm) * triton.cdiv(n, bn) < 32:
                 continue
-            preferred = min(8, max(1, triton.next_power_of_2(triton.cdiv(area, 256))))
+            preferred = min(
+                8, max(1, triton.next_power_of_2(triton.cdiv(area, 256)))
+            )
             for warps in sorted({preferred, min(8, 2 * preferred)}):
                 if not 1 <= area / (32 * warps) <= 128:
                     continue
@@ -756,7 +1000,9 @@ def _iter_configs(
     change those coordinates only. Legacy five/eight-entry configs still work.
     """
     if geometries is None:
-        geometries = _geometry_configs(m, n, interleaved, weighted, element_size)
+        geometries = _geometry_configs(
+            m, n, interleaved, weighted, element_size
+        )
     geometries = [
         _normalize_config(tuple(c), interleaved)
         for c in itertools.islice(geometries, 384)
@@ -794,7 +1040,11 @@ def _refine_geometry_configs(anchors, m, n):
     candidates = []
     for config in anchors:
         family, bm, bn, _, _, load, _, _ = config[:8]
-        rows = (1,) if family == "flat" else (max(1, bm // 2), bm, min(128, 2 * bm))
+        rows = (
+            (1,)
+            if family == "flat"
+            else (max(1, bm // 2), bm, min(128, 2 * bm))
+        )
         for row_tile in rows:
             for column_tile in (max(16, bn // 2), bn, min(16384, 2 * bn)):
                 area = row_tile * column_tile
@@ -815,7 +1065,16 @@ def _refine_geometry_configs(anchors, m, n):
                 for warps in (1, 2, 4, 8):
                     if 1 <= area / (32 * warps) <= 128:
                         candidates.append(
-                            (family, row_tile, column_tile, warps, "", load, 0, "")
+                            (
+                                family,
+                                row_tile,
+                                column_tile,
+                                warps,
+                                "",
+                                load,
+                                0,
+                                "",
+                            )
                         )
     return list(dict.fromkeys(candidates))
 
@@ -865,9 +1124,13 @@ def _autotune(
     if not x.numel():
         raise ValueError("Explicit autotuning requires a nonempty input")
     if torch.cuda.current_device() != x.device.index:
-        raise ValueError("Enter the input's CUDA device context before autotuning")
+        raise ValueError(
+            "Enter the input's CUDA device context before autotuning"
+        )
     if torch.cuda.is_current_stream_capturing():
-        raise RuntimeError("Explicit autotuning must run outside CUDA graph capture")
+        raise RuntimeError(
+            "Explicit autotuning must run outside CUDA graph capture"
+        )
     if search not in ("staged", "exhaustive"):
         raise ValueError("search must be staged or exhaustive")
     if max_configs is not None and (
@@ -882,7 +1145,9 @@ def _autotune(
         or not math.isfinite(max_seconds)
         or max_seconds <= 0
     ):
-        raise ValueError("max_seconds must be a finite positive number or None")
+        raise ValueError(
+            "max_seconds must be a finite positive number or None"
+        )
     started = time.perf_counter()
     deadline = None if max_seconds is None else started + max_seconds
     m, width = x.shape
@@ -947,7 +1212,9 @@ def _autotune(
         launch_candidate(config, target)
         stream.synchronize()
         if validate is not None and not validate(target):
-            raise CandidateRejected("Ordinary launch failed candidate validation")
+            raise CandidateRejected(
+                "Ordinary launch failed candidate validation"
+            )
         validated[config] = True
         if not time_available():
             return None
@@ -1019,7 +1286,9 @@ def _autotune(
         # Internal finite stages avoid wasting slots on earlier measurements;
         # explicit custom iterables still count every duplicate entry.
         return (
-            c for c in iterable if _normalize_config(c, interleaved) not in attempted
+            c
+            for c in iterable
+            if _normalize_config(c, interleaved) not in attempted
         )
 
     def coordinate_stage(anchors, phase):
@@ -1027,7 +1296,12 @@ def _autotune(
         for anchor in anchors:
             if phase == "math":
                 options = dict(
-                    caches=(), stores=(), stages=(), ctas=(), registers=(), fusion=()
+                    caches=(),
+                    stores=(),
+                    stages=(),
+                    ctas=(),
+                    registers=(),
+                    fusion=(),
                 )
             elif phase == "policy":
                 options = dict(
@@ -1036,7 +1310,11 @@ def _autotune(
             else:
                 options = dict(math_modes=(), caches=(), stores=())
             trials.append(
-                list(_coordinate_configs(anchor, capability=capability, **options))
+                list(
+                    _coordinate_configs(
+                        anchor, capability=capability, **options
+                    )
+                )
             )
         # Stagger the coordinates across family/load anchors so a small phase
         # budget still reaches stores and every compiler axis, not only stages.
@@ -1044,7 +1322,10 @@ def _autotune(
             offset = index * max(0, len(trial) - 1) // max(1, len(trials) - 1)
             trials[index] = trial[offset:] + trial[:offset]
         return (
-            c for row in itertools.zip_longest(*trials) for c in row if c is not None
+            c
+            for row in itertools.zip_longest(*trials)
+            for c in row
+            if c is not None
         )
 
     try:
@@ -1078,7 +1359,9 @@ def _autotune(
                 )
                 spread = _spread_configs(geometry, max(1, quotas[0] - 1))
                 initial = new_configs(spread)
-                stage_counts["geometry"] = consume(initial, max(0, quotas[0] - 1))
+                stage_counts["geometry"] = consume(
+                    initial, max(0, quotas[0] - 1)
+                )
                 if budget_available():
                     neighbors = list(
                         new_configs(_refine_geometry_configs(winners(), m, n))
@@ -1086,19 +1369,25 @@ def _autotune(
                     stage_counts["neighbors"] = consume(
                         _spread_configs(neighbors, quotas[1]), quotas[1]
                     )
-                for phase, quota in zip(("math", "policy", "compiler"), quotas[2:]):
+                for phase, quota in zip(
+                    ("math", "policy", "compiler"), quotas[2:]
+                ):
                     if not budget_available():
                         break
                     stage_counts[phase] = consume(
                         new_configs(coordinate_stage(winners(), phase)), quota
                     )
             if not validated:
-                raise RuntimeError("No candidate completed within the autotune budgets")
+                raise RuntimeError(
+                    "No candidate completed within the autotune budgets"
+                )
 
             # Always retain a warm-measured fallback. Prefer normal cache
             # priority when there is no time to condition stream/hint policies.
             robust = [c for c in timings if c[4] not in ("stream", "hint")]
-            robust_validated = [c for c in validated if c[4] not in ("stream", "hint")]
+            robust_validated = [
+                c for c in validated if c[4] not in ("stream", "hint")
+            ]
             if robust:
                 fallback = min(robust, key=timings.get)
             elif robust_validated:
@@ -1128,7 +1417,9 @@ def _autotune(
                     )
                 )
                 finalists = [c for c in finalists if c in timings]
-                finalists.sort(key=lambda c: (c[4] in ("stream", "hint"), timings[c]))
+                finalists.sort(
+                    key=lambda c: (c[4] in ("stream", "hint"), timings[c])
+                )
                 targets = [y]
                 if y.numel() * y.element_size() <= 16 * 1024 * 1024:
                     alignment_offset = (y.data_ptr() % 16) // y.element_size()
@@ -1156,11 +1447,15 @@ def _autotune(
                         l2_bytes = 64 * 1024 * 1024
                     try:
                         conditioning = torch.empty(
-                            max(1, 2 * l2_bytes), device=x.device, dtype=torch.uint8
+                            max(1, 2 * l2_bytes),
+                            device=x.device,
+                            dtype=torch.uint8,
                         )
                     except torch.cuda.OutOfMemoryError:
                         finalists = [
-                            c for c in finalists if c[4] not in ("stream", "hint")
+                            c
+                            for c in finalists
+                            if c[4] not in ("stream", "hint")
                         ]
                     if not finalists:
                         raise RuntimeError(
@@ -1226,7 +1521,9 @@ def _autotune(
         "finalist_status": final_status,
         "finalists_completed": len(final_times),
         "output_addresses_tested": completed_addresses,
-        "cache_conditioning_bytes": 0 if conditioning is None else conditioning.numel(),
+        "cache_conditioning_bytes": (
+            0 if conditioning is None else conditioning.numel()
+        ),
         "address_times_ms": address_times,
         "skipped": skipped,
     }
@@ -1386,14 +1683,17 @@ def _native_grid(meta):
         (
             triton.cdiv(meta["M"] * meta["N"], meta["BN"])
             if meta["FLAT"]
-            else triton.cdiv(meta["M"], meta["BM"]) * triton.cdiv(meta["N"], meta["BN"])
+            else triton.cdiv(meta["M"], meta["BM"])
+            * triton.cdiv(meta["N"], meta["BN"])
         ),
     )
 
 
 def _prune_native(configs, named_args, **kwargs):
     if torch.cuda.is_current_stream_capturing():
-        raise RuntimeError("Warm up this autotune signature before CUDA graph capture")
+        raise RuntimeError(
+            "Warm up this autotune signature before CUDA graph capture"
+        )
     args = {**named_args, **kwargs}
     target, backend = _checked_backend()
     m, n = args["M"], args["N"]
@@ -1401,7 +1701,9 @@ def _prune_native(configs, named_args, **kwargs):
     # Keep the previous metadata-selected geometry as a seed, but do not
     # import its approximate sigmoid or compiler arithmetic into online tuning.
     selected = _normalize_config(
-        _select_measured_config(args["X"], args["W"], args["Y"], args["INTERLEAVED"]),
+        _select_measured_config(
+            args["X"], args["W"], args["Y"], args["INTERLEAVED"]
+        ),
         args["INTERLEAVED"],
     )
     seed = _native_config(
@@ -1424,7 +1726,9 @@ def _prune_native(configs, named_args, **kwargs):
             continue
         if (
             bm * bn > 16384
-            or not 1 <= bm * bn / (target.warp_size * candidate.num_warps) <= 128
+            or not 1
+            <= bm * bn / (target.warp_size * candidate.num_warps)
+            <= 128
         ):
             continue
         if not args["COMPILER_TUNING"] and candidate.num_stages != 1:
@@ -1595,7 +1899,9 @@ def silu_and_mul_routed(
         raise ValueError("gateup_output must be CUDA FP16, BF16, or FP32")
     m, width = x.shape
     if width % 2 or (x.numel() and x.stride(1) != 1):
-        raise ValueError("gateup_output needs an even width and contiguous columns")
+        raise ValueError(
+            "gateup_output needs an even width and contiguous columns"
+        )
     if not isinstance(use_interleaved, bool):
         raise TypeError("use_interleaved must be bool")
     n = width // 2
@@ -1611,7 +1917,9 @@ def silu_and_mul_routed(
             or w.device != x.device
             or w.dtype not in supported
         ):
-            raise ValueError("topk_weights must be contiguous [M] on the input device")
+            raise ValueError(
+                "topk_weights must be contiguous [M] on the input device"
+            )
     allocated_output = out is None
     if allocated_output:
         out = torch.empty((m, n), device=x.device, dtype=dtype)
@@ -1632,10 +1940,14 @@ def silu_and_mul_routed(
                 topk_weights is not None
                 and output_storage == topk_weights.untyped_storage().data_ptr()
             ):
-                raise ValueError("out must not share storage with input or weights")
+                raise ValueError(
+                    "out must not share storage with input or weights"
+                )
         if torch.cuda.current_device() == x.device.index:
             if autotune:
-                _run_autotuned(x, topk_weights, out, use_interleaved, compiler_tuning)
+                _run_autotuned(
+                    x, topk_weights, out, use_interleaved, compiler_tuning
+                )
             else:
                 _run_selected(x, topk_weights, out, use_interleaved)
         else:
