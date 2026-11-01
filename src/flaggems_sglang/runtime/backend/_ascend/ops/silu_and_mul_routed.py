@@ -1202,3 +1202,6 @@ def silu_and_mul_routed(
 
 
 silu_and_mul = silu_and_mul_routed
+
+
+__all__ = ["silu_and_mul_routed"]

@@ -1651,3 +1651,6 @@ def silu_and_mul_routed(
 
 # Compatibility spelling for callers mirroring SGLang's function name.
 silu_and_mul = silu_and_mul_routed
+
+
+__all__ = ["silu_and_mul_routed"]
