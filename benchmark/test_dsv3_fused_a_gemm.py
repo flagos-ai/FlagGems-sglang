@@ -23,36 +23,21 @@ from flaggems_sglang.reference import get_reference
 from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(m, 4096, 64, 8) for m in (1, 2, 4, 8)]
-MORE_SHAPES = [(m, 4096, 64, 8) for m in (16,)]
+SHAPES = [(m, 7168, 2112) for m in (1, 2, 4, 8)]
+MORE_SHAPES = [(m, 7168, 2112) for m in (16,)]
 
 
 def _input_fn(shape, cur_dtype, device):
-    m, d, num_experts, top_k = shape
+    m, hd_in, hd_out = shape
     g = torch.Generator(device=device).manual_seed(0)
-    a = torch.randn(m, d, dtype=torch.float32, device=device, generator=g).to(
-        cur_dtype
-    )
-    b = torch.randn(
-        num_experts, d, d, dtype=torch.float32, device=device, generator=g
+    a = torch.randn(
+        m, hd_in, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
-    topk_weights = torch.randn(
-        m, top_k, dtype=torch.float32, device=device, generator=g
+    # Column-major B: build the row-major [hd_out, hd_in] weight and transpose.
+    w = torch.randn(
+        hd_out, hd_in, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
-    topk_ids = torch.randint(
-        0,
-        num_experts,
-        (m, top_k),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    sorted_token_ids = torch.arange(m, dtype=torch.int32, device=device)
-    expert_ids = torch.arange(num_experts, dtype=torch.int32, device=device)
-    num_tokens_post_padded = torch.full(
-        (num_experts,), m, dtype=torch.int32, device=device
-    )
-    yield a, b, topk_weights, topk_ids, sorted_token_ids, expert_ids, num_tokens_post_padded
+    yield a, w.t()
 
 
 def _case_fn(shape, cur_dtype):
@@ -89,7 +74,7 @@ def test_perf_dsv3_fused_a_gemm():
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
-        shape_desc="m, d, num_experts, top_k",
+        shape_desc="m, hd_in, hd_out",
     )
     bench.set_gems_from_module(flaggems_sglang)
     bench.run()
