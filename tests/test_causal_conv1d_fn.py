@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -133,13 +134,13 @@ def test_causal_conv1d_fn(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import causal_conv1d_fn
+        candidate = get_candidate("causal_conv1d_fn", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/causal_conv1d_fn ops module not found")
         return
 
     try:
-        actual = causal_conv1d_fn(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/causal_conv1d_fn not yet implemented")
         return

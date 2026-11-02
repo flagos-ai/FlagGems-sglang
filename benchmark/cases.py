@@ -16,6 +16,35 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Tuple
 
 
+def single_input_builder(input_fn):
+    """Adapt a one-input-per-shape generator to the Case API builder.
+
+    Planning stays explicit in each operator. The legacy generator is called
+    only after selection, preserving its RNG, layouts and nested arguments.
+    Reject changed cardinality instead of silently dropping extra inputs.
+    """
+
+    def build(plan, dtype, device):
+        (shape,) = plan.builder_args
+        inputs = iter(input_fn(shape, dtype, device))
+        try:
+            try:
+                value = next(inputs)
+            except StopIteration:
+                raise ValueError("Case builder generated no inputs.") from None
+            try:
+                next(inputs)
+            except StopIteration:
+                return value
+            raise ValueError("Case builder generated more than one input.")
+        finally:
+            close = getattr(inputs, "close", None)
+            if close is not None:
+                close()
+
+    return build
+
+
 @dataclass(frozen=True)
 class BenchmarkCasePlan:
     """Tensor-free description produced by the case planning stage."""

@@ -1,0 +1,41 @@
+# Build python3-flaggems-sglang rpm in a clean Fedora / openEuler container.
+ARG BASE_IMAGE=fedora
+ARG BASE_IMAGE_VERSION=43
+FROM ${BASE_IMAGE}:${BASE_IMAGE_VERSION}
+
+RUN dnf install -y \
+    rpm-build rpmdevtools \
+    python3-devel python3-setuptools python3-wheel python3-pip \
+    && (dnf install -y pyproject-rpm-macros \
+        || echo "pyproject-rpm-macros unavailable; spec uses pip fallback") \
+    && dnf clean all
+
+# openEuler defines no %dist; give the Release field the suite tag so the
+# rpm is distinguishable from a Fedora build of the same version.
+RUN if [ -z "$(rpm --eval '%{?dist}')" ]; then \
+        . /etc/os-release && \
+        case "${ID}" in \
+            openEuler) echo "%dist .oe$(echo "${VERSION_ID}" | tr -d '.')" >> /root/.rpmmacros ;; \
+        esac; \
+    fi
+
+RUN rpmdev-setuptree
+
+COPY . /workspace/FlagGems-sglang
+
+RUN SPEC_VERSION=$(grep '^Version:' /workspace/FlagGems-sglang/packaging/rpm/specs/flaggems-sglang.spec | awk '{print $2}') && \
+    tar czf /root/rpmbuild/SOURCES/flaggems-sglang-${SPEC_VERSION}.tar.gz \
+        -C /workspace/FlagGems-sglang \
+        --exclude='./.git' \
+        --transform "s|^\./|flaggems-sglang-${SPEC_VERSION}/|" \
+        .
+
+RUN rpmbuild -ba /workspace/FlagGems-sglang/packaging/rpm/specs/flaggems-sglang.spec 2>&1 || \
+    { echo "=== build failed ==="; \
+      find /root/rpmbuild -name "*.log" -exec echo "=== {} ===" \; -exec cat {} \; 2>/dev/null || true; \
+      exit 1; }
+
+RUN mkdir -p /output && \
+    find /root/rpmbuild/RPMS  -name "*.rpm" -exec cp {} /output/ \; && \
+    find /root/rpmbuild/SRPMS -name "*.rpm" -exec cp {} /output/ \; && \
+    ls -lh /output/

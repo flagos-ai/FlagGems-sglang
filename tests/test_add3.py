@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -106,13 +107,13 @@ def test_add3(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import add3
+        candidate = get_candidate("add3", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("elementwise/add3 ops module not found")
         return
 
     try:
-        actual = add3(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("elementwise/add3 not yet implemented")
         return

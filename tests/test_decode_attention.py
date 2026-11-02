@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -161,13 +162,13 @@ def test_decode_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import decode_attention
+        candidate = get_candidate("decode_attention", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/decode_attention ops module not found")
         return
 
     try:
-        actual = decode_attention(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/decode_attention not yet implemented")
         return

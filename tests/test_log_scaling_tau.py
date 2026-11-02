@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -103,13 +104,13 @@ def test_log_scaling_tau(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import log_scaling_tau
+        candidate = get_candidate("log_scaling_tau", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/log_scaling_tau ops module not found")
         return
 
     try:
-        actual = log_scaling_tau(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/log_scaling_tau not yet implemented")
         return

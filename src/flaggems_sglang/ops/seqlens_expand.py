@@ -16,49 +16,13 @@ import torch
 import triton
 import triton.language as tl
 
-_MAX_GROUPED_N = 8192
-_MAX_TILE_Q = 256
 
-
-@triton.jit
-def _seqlens_expand_grouped_kernel(
-    qo_ptr,
-    kv_ptr,
-    out_ptr,
-    N,
-    BLOCK_N: tl.constexpr,
-    GROUP_N: tl.constexpr,
-    Q: tl.constexpr,
-    SINGLE: tl.constexpr,
-):
-    pid = tl.program_id(0)
-    start = pid * GROUP_N
-
-    rows = start + tl.arange(0, GROUP_N)
-    row_ok = rows < N
-    qo = tl.load(qo_ptr + rows, mask=row_ok, other=0).to(tl.int32)
-    kv = tl.load(kv_ptr + rows, mask=row_ok, other=0).to(tl.int32)
-
-    if SINGLE:
-
-        group_base = 0
-    else:
-
-        offs = tl.arange(0, BLOCK_N)
-        qo_all = tl.load(qo_ptr + offs, mask=offs < N, other=0).to(tl.int32)
-        csum = tl.cumsum(qo_all, axis=0)
-
-        group_base = tl.sum(tl.where(offs == start - 1, csum, 0), axis=0)
-
-    rel = tl.cumsum(qo, axis=0) - qo
-    base_val = kv - qo + 1
-    cols = tl.arange(0, Q)
-    ptrs = out_ptr + (group_base + rel)[:, None] + cols[None, :]
-    vals = tl.maximum(base_val[:, None] + cols[None, :], 0)
-    mask = row_ok[:, None] & (cols[None, :] < qo[:, None])
-    tl.store(ptrs, vals, mask=mask)
-
-
+# A single program handles one request: it recovers that request's write
+# offset by summing the preceding extend lengths, then stores its row with a
+# plain 1D pointer. The former `_seqlens_expand_grouped_kernel` broadcast a
+# cumsum-derived row offset into a 2D store pointer, which tripped a FlagTree
+# layout-propagation crash (TritonGPURemoveLayoutConversions cloneElementwise,
+# `operandEnc` assertion) for every batch size, so it could never compile.
 @triton.autotune(
     configs=[
         triton.Config({"BLOCK_N": 128, "BLOCK_Q": 16}, num_warps=1),
@@ -107,44 +71,6 @@ def seqlens_expand(extend_seq_lens, seq_lens, total_len, max_q_len):
         extend_seq_lens = extend_seq_lens.contiguous()
     if not seq_lens.is_contiguous():
         seq_lens = seq_lens.contiguous()
-
-    if n <= _MAX_GROUPED_N and max_q_len <= _MAX_TILE_Q:
-        block_n = triton.next_power_of_2(n)
-        tile_q = triton.next_power_of_2(max(1, max_q_len))
-
-        if n <= 16:
-            grid = (1,)
-            _seqlens_expand_grouped_kernel[grid](
-                extend_seq_lens,
-                seq_lens,
-                out,
-                n,
-                BLOCK_N=block_n,
-                GROUP_N=block_n,
-                Q=tile_q,
-                SINGLE=1,
-                num_warps=2,
-            )
-            return out
-
-        if n <= 1024:
-            group_n, num_warps = 16, 2
-        else:
-
-            group_n, num_warps = 64, 8
-        grid = (triton.cdiv(n, group_n),)
-        _seqlens_expand_grouped_kernel[grid](
-            extend_seq_lens,
-            seq_lens,
-            out,
-            n,
-            BLOCK_N=block_n,
-            GROUP_N=group_n,
-            Q=tile_q,
-            SINGLE=0,
-            num_warps=num_warps,
-        )
-        return out
 
     _seqlens_expand_fused_kernel[(n,)](
         extend_seq_lens,

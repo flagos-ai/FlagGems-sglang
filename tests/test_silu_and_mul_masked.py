@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -126,13 +127,13 @@ def test_silu_and_mul_masked(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import silu_and_mul_masked
+        candidate = get_candidate("silu_and_mul_masked", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/silu_and_mul_masked ops module not found")
         return
 
     try:
-        actual = silu_and_mul_masked(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/silu_and_mul_masked not yet implemented")
         return

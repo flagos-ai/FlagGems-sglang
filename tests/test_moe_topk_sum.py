@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -99,13 +100,13 @@ def test_moe_topk_sum(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import moe_topk_sum
+        candidate = get_candidate("moe_topk_sum", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_topk_sum ops module not found")
         return
 
     try:
-        actual = moe_topk_sum(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/moe_topk_sum not yet implemented")
         return

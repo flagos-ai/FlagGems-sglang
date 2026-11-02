@@ -21,8 +21,8 @@ follows the spec from kernel-comp-baseline/problems/rope/mrope_fused.
 import pytest
 import torch
 
-from flaggems_sglang import mrope_fused
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -99,7 +99,8 @@ def test_mrope_fused(case):
     )
 
     # Operator under test
-    q_out, k_out = mrope_fused(
+    candidate = get_candidate("mrope_fused", reference=mrope_fused_ref)
+    q_out, k_out = candidate(
         q,
         k,
         cos_sin_cache,

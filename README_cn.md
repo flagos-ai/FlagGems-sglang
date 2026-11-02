@@ -54,7 +54,7 @@ import flaggems_sglang
 x = torch.randn(1024, device='cuda')
 
 # 应用 ReLU 激活函数
-y = flaggems_sglang.ops.relu(x)
+y = flaggems_sglang.relu(x)
 ```
 
 ## Tests 与 Benchmark 快速使用

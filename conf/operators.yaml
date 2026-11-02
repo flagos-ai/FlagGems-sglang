@@ -27,6 +27,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: add_constant
+    description: |
+      Elementwise addition of a compile-time integer constant: dst = src + constant.
+      The constant is folded into the kernel body, so every distinct value triggers its own JIT compilation.
+    for:
+      - add_constant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: apply_token_bitmask
     description: |
       Applies a packed bitmask to logits for grammar-constrained decoding.
@@ -37,6 +51,20 @@ ops:
       - fused
       - sglang
       - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: assign_draft_cache_locs_contiguous
+    description: |
+      Copies each request's newly allocated draft KV slots out of the req_to_token pool.
+      The slots are packed into the flat out_cache_loc buffer consumed by the draft forward pass.
+    for:
+      - assign_draft_cache_locs_contiguous
+    labels:
+      - fused
+      - sglang
+      - Speculative
     kind:
       - NeuralNetwork
     stages:
@@ -82,6 +110,35 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: causal_conv1d_update
+    description: |
+      Single-step depthwise causal 1-D convolution update against a rolling conv state.
+      Shifts the cached state, convolves with the kernel and optional bias, then applies SiLU.
+    for:
+      - causal_conv1d_update
+    labels:
+      - fused
+      - sglang
+      - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chain_speculative_sampling
+    description: |
+      Chain speculative sampling for tree-based speculative decoding.
+      Accepts or rejects each draft token per request and samples a final token from the adjusted target distribution.
+    for:
+      - chain_speculative_sampling
+    labels:
+      - fused
+      - sglang
+      - Speculative
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: chunk_cumsum
     description: |
       Chunk-wise cumulative sum of the Mamba timestep and state-decay terms.
@@ -122,6 +179,19 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: chunk_scaled_dot_kkt
+    description: |
+      Per-chunk lower-triangular K K^T attention matrix for gated delta-rule linear attention.
+      Scales by beta and the gate-cumsum decay, with grouped-query head broadcasting.
+    for:
+      - chunk_scaled_dot_kkt
+    labels:
+      - fused
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: chunk_state
     description: |
       Mamba2 per-chunk SSM hidden-state accumulation.
@@ -146,6 +216,48 @@ ops:
       - fused
       - sglang
       - Mamba
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunked_embedding_lora_a
+    description: |
+      LoRA A-projection over an embedding lookup for chunked segmented multi-adapter batches.
+      Gathers each segment's rows through a permutation and projects them with the per-segment adapter.
+    for:
+      - chunked_embedding_lora_a
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunked_sgmv_expand
+    description: |
+      Segmented GEMV LoRA B-projection expand for chunked multi-adapter batches.
+      Expands the low-rank activations per slice and accumulates onto the base output with per-adapter scaling.
+    for:
+      - chunked_sgmv_expand
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunked_sgmv_shrink
+    description: |
+      Segmented GEMV LoRA A-projection shrink for chunked multi-adapter batches.
+      Shrinks activations to the adapter rank per segment, optionally over a stack of slices.
+    for:
+      - chunked_sgmv_shrink
+    labels:
+      - fused
+      - sglang
+      - LoRA
     kind:
       - NeuralNetwork
     stages:
@@ -207,6 +319,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: concat_mla_absorb_q
+    description: |
+      Concatenates the NoPE and RoPE halves of the absorbed MLA query along the last dimension.
+      Two source rows with different strides feed one contiguous destination row, at MLA head counts.
+    for:
+      - concat_mla_absorb_q
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: concat_mla_k
     description: |
       Builds the MLA key tensor from its NoPE and RoPE halves.
@@ -227,6 +353,35 @@ ops:
       Supports causal masking over sequences delimited by per-batch start offsets and lengths.
     for:
       - context_attention
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: conv_window_scatter_with_mask
+    description: |
+      Conv-window variant of state_scatter_with_mask for speculative decoding mamba commits.
+      The source is an overlapping as_strided view, so the kernel indexes (dim, win) elements through its strides.
+    for:
+      - conv_window_scatter_with_mask
+    labels:
+      - fused
+      - sglang
+      - Mamba
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: create_chunked_prefix_cache_kv_indices
+    description: |
+      Chunked-prefill variant of create_flashinfer_kv_indices.
+      Each request contributes only the [chunk_start_idx, chunk_start_idx + chunk_seq_len) window of its pool.
+    for:
+      - create_chunked_prefix_cache_kv_indices
     labels:
       - fused
       - sglang
@@ -261,6 +416,20 @@ ops:
       - Attention
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: dcp_lse_combine
+    description: |
+      Combines the partial attention outputs of N decode-context-parallel ranks using their log-sum-exp values.
+      NaN and +inf lse entries are sanitized to -inf so a dead shard contributes nothing.
+    for:
+      - dcp_lse_combine
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: decode_attention
@@ -385,6 +554,58 @@ ops:
       - sglang
       - MoE
       - Quantization
+  - id: ernie45_rope_fused
+    description: |
+      Fused multi-section Rotary Positional Embedding for the ERNIE 4.5 query and key layout.
+      Rotates the half-split rotary dimensions with per-section temporal, height and width offsets.
+    for:
+      - ernie45_rope_fused
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: extend_attention
+    description: |
+      Prefill/extend-stage attention that mixes freshly extended keys and values with the paged KV cache.
+      Operates on packed variable-length sequences delimited by query and KV index pointers, with grouped-query heads.
+    for:
+      - extend_attention
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fill_accept_out_cache_loc
+    description: |
+      Compacts the KV cache slots of the accepted draft tokens in speculative decoding.
+      accept_index gives each accepted slot's draft-token position, -1 marks a rejection, survivors are packed.
+    for:
+      - fill_accept_out_cache_loc
+    labels:
+      - fused
+      - sglang
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fill_bonus_tokens
+    description: |
+      Picks each request's bonus token out of the accepted-token matrix in speculative decoding.
+      bonus_tokens[i] = accept_tokens[i, accept_lens[i] - 1], since accept_lens counts the bonus token too.
+    for:
+      - fill_bonus_tokens
+    labels:
+      - fused
+      - sglang
+      - Speculative
     kind:
       - NeuralNetwork
     stages:
@@ -417,6 +638,34 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fla_layernorm_gated
+    description: |
+      Gated layer/RMS normalization for linear-attention (FLA) blocks.
+      Normalizes with an optional mean subtraction and applies a SiLU/Swish gate before the affine scale.
+    for:
+      - fla_layernorm_gated
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_dual_residual_rmsnorm
+    description: |
+      Two chained RMS norms with a residual add in between.
+      Normalizes x with weight1, adds the residual, then normalizes the sum with weight2; returns the output and the intermediate residual.
+    for:
+      - fused_dual_residual_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_eh_norm
     description: |
       EAGLE draft-model preprocessing: RMSNorm of the input embeddings and the previous hidden state.
@@ -443,6 +692,19 @@ ops:
       - sglang
       - Activation
       - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_gdn_gating
+    description: |
+      Fused gated delta-net gating for linear attention.
+      Computes the log-space decay g = -exp(A_log) * softplus(a + dt_bias) and the sigmoid beta gate in one pass.
+    for:
+      - fused_gdn_gating
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -514,6 +776,17 @@ ops:
       - sglang
       - RoPE
       - Normalization
+  - id: fused_norm_rope_stacked
+    description: |
+      Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
+      Normalizes each layer's key heads and rotates the half-split rotary dimensions in a single pass.
+    for:
+      - fused_norm_rope_stacked
+    labels:
+      - fused
+      - sglang
+      - Normalization
+      - RoPE
     kind:
       - NeuralNetwork
     stages:
@@ -530,6 +803,32 @@ ops:
       - Normalization
     kind:
       - Reduction
+  - id: fused_pack_qkv
+    description: |
+      Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
+      One launch gathers all three tensors instead of three independent advanced-index gathers.
+    for:
+      - fused_pack_qkv
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_qkvzba_split_reshape_cat
+    description: |
+      Splits the packed GDN projection into the four tensors the linear-attention kernel needs, in a single launch.
+      Pure layout movement with no arithmetic, so it is bandwidth bound and the problem is address computation.
+    for:
+      - fused_qkvzba_split_reshape_cat
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
     stages:
       - stable: '1.0'
   - id: fused_rmsnorm
@@ -544,6 +843,35 @@ ops:
       - Normalization
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_sigmoid_mul
+    description: |
+      Attention output gating: out = attn_output * sigmoid(gate).
+      The strided path reads a 3D gate through its strides against a 2D attn_output, with no contiguous copy.
+    for:
+      - fused_sigmoid_mul
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_softmax_pool
+    description: |
+      Softmax-weighted pooling along the K axis with the values and scores packed in one tensor.
+      The softmax is per channel along K, so one pass replaces softmax plus elementwise multiply plus reduction.
+    for:
+      - fused_softmax_pool
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: gate_topk
@@ -570,6 +898,20 @@ ops:
       - fused
       - sglang
       - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gather_spec_extras
+    description: |
+      Gathers four speculative-decoding side buffers with a shared row index in one fused launch.
+      Covers topk_p, topk_index, bonus_tokens and an optional hidden_states, removing three launch bubbles.
+    for:
+      - gather_spec_extras
+    labels:
+      - fused
+      - sglang
+      - Speculative
     kind:
       - NeuralNetwork
     stages:
@@ -614,6 +956,30 @@ ops:
       - fused
       - sglang
       - Normalization
+  - id: get_mla_kv_buffer
+    description: |
+      Gather counterpart of set_mla_kv_buffer.
+      Reads row loc[i] of the paged MLA KV cache and splits it back into its NoPE and RoPE halves.
+    for:
+      - get_mla_kv_buffer
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: get_target_cache_loc
+    description: |
+      Splits the verify step's out_cache_loc into the surviving slots and the slots returned to the allocator.
+      Both sides are packed contiguously according to the per-request accepted draft counts.
+    for:
+      - get_target_cache_loc
+    labels:
+      - fused
+      - sglang
+      - Speculative
     kind:
       - NeuralNetwork
     stages:
@@ -660,6 +1026,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: hc_head
+    description: |
+      Head-wise RMS-normalized mixing of a multi-head input into a single fused head.
+      Normalizes each head, scores a sigmoid mixing weight per head, then sums the weighted heads.
+    for:
+      - hc_head
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: indexed_scale_shift
     description: |
       Per-row AdaLN modulation with the scale and shift tables gathered through an index vector.
@@ -694,6 +1074,11 @@ ops:
       One modulation vector per batch element, broadcast along the sequence dimension.
     for:
       - layernorm_modulate
+  - id: l2norm
+    description: |
+      Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
+    for:
+      - l2norm
     labels:
       - fused
       - sglang
@@ -712,6 +1097,44 @@ ops:
       - fused
       - sglang
       - Normalization
+  - id: linear_decode_forward
+    description: |
+      Lightning-attention decode step: one token per sequence, updating each slot's [D, D] linear attention state.
+      The decay applies only to the previous state, and slot_idx -1 marks padding rows that are left untouched.
+    for:
+      - linear_decode_forward
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: log_scaling_tau
+    description: |
+      Per-row temperature scaling of logits. Multiplies each row of x by its scalar tau in float32.
+    for:
+      - log_scaling_tau
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: ltx2_split_rotary
+    description: |
+      LTX-2 split-half rotary embedding, rotating halves rather than interleaved pairs.
+      Uses per-head cos and sin tables.
+    for:
+      - ltx2_split_rotary
+    labels:
+      - fused
+      - sglang
+      - RoPE
     kind:
       - NeuralNetwork
     stages:
@@ -727,6 +1150,19 @@ ops:
       - sglang
       - Mamba
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: memcpy_triton
+    description: |
+      Offset and size driven device-to-device copy where both the offset and the size live in device memory.
+      That keeps the copy capturable by a CUDA graph even when the amount moved per step changes.
+    for:
+      - memcpy_triton
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -886,6 +1322,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: pad_draft_extend_query
+    description: |
+      Scatters the varlen draft query into a padded [bs, max_seq_len, H, D] buffer, offset by cu_seqlens_q.
+      Rows beyond seq_lens_q[b] are left unchanged; the baseline's early-exit waste on short sequences is the aim.
+    for:
+      - pad_draft_extend_query
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: per_group_transpose
     description: |
       Per-expert group transpose operation for MoE models.
@@ -967,6 +1418,30 @@ ops:
       - fused
       - sglang
       - Normalization
+  - id: post_reorder_deepgemm
+    description: |
+      DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
+      Its validity gate is expert_id >= 0, not != num_local_experts, so the fused shared expert survives.
+    for:
+      - post_reorder_deepgemm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: pre_reorder_cutlass
+    description: |
+      CUTLASS-MoE input permutation with a fused per-tensor dequant scale.
+      Each token row is copied to its routed destinations, scaled by 1 / a1_scales on the way.
+    for:
+      - pre_reorder_cutlass
+    labels:
+      - fused
+      - sglang
+      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -981,6 +1456,19 @@ ops:
       - fused
       - sglang
       - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: recompute_w_u
+    description: |
+      The w and u recomputation step of the chunked Gated DeltaNet forward pass.
+      Applies each chunk's inverted UT transform to the beta-scaled value block and the gate-scaled key block.
+    for:
+      - recompute_w_u
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -1048,6 +1536,12 @@ ops:
       The gate broadcasts over rows the same way rmsnorm_scale's scale does.
     for:
       - rmsnorm_tanh_residual
+  - id: rmsnorm_hf
+    description: |
+      RMSNorm with HuggingFace LlamaRMSNorm semantics.
+      The normalized activations cast back to the input dtype before the weight multiply, unlike fused_rmsnorm.
+    for:
+      - rmsnorm_hf
     labels:
       - fused
       - sglang
@@ -1122,6 +1616,34 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: set_mla_kv_buffer
+    description: |
+      Scatter-write into the paged MLA KV cache.
+      Each token's NoPE and RoPE key parts are concatenated into one row and stored at slot loc[i].
+    for:
+      - set_mla_kv_buffer
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: set_token_filter
+    description: |
+      Grammar and structured-output token mask: resets one row of the int32 vocab bitmask, then sets or clears
+      the bits named by explicit allow and deny token lists with atomic_or and atomic_and.
+    for:
+      - set_token_filter
+    labels:
+      - fused
+      - sglang
+      - Sampling
     kind:
       - NeuralNetwork
     stages:
@@ -1271,6 +1793,35 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: state_scatter_with_mask
+    description: |
+      Fully fused masked gather-scatter for speculative decoding mamba state commits.
+      One launch replaces nonzero, two index_select calls and an advanced-indexing scatter, over all layers.
+    for:
+      - state_scatter_with_mask
+    labels:
+      - fused
+      - sglang
+      - Mamba
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: store_cache_4d
+    description: |
+      Single-launch, token-parallel write of K and V into 4-D page-major envelope KV cache views.
+      The flat slot index is split into its page and in-page token coordinates.
+    for:
+      - store_cache_4d
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: tiny_k_gemm
     description: |
       Small-K, large-N GEMM: out = x @ w.T with m <= 16 and k in {128, 256}.
@@ -1280,6 +1831,62 @@ ops:
     labels:
       - fused
       - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: tiny_n_gemm
+    description: |
+      Thin-M bf16 GEMM out = x @ w.T for the small projections that fill the decode stage, at most max_m rows.
+      N is split into split_n column groups so that n / split_n blocks fill exactly one SM wave.
+    for:
+      - tiny_n_gemm
+    labels:
+      - fused
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: tma_align_input_scale
+    description: |
+      Transposes the per-token FP8 activation scales into the column-major, 16-byte aligned DeepGEMM TMA layout.
+      The M axis is padded up to a multiple of 16 / element_size.
+    for:
+      - tma_align_input_scale
+    labels:
+      - fused
+      - sglang
+      - MoE
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: top_p_renorm
+    description: |
+      Exact top-p (nucleus) thresholding and renormalization of a probability distribution.
+      Follows FlashInfer's pivot semantics, so elements tied at the pivot are all kept rather than truncated.
+    for:
+      - top_p_renorm
+    labels:
+      - fused
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: topk_sigmoid
+    description: |
+      Fused sigmoid MoE gate: sigmoid over the router logits, top-k expert selection and an optional renormalize.
+      Destination-passing, writing the preallocated fp32 topk_weights and int32 topk_ids in place.
+    for:
+      - topk_sigmoid
+    labels:
+      - fused
+      - sglang
+      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -1295,6 +1902,61 @@ ops:
       - sglang
       - Attention
       - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: vocab_parallel_embedding
+    description: |
+      Vocab-parallel embedding lookup where each TP rank owns one vocab window plus an added-token window.
+      Tokens outside the rank's windows read a zero row, and the constexpr bounds fold into one range check.
+    for:
+      - vocab_parallel_embedding
+    labels:
+      - fused
+      - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: w8a8_block_int8_matmul
+    description: |
+      INT8 GEMM with per-block weight and activation scales (W8A8).
+      Multiplies quantized A and B, rescaling each tile by its activation and weight block scales into the output dtype.
+    for:
+      - w8a8_block_int8_matmul
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: wide_row_softmax
+    description: |
+      Column-parallel softmax over very wide fp32 rows with an optional per-row temperature.
+      Each row is split across blocks whose partial max and sum are merged, writing only the first V columns.
+    for:
+      - wide_row_softmax
+    labels:
+      - fused
+      - sglang
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: zero_experts_identity
+    description: |
+      Zero (identity) experts: any routing slot whose expert id is >= num_experts is a no-op expert.
+      Its contribution is the token's own hidden state scaled by the summed routing weights of those slots.
+    for:
+      - zero_experts_identity
+    labels:
+      - fused
+      - sglang
+      - MoE
     kind:
       - NeuralNetwork
     stages:

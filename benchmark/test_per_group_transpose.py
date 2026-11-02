@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 NUM_EXPERTS = 8
@@ -47,15 +48,34 @@ def _input_fn(shape, cur_dtype, device):
     yield a, expert_offsets
 
 
+def _case_fn(shape, cur_dtype):
+    (k, rows_per_expert) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "a": (rows_per_expert * NUM_EXPERTS, k),
+            "expert_offsets": (NUM_EXPERTS + 1,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "NUM_EXPERTS": NUM_EXPERTS,
+            "k": k,
+            "rows_per_expert": rows_per_expert,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.per_group_transpose
 def test_perf_per_group_transpose():
     bench = OpBenchmark(
         op_name="per_group_transpose",
         torch_op=get_reference("per_group_transpose"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         shape_desc="k, rows_per_expert",
     )
-    bench.set_gems(flaggems_sglang.per_group_transpose)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -22,6 +22,11 @@ import torch
 import yaml
 
 import flaggems_sglang
+from flaggems_sglang.cli_override import (
+    add_override_arguments,
+    cleanup_overrides,
+    configure_overrides,
+)
 from flaggems_sglang.runtime import torch_device_fn
 
 from . import consts
@@ -48,10 +53,18 @@ BUILTIN_MARKS = (
 REGISTERED_MARKS = []
 TEST_RESULTS = {}
 CASE_LISTS = []
+LISTED_CASE_IDS = set()
 REPORT_FILE = "benchmark_result.json"
 
 
 def update_case_list(data):
+    cases = data.get("cases", [])
+    if not cases:
+        raise ValueError("Cannot publish an empty benchmark case list.")
+    ids = [case["case_id"] for case in cases]
+    if len(ids) != len(set(ids)) or LISTED_CASE_IDS.intersection(ids):
+        raise ValueError("Benchmark catalog contains duplicate case IDs.")
+    LISTED_CASE_IDS.update(ids)
     CASE_LISTS.append(data)
 
 
@@ -163,6 +176,7 @@ def pytest_addhooks(pluginmanager):
 
 
 def pytest_addoption(parser):
+    add_override_arguments(parser)
     parser.addoption(
         (
             "--mode" if vendor_name != "kunlunxin" else "--fg_mode"
@@ -408,6 +422,7 @@ def pytest_configure(config):
 
     # ---- Case listing / exact replay (PR 6397) --------------------------
     CASE_LISTS.clear()
+    LISTED_CASE_IDS.clear()
     TEST_RESULTS.clear()
     Config.list_cases = config.getoption("--list-cases")
     Config.case_ids = config.getoption("--case-id")
@@ -454,8 +469,8 @@ def pytest_configure(config):
         raise pytest.UsageError(
             "profile warmup must be non-negative and iterations positive"
         )
-    # Compose with the optional dynamic override registry if present.
-    Config.override_registry = getattr(config, "_override_registry", None)
+    # Share one override registry with correctness tests in mixed sessions.
+    Config.override_registry = configure_overrides(config)
     Config.profile_hook = config.hook.pytest_flaggems_profile_scope
 
     if Config.record_json or Config.list_cases:
@@ -493,6 +508,10 @@ def pytest_configure(config):
         recordLogger.addHandler(handler)
         recordLogger.setLevel(logging.INFO)
         emit_record_logger("Benchmark record logger enabled")
+
+
+def pytest_unconfigure(config):
+    cleanup_overrides(config)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -621,6 +640,8 @@ def pytest_runtest_logreport(report):
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Combine and dump the result into JSON."""
+    if getattr(config, "_dummy_probe", None) is not None:
+        return
     if Config.list_cases:
         with open(REPORT_FILE, "w") as f:
             json.dump(
@@ -673,6 +694,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 def pytest_sessionfinish(session, exitstatus):
     if Config is None:
+        return
+
+    if Config.list_cases and not CASE_LISTS:
+        if session.exitstatus in (
+            pytest.ExitCode.OK,
+            pytest.ExitCode.NO_TESTS_COLLECTED,
+        ):
+            session.exitstatus = pytest.ExitCode.TESTS_FAILED
         return
 
     if Config.preflight_only:

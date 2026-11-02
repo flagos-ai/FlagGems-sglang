@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -115,13 +116,13 @@ def test_per_group_transpose(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import per_group_transpose
+        candidate = get_candidate("per_group_transpose", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/per_group_transpose ops module not found")
         return
 
     try:
-        actual = per_group_transpose(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("quantization/per_group_transpose not yet implemented")
         return

@@ -1,0 +1,48 @@
+#!/usr/bin/make -f
+export DH_VERBOSE = 1
+export PYBUILD_NAME = flaggems_sglang
+
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+# find_spec smoke test only: `import flaggems_sglang` would need torch and
+# triton, which are the user's runtime dependencies, not the builder's.
+# Catches wrong install path, missing __init__.py and dist-info misconfig.
+override_dh_auto_test:
+	@echo "=== smoke find_spec test ==="
+	@found_dir=""; \
+	for d in .pybuild/cpython3_*/build; do \
+	    if [ -d "$$d/flaggems_sglang" ]; then \
+	        found_dir="$$d"; \
+	        break; \
+	    fi; \
+	done; \
+	if [ -z "$$found_dir" ]; then \
+	    echo "ERROR: could not find a built flaggems_sglang module"; \
+	    exit 1; \
+	fi; \
+	echo "Found build dir: $$found_dir"; \
+	PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$$found_dir" python3 -c \
+	    "import importlib.util; s = importlib.util.find_spec('flaggems_sglang'); assert s and s.origin, 'flaggems_sglang not findable'; print('OK: flaggems_sglang at', s.origin)"
+# Subpackage completeness: every __init__.py under src/ must be in the
+# build tree. packages.find silently drops directories it does not match,
+# and the shipped package then fails on the first missing import.
+	@echo "=== subpackage completeness test ==="
+	@found_dir=""; \
+	for d in .pybuild/cpython3_*/build; do \
+	    if [ -d "$$d/flaggems_sglang" ]; then found_dir="$$d"; break; fi; \
+	done; \
+	src_inits="$$(cd src && find flaggems_sglang -name __init__.py)"; \
+	if [ -z "$$src_inits" ]; then \
+	    echo "ERROR: no __init__.py found under src/flaggems_sglang; check would be vacuous"; \
+	    exit 1; \
+	fi; \
+	missing=""; \
+	for f in $$src_inits; do \
+	    if [ ! -f "$$found_dir/$$f" ]; then missing="$$missing $$f"; fi; \
+	done; \
+	if [ -n "$$missing" ]; then \
+	    echo "ERROR: subpackages missing from build tree:$$missing"; \
+	    exit 1; \
+	fi; \
+	echo "OK: all package __init__.py files from src/ present in build tree"

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 IS_CAUSAL = True
@@ -56,17 +57,41 @@ def _input_fn(shape, cur_dtype, device):
     yield q, k, v, b_start_loc, b_seq_len, max(seq_lens), IS_CAUSAL
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, seq_len, num_heads, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (bs * seq_len, num_heads, head_dim),
+            "k": (bs * seq_len, num_heads, head_dim),
+            "v": (bs * seq_len, num_heads, head_dim),
+            "b_start_loc": (bs,),
+            "b_seq_len": (bs,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "IS_CAUSAL": IS_CAUSAL,
+            "bs": bs,
+            "seq_len": seq_len,
+            "num_heads": num_heads,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.context_attention
 def test_perf_context_attention():
     bench = OpBenchmark(
         op_name="context_attention",
         torch_op=get_reference("context_attention"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         # The prefill reference runs a per-sequence fp32 SDPA.
         dtypes=[torch.float32],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, seq_len, num_heads, head_dim",
     )
-    bench.set_gems(flaggems_sglang.context_attention)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

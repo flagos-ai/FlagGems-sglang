@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -156,13 +157,13 @@ def test_ernie45_rope_fused(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import ernie45_rope_fused
+        candidate = get_candidate("ernie45_rope_fused", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("rope/ernie45_rope_fused ops module not found")
         return
 
     try:
-        actual = ernie45_rope_fused(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("rope/ernie45_rope_fused not yet implemented")
         return

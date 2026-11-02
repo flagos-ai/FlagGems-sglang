@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 EPS = 1e-5
@@ -50,16 +51,33 @@ def _input_fn(shape, cur_dtype, device):
     yield x, weight, bias, EPS, dict(z=z, group_size=group_size)
 
 
+def _case_fn(shape, cur_dtype):
+    (m, n, group_size) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (m, n), "weight": (n,), "bias": (n,), "z": (m, n)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "EPS": EPS,
+            "m": m,
+            "n": n,
+            "group_size": group_size,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.mamba_layernorm_gated
 def test_perf_mamba_layernorm_gated():
     bench = OpBenchmark(
         op_name="mamba_layernorm_gated",
         torch_op=get_reference("mamba_layernorm_gated"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, n, group_size",
     )
-    bench.set_gems(flaggems_sglang.mamba_layernorm_gated)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

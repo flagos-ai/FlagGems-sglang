@@ -36,11 +36,25 @@ from typing_extensions import override
 from .model import PersistantModel
 from .session import RollbackSession
 
+# SQLAlchemy 2.0 introduced DeclarativeBase and mapped_column; LTS
+# distributions (Ubuntu 22.04/24.04, openEuler 24.03) still ship 1.4, so
+# fall back to the legacy declarative API when they are unavailable.
+_SQLALCHEMY_2 = hasattr(sqlalchemy.orm, "DeclarativeBase")
 
-class Base(sqlalchemy.orm.DeclarativeBase):
-    # wbj fix:
-    # ...
-    pass
+if _SQLALCHEMY_2:
+
+    class Base(sqlalchemy.orm.DeclarativeBase):
+        pass
+
+else:
+    Base = sqlalchemy.orm.declarative_base()
+
+_SQL_TYPES = {
+    bool: sqlalchemy.Boolean,
+    int: sqlalchemy.Integer,
+    float: sqlalchemy.Float,
+    str: sqlalchemy.String,
+}
 
 
 class SQLPersistantModel(PersistantModel):
@@ -57,28 +71,30 @@ class SQLPersistantModel(PersistantModel):
         keys: Mapping[str, Union[Any, Type]],
         values: Mapping[str, Union[Any, Type]] = {},
     ) -> Type[Base]:
-        annotations: Dict[str, Type] = {
-            k: sqlalchemy.orm.Mapped[  # type: ignore[misc]
-                v if isinstance(v, Type) else type(v)  # type: ignore[arg-type]
-            ]
+        py_types: Dict[str, Type] = {
+            k: v if isinstance(v, Type) else type(v)  # type: ignore[arg-type]
             for k, v in chain(keys.items(), values.items())
         }
-        cols: Dict[str, sqlalchemy.orm.MappedColumn] = {
-            k: sqlalchemy.orm.mapped_column(primary_key=True)
-            for k in keys.keys()
-        } | {
-            k: sqlalchemy.orm.mapped_column(primary_key=False)
-            for k in values.keys()
-        }
-        ModelCls: Type[Base] = type(
-            name,
-            (Base,),
-            {
-                "__annotations__": annotations,
-                "__tablename__": name,
-                **cols,
-            },
-        )
+        attrs: Dict[str, Any] = {"__tablename__": name}
+        if _SQLALCHEMY_2:
+            attrs["__annotations__"] = {
+                k: sqlalchemy.orm.Mapped[t]  # type: ignore[misc]
+                for k, t in py_types.items()
+            }
+            attrs.update(
+                {
+                    k: sqlalchemy.orm.mapped_column(primary_key=k in keys)
+                    for k in py_types
+                }
+            )
+        else:
+            attrs.update(
+                {
+                    k: sqlalchemy.Column(_SQL_TYPES[t], primary_key=k in keys)
+                    for k, t in py_types.items()
+                }
+            )
+        ModelCls: Type[Base] = type(name, (Base,), attrs)
         return ModelCls
 
     @staticmethod

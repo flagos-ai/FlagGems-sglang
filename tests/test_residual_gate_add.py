@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -112,13 +113,13 @@ def test_residual_gate_add(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import residual_gate_add
+        candidate = get_candidate("residual_gate_add", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/residual_gate_add ops module not found")
         return
 
     try:
-        actual = residual_gate_add(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/residual_gate_add not yet implemented")
         return

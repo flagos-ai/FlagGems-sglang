@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/rope/ernie45_rope_fused.
@@ -75,16 +76,40 @@ def _input_fn(shape, cur_dtype, device):
     yield q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, n_qh, n_kh, head_size, rotary_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (num_tokens, n_qh * head_size),
+            "k": (num_tokens, n_kh * head_size),
+            "cos_sin_cache": (_MAX_POS, rotary_dim),
+            "positions": (3, num_tokens),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "_MAX_POS": _MAX_POS,
+            "num_tokens": num_tokens,
+            "n_qh": n_qh,
+            "n_kh": n_kh,
+            "head_size": head_size,
+            "rotary_dim": rotary_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.ernie45_rope_fused
 def test_perf_ernie45_rope_fused():
     bench = OpBenchmark(
         op_name="ernie45_rope_fused",
         torch_op=get_reference("ernie45_rope_fused"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, n_qh, n_kh, head_size, rotary_dim",
     )
-    bench.set_gems(flaggems_sglang.ernie45_rope_fused)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

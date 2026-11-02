@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Build python3-flaggems-sglang rpm locally.
+#   BASE_IMAGE=fedora BASE_IMAGE_VERSION=43 ./build-flaggems-sglang-rpm.sh
+#   BASE_IMAGE=openeuler/openeuler BASE_IMAGE_VERSION=24.03-lts ./build-flaggems-sglang-rpm.sh
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+BASE_IMAGE="${BASE_IMAGE:-fedora}"
+BASE_IMAGE_VERSION="${BASE_IMAGE_VERSION:-${1:-43}}"
+if [ "${BASE_IMAGE}" = "fedora" ]; then
+    IMAGE_TAG="flaggems-sglang-rpm:f${BASE_IMAGE_VERSION}"
+else
+    IMAGE_TAG="flaggems-sglang-rpm:$(echo "${BASE_IMAGE}-${BASE_IMAGE_VERSION}" | tr '/' '-')"
+fi
+OUTPUT_DIR="${OUTPUT_DIR:-${PROJECT_DIR}/rpm-packages}"
+
+docker build --network=host \
+    -f "${SCRIPT_DIR}/dockerfiles/Dockerfile.rpm" \
+    --build-arg BASE_IMAGE="$BASE_IMAGE" \
+    --build-arg BASE_IMAGE_VERSION="$BASE_IMAGE_VERSION" \
+    -t "$IMAGE_TAG" "$PROJECT_DIR"
+
+mkdir -p "$OUTPUT_DIR"
+CID=$(docker create "$IMAGE_TAG")
+docker cp "$CID:/output/." "$OUTPUT_DIR/"
+docker rm "$CID" > /dev/null
+
+echo ""; echo ">>> Output:"; ls -lh "$OUTPUT_DIR"

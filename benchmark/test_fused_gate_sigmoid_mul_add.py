@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/activation_norm/
@@ -47,16 +48,36 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "hidden_states": (num_tokens, hidden),
+            "gate_weight": (hidden,),
+            "shared_output": (num_tokens, hidden),
+            "final_hidden_states": (num_tokens, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seeds": [0, 1, 2, 3],
+            "num_tokens": num_tokens,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_gate_sigmoid_mul_add
 def test_perf_fused_gate_sigmoid_mul_add():
     bench = OpBenchmark(
         op_name="fused_gate_sigmoid_mul_add",
         torch_op=get_reference("fused_gate_sigmoid_mul_add"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
-    bench.set_gems(flaggems_sglang.fused_gate_sigmoid_mul_add)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -77,7 +77,7 @@ Copy `_nvidia/__init__.py` as a starting point. The **only change**
 required is the `VendorDescriptor` construction:
 
 ```python
-from backend_utils import VendorDescriptor
+from ..backend_utils import VendorDescriptor
 
 vendor_info = VendorDescriptor(
     vendor_name="xxx",

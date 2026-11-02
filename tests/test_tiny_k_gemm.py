@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -97,13 +98,13 @@ def test_tiny_k_gemm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import tiny_k_gemm
+        candidate = get_candidate("tiny_k_gemm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("gemm/tiny_k_gemm ops module not found")
         return
 
     try:
-        actual = tiny_k_gemm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("gemm/tiny_k_gemm not yet implemented")
         return

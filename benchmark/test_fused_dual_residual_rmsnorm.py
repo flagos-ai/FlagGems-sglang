@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match
@@ -48,16 +49,37 @@ def _input_fn(shape, cur_dtype, device):
     yield x, residual, weight1, weight2, _EPS
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (bs, hidden),
+            "residual": (bs, hidden),
+            "weight1": (hidden,),
+            "weight2": (hidden,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "_EPS": _EPS,
+            "bs": bs,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_dual_residual_rmsnorm
 def test_perf_fused_dual_residual_rmsnorm():
     bench = OpBenchmark(
         op_name="fused_dual_residual_rmsnorm",
         torch_op=get_reference("fused_dual_residual_rmsnorm"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, hidden",
     )
-    bench.set_gems(flaggems_sglang.fused_dual_residual_rmsnorm)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

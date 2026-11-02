@@ -17,6 +17,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -109,13 +110,13 @@ def test_gate_topk(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import gate_topk
+        candidate = get_candidate("gate_topk", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/gate_topk ops module not found")
         return
 
     try:
-        actual = gate_topk(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/gate_topk not yet implemented")
         return

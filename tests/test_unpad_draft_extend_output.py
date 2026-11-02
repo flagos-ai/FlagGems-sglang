@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -120,13 +121,15 @@ def test_unpad_draft_extend_output(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import unpad_draft_extend_output
+        candidate = get_candidate(
+            "unpad_draft_extend_output", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/unpad_draft_extend_output ops module not found")
         return
 
     try:
-        actual = unpad_draft_extend_output(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/unpad_draft_extend_output not yet implemented")
         return

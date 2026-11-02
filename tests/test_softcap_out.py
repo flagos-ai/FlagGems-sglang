@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -111,13 +112,13 @@ def test_softcap_out(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import softcap_out
+        candidate = get_candidate("softcap_out", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/softcap_out ops module not found")
         return
 
     try:
-        actual = softcap_out(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/softcap_out not yet implemented")
         return

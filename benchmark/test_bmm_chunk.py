@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 CAUSAL = True
@@ -54,16 +55,38 @@ def _input_fn(shape, cur_dtype, device):
     yield a, b, chunk_size, CAUSAL
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, nchunks, chunk_size, ngroups, k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "a": (batch, nchunks * chunk_size, ngroups, k),
+            "b": (batch, nchunks * chunk_size, ngroups, k),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "CAUSAL": CAUSAL,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "ngroups": ngroups,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.bmm_chunk
 def test_perf_bmm_chunk():
     bench = OpBenchmark(
         op_name="bmm_chunk",
         torch_op=get_reference("bmm_chunk"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, ngroups, k",
     )
-    bench.set_gems(flaggems_sglang.bmm_chunk)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

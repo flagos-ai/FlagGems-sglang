@@ -22,6 +22,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference.chunk_cumsum import (
     reference as chunk_cumsum_reference,
 )
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -148,13 +149,13 @@ def test_state_passing(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import state_passing
+        candidate = get_candidate("state_passing", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/state_passing ops module not found")
         return
 
     try:
-        actual = state_passing(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/state_passing not yet implemented")
         return

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SOFTCAP_CONST = 30.0
@@ -39,16 +40,32 @@ def _input_fn(shape, cur_dtype, device):
     yield x, SOFTCAP_CONST
 
 
+def _case_fn(shape, cur_dtype):
+    (m, n) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (m, n)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "SOFTCAP_CONST": SOFTCAP_CONST,
+            "m": m,
+            "n": n,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.softcap_out
 def test_perf_softcap_out():
     bench = OpBenchmark(
         op_name="softcap_out",
         torch_op=get_reference("softcap_out"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, n",
     )
-    bench.set_gems(flaggems_sglang.softcap_out)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

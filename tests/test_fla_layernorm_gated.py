@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -126,13 +127,13 @@ def test_fla_layernorm_gated(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fla_layernorm_gated
+        candidate = get_candidate("fla_layernorm_gated", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/layernorm_gated ops module not found")
         return
 
     try:
-        actual = fla_layernorm_gated(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("fla/layernorm_gated not yet implemented")
         return

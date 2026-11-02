@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -110,13 +111,13 @@ def test_gelu_and_mul(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import gelu_and_mul
+        candidate = get_candidate("gelu_and_mul", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/gelu_and_mul ops module not found")
         return
 
     try:
-        actual = gelu_and_mul(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/gelu_and_mul not yet implemented")
         return

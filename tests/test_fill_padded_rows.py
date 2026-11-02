@@ -17,6 +17,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -111,13 +112,13 @@ def test_fill_padded_rows(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fill_padded_rows
+        candidate = get_candidate("fill_padded_rows", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/fill_padded_rows ops module not found")
         return
 
     try:
-        actual = fill_padded_rows(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/fill_padded_rows not yet implemented")
         return

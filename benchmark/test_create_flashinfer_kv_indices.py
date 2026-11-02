@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(bs, 16, 4096) for bs in (1, 8, 32)]
@@ -50,16 +51,36 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, page_size, max_len) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "kv_indptr": (bs + 1,),
+            "kv_page_indices": ("kv_indptr[-1]",),
+            "kv_last_page_len": (bs,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "bs": bs,
+            "page_size": page_size,
+            "max_len": max_len,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.create_flashinfer_kv_indices
 def test_perf_create_flashinfer_kv_indices():
     bench = OpBenchmark(
         op_name="create_flashinfer_kv_indices",
         torch_op=get_reference("create_flashinfer_kv_indices"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, page_size, max_len",
     )
-    bench.set_gems(flaggems_sglang.create_flashinfer_kv_indices)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

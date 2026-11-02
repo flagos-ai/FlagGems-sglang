@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/moe_topk_sum.
@@ -35,16 +36,32 @@ def _input_fn(shape, cur_dtype, device):
     yield x, out
 
 
+def _case_fn(shape, cur_dtype):
+    (m, topk, k) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (m, topk, k), "out": (m, k)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "m": m,
+            "topk": topk,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.moe_topk_sum
 def test_perf_moe_topk_sum():
     bench = OpBenchmark(
         op_name="moe_topk_sum",
         torch_op=get_reference("moe_topk_sum"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, topk, k",
     )
-    bench.set_gems(flaggems_sglang.moe_topk_sum)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

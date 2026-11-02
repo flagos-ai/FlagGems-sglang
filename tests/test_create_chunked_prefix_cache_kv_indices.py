@@ -1,0 +1,168 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Correctness test for kvcache/create_chunked_prefix_cache_kv_indices."""
+
+import pytest
+import torch
+
+from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
+
+from . import conftest as cfg
+
+# ---------------------------------------------------------------------------
+# Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
+# ---------------------------------------------------------------------------
+
+_TOLERANCES = {
+    torch.float32: dict(atol=1e-4, rtol=1e-4),
+    torch.bfloat16: dict(atol=1.5e-2, rtol=1.5e-2),
+    torch.float16: dict(atol=1e-2, rtol=1e-2),
+}
+_DEFAULT_TOLERANCE = dict(atol=1e-2, rtol=1e-2)
+
+
+def assert_close(actual, expected, *, dtype=None, **overrides):
+    tol = dict(
+        _TOLERANCES.get(
+            dtype if dtype is not None else expected.dtype, _DEFAULT_TOLERANCE
+        )
+    )
+    tol.update(overrides)
+    torch.testing.assert_close(
+        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
+        **tol,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cases (from
+# kernel-comp-baseline/problems/kvcache/create_chunked_prefix_cache_kv_indices/cases.py)
+# ---------------------------------------------------------------------------
+
+
+def _case(bs, chunk=1024, max_batch=256, max_context=16384, seed=0):
+    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    req_to_token = torch.randint(
+        0,
+        1 << 20,
+        (max_batch, max_context),
+        dtype=torch.int32,
+        device=cfg.device,
+        generator=g,
+    )
+    # torch_gcu randperm hangs on-device; generate on CPU then move.
+    req_pool_indices = (
+        torch.randperm(
+            max_batch,
+            generator=torch.Generator(device="cpu").manual_seed(seed),
+        )[:bs]
+        .to(torch.int32)
+        .to(cfg.device)
+    )
+    seq_lens = torch.randint(
+        1, chunk + 1, (bs,), dtype=torch.int32, device=cfg.device, generator=g
+    )
+    start_idx = torch.randint(
+        0,
+        max_context - chunk - 1,
+        (bs,),
+        dtype=torch.int32,
+        device=cfg.device,
+        generator=g,
+    )
+    cu = torch.zeros(bs + 1, dtype=torch.int32, device=cfg.device)
+    cu[1:] = torch.cumsum(seq_lens, dim=0)
+    return dict(
+        req_to_token=req_to_token,
+        req_pool_indices=req_pool_indices,
+        chunk_start_idx=start_idx,
+        chunk_seq_lens=seq_lens,
+        chunk_cu_seq_lens=cu,
+        chunk_kv_indices=torch.zeros(
+            int(cu[-1]), dtype=torch.int32, device=cfg.device
+        ),
+        check=assert_close,
+    )
+
+
+_CASE_FACTORIES = [
+    lambda: _case(1),
+    lambda: _case(16, seed=1),
+    lambda: _case(64, chunk=512, seed=2),
+    lambda: _case(32, chunk=2048, seed=3),
+]
+
+CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
+
+
+# ---------------------------------------------------------------------------
+# Test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("case_idx", range(len(CORRECTNESS_CASES)))
+@pytest.mark.create_chunked_prefix_cache_kv_indices
+def test_create_chunked_prefix_cache_kv_indices(case_idx):
+    # Build only this case; a module-level list would allocate
+    # every case's tensors at import time.
+    case = _CASE_FACTORIES[case_idx]()
+    reference = get_reference("create_chunked_prefix_cache_kv_indices")
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
+    kwargs = case if isinstance(case, dict) else {}
+
+    # Reference
+    expected = reference(**kwargs)
+
+    # Operator under test
+    try:
+        candidate = get_candidate(
+            "create_chunked_prefix_cache_kv_indices", reference=reference
+        )
+    except (ImportError, ModuleNotFoundError):
+        pytest.skip(
+            "kvcache/create_chunked_prefix_cache_kv_indices ops module not found"
+        )
+        return
+
+    try:
+        actual = candidate(**kwargs)
+    except NotImplementedError:
+        pytest.skip(
+            "kvcache/create_chunked_prefix_cache_kv_indices not yet implemented"
+        )
+        return
+
+    # Compare
+    if check is not None:
+        check(actual, expected)
+    elif isinstance(expected, torch.Tensor):
+        assert_close(actual, expected)
+    elif isinstance(expected, (tuple, list)):
+        for a, e in zip(actual, expected):
+            if isinstance(e, torch.Tensor):
+                assert_close(a, e)
+    # Restore check for reuse
+    if check is not None:
+        case["check"] = check

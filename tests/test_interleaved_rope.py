@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -107,13 +108,13 @@ def test_interleaved_rope(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import interleaved_rope
+        candidate = get_candidate("interleaved_rope", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("rope/interleaved_rope ops module not found")
         return
 
     try:
-        actual = interleaved_rope(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("rope/interleaved_rope not yet implemented")
         return

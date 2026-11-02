@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(t, 8, 7168, 1.0) for t in (1, 8, 64, 512)]
@@ -40,16 +41,36 @@ def _input_fn(shape, cur_dtype, device):
     yield down, dst, {"scaling": scaling}
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, topk, hidden, scaling) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "down": (num_tokens * topk, hidden),
+            "dst": (num_tokens * topk,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "num_tokens": num_tokens,
+            "topk": topk,
+            "hidden": hidden,
+            "scaling": scaling,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.deepep_post_reorder
 def test_perf_deepep_post_reorder():
     bench = OpBenchmark(
         op_name="deepep_post_reorder",
         torch_op=get_reference("deepep_post_reorder"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, topk, hidden, scaling",
     )
-    bench.set_gems(flaggems_sglang.deepep_post_reorder)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -18,22 +18,45 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-from .attri_util import FUSED_SIGMOID_MUL_SHAPES
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
+
+# Shapes match
+# kernel-comp-baseline/problems/activation_norm/fused_sigmoid_mul.
+# The strided path (3D gate over a 2D attn_output) is the production shape,
+# so the benchmark sweeps num_tokens with a fixed 32 x 128 head layout.
+SHAPES = [(t, 32, 128) for t in (1, 8, 64, 512)]
+MORE_SHAPES = [(t, 32, 128) for t in (1024, 4096)]
 
 
 def _input_fn(shape, cur_dtype, device):
-    tokens, heads, dim, transposed = shape
-    attn = torch.randn((tokens, heads * dim), device=device, dtype=cur_dtype)
-    if transposed:
-        gate = torch.randn(
-            (tokens, dim, heads), device=device, dtype=cur_dtype
-        ).transpose(1, 2)
-    else:
-        gate = torch.randn(
-            (tokens, heads * dim), device=device, dtype=cur_dtype
-        )
-    yield attn, gate
+    num_tokens, num_heads, head_dim = shape
+    g = torch.Generator(device=device).manual_seed(9)
+    attn_output = torch.randn(
+        num_tokens, num_heads * head_dim, device=device, generator=g
+    ).to(cur_dtype)
+    gate = torch.randn(
+        num_tokens, num_heads, head_dim, device=device, generator=g
+    ).to(cur_dtype)
+    yield attn_output, gate
+
+
+def _case_fn(shape, cur_dtype):
+    (num_tokens, num_heads, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "attn_output": (num_tokens, num_heads * head_dim),
+            "gate": (num_tokens, num_heads, head_dim),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "num_heads": num_heads,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
 
 
 @pytest.mark.fused_sigmoid_mul
@@ -41,10 +64,12 @@ def test_perf_fused_sigmoid_mul():
     bench = OpBenchmark(
         op_name="fused_sigmoid_mul",
         torch_op=get_reference("fused_sigmoid_mul"),
-        input_fn=_input_fn,
-        dtypes=[torch.float16, torch.bfloat16, torch.float32],
-        shapes=FUSED_SIGMOID_MUL_SHAPES,
-        shape_desc="tokens, heads, head_dim, transposed_gate",
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
+        dtypes=[torch.bfloat16],
+        shapes=SHAPES,
+        more_shapes=MORE_SHAPES,
+        shape_desc="num_tokens, num_heads, head_dim",
     )
-    bench.set_gems(flaggems_sglang.fused_sigmoid_mul)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

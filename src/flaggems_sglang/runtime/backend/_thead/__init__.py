@@ -26,7 +26,7 @@ Key Features:
 - Device management: ppu-smi tool (similar to nvidia-smi)
 """
 
-from backend_utils import VendorDescriptor  # noqa: E402
+from ..backend_utils import VendorDescriptor  # noqa: E402
 
 vendor_info = VendorDescriptor(
     vendor_name="thead",

@@ -35,7 +35,7 @@ repos:
         entry: isort
         language: system
         types: [python]
-        args: ["--profile", "black", "--line-length", "80"]
+        args: ["--profile", "black", "--line-length", "80", "-o", "packaging"]
 
       - id: black
         name: black

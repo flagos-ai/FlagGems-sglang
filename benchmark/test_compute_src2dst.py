@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(n,) for n in (8, 512, 8192, 131072)]
@@ -35,16 +36,26 @@ def _input_fn(shape, cur_dtype, device):
     yield (src_to_dst,)
 
 
+def _case_fn(shape, cur_dtype):
+    (n,) = shape
+    yield BenchmarkCasePlan(
+        shape={"src_to_dst": (n,)},
+        params={"configuration": shape, "seed": 0, "n": n},
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.compute_src2dst
 def test_perf_compute_src2dst():
     bench = OpBenchmark(
         op_name="compute_src2dst",
         torch_op=get_reference("compute_src2dst"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="n",
     )
-    bench.set_gems(flaggems_sglang.compute_src2dst)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

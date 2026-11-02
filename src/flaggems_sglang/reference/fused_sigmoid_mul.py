@@ -17,4 +17,5 @@ import torch
 
 def reference(attn_output, gate):
     g = gate.reshape(attn_output.shape).float()
-    return (attn_output.float() * torch.sigmoid(g)).to(attn_output.dtype)
+    out = attn_output.float() * torch.sigmoid(g)
+    return out.to(attn_output.dtype)

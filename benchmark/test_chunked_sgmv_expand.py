@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/lora/chunked_sgmv_expand.
@@ -91,16 +92,48 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (seg_len, num_segs, num_lora, r) = shape[:4]
+    slice_sizes = list(shape[4:])
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (seg_len * num_segs, len(slice_sizes) * r),
+            "weights": (num_lora, sum(slice_sizes), r),
+            "base_output": (seg_len * num_segs, sum(slice_sizes)),
+            "slice_offsets": (len(slice_sizes) + 1,),
+            "batch_info.seg_indptr": (num_segs + 1,),
+            "batch_info.seg_lens": (num_segs,),
+            "batch_info.weight_indices": (num_segs,),
+            "batch_info.lora_ranks": (num_lora,),
+            "batch_info.scalings": (num_lora,),
+            "batch_info.permutation": (
+                (seg_len * num_segs,) if "identity" != "none" else None
+            ),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "seg_len": seg_len,
+            "num_segs": num_segs,
+            "num_lora": num_lora,
+            "r": r,
+            "slice_sizes": slice_sizes,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunked_sgmv_expand
 def test_perf_chunked_sgmv_expand():
     bench = OpBenchmark(
         op_name="chunked_sgmv_expand",
         torch_op=get_reference("chunked_sgmv_expand"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="seg_len, num_segs, num_lora, r, *slice_sizes",
     )
-    bench.set_gems(flaggems_sglang.chunked_sgmv_expand)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

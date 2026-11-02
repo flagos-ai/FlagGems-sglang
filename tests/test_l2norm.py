@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -105,13 +106,13 @@ def test_l2norm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import l2norm
+        candidate = get_candidate("l2norm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/l2norm ops module not found")
         return
 
     try:
-        actual = l2norm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/l2norm not yet implemented")
         return

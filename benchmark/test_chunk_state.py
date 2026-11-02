@@ -23,6 +23,7 @@ from flaggems_sglang.reference.chunk_cumsum import (
     reference as chunk_cumsum_reference,
 )
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/chunk_state.
@@ -73,12 +74,37 @@ def _input_fn(shape, cur_dtype, device):
     yield b, x, dt_out, dA_cumsum
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, nchunks, chunk_size, nheads, ngroups, headdim, dstate) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "b": (batch, nchunks * chunk_size, ngroups, dstate),
+            "x": (batch, nchunks * chunk_size, nheads, headdim),
+            "dt_out": (batch, nheads, nchunks, chunk_size),
+            "dA_cumsum": (batch, nheads, nchunks, chunk_size),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "nheads": nheads,
+            "ngroups": ngroups,
+            "headdim": headdim,
+            "dstate": dstate,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunk_state
 def test_perf_chunk_state():
     bench = OpBenchmark(
         op_name="chunk_state",
         torch_op=get_reference("chunk_state"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
@@ -86,5 +112,5 @@ def test_perf_chunk_state():
             "batch, nchunks, chunk_size, nheads, ngroups, headdim, dstate"
         ),
     )
-    bench.set_gems(flaggems_sglang.chunk_state)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

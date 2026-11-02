@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -140,13 +141,13 @@ def test_merge_state(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import merge_state
+        candidate = get_candidate("merge_state", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/merge_state ops module not found")
         return
 
     try:
-        actual = merge_state(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/merge_state not yet implemented")
         return

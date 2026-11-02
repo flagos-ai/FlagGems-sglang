@@ -1,0 +1,72 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Build RPM Packages
+
+# Verifies that the packaging definition still builds and installs. It is
+# not a release path: packages published to the FlagOS repositories are
+# built and uploaded by flagos-ai/build-infra from a pinned ref, so no tag
+# triggers a build here.
+on:
+  pull_request:
+    branches: [master]
+    # Only what changes the package. An .rpm built on a source PR is
+    # published nowhere and downloaded by no one. A build can be requested
+    # by hand.
+    paths:
+      - 'packaging/rpm/**'
+      - '.github/workflows/build-rpm.yml'
+  workflow_dispatch:
+
+jobs:
+  build-rpm:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: fedora43
+            base_image: fedora
+            base_image_version: "43"
+            artifact: flaggems-sglang-noarch-rpm-packages
+          - target: openeuler2403
+            base_image: openeuler/openeuler
+            base_image_version: 24.03-lts
+            artifact: flaggems-sglang-noarch-oe2403-rpm-packages
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build .rpm (${{ matrix.target }})
+        run: bash packaging/rpm/build-flaggems-sglang-rpm.sh
+        env:
+          BASE_IMAGE: ${{ matrix.base_image }}
+          BASE_IMAGE_VERSION: ${{ matrix.base_image_version }}
+
+      - name: Install it in a clean ${{ matrix.target }} container
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD/rpm-packages:/pkg:ro" \
+            "${{ matrix.base_image }}:${{ matrix.base_image_version }}" bash -c '
+              set -e
+              dnf install -y $(ls /pkg/*.rpm | grep -v "\.src\.rpm$")
+              rpm -ql python3-flaggems-sglang | grep -c "\.py$"
+            '
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact }}
+          path: rpm-packages/*.rpm
+          retention-days: 7

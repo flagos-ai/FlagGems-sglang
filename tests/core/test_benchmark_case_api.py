@@ -45,6 +45,8 @@ def _stable_case_identity(monkeypatch):
 
     cfg = bench_conftest.BenchConfig()
     monkeypatch.setattr(bench_conftest, "Config", cfg)
+    monkeypatch.setattr(bench_conftest, "CASE_LISTS", [])
+    monkeypatch.setattr(bench_conftest, "LISTED_CASE_IDS", set())
     monkeypatch.setattr(base, "Config", cfg)
     cfg.current_nodeid = _NODEID
     cfg.available_case_ids = set()
@@ -246,6 +248,45 @@ def test_duplicate_generated_ids_fail_during_listing(monkeypatch):
     )
     with pytest.raises(ValueError, match="duplicate case IDs"):
         benchmark.list_cases()
+
+
+def test_empty_provider_fails_without_materializing(monkeypatch):
+    materialized = []
+    benchmark = _make_benchmark(materialized)
+    monkeypatch.setattr(benchmark, "init_user_config", lambda: None)
+    monkeypatch.setattr(benchmark, "case_fn", lambda *args: iter(()))
+
+    with pytest.raises(ValueError, match="no benchmark cases"):
+        benchmark.list_cases()
+    assert materialized == []
+
+
+def test_catalog_rejects_repeated_ids_across_benchmark_objects():
+    from benchmark import conftest
+
+    first = _make_benchmark([])
+    second = _make_benchmark([])
+    first_payload = first.list_cases(initialize=False).to_dict()
+    second_payload = second.list_cases(initialize=False).to_dict()
+    conftest.update_case_list(first_payload)
+
+    with pytest.raises(ValueError, match="duplicate case IDs"):
+        conftest.update_case_list(second_payload)
+    assert conftest.CASE_LISTS == [first_payload]
+
+
+@pytest.mark.parametrize(
+    "initial_status", [pytest.ExitCode.OK, pytest.ExitCode.NO_TESTS_COLLECTED]
+)
+def test_listing_session_with_no_published_cases_fails(initial_status):
+    from types import SimpleNamespace
+
+    from benchmark import conftest
+
+    base.Config.list_cases = True
+    session = SimpleNamespace(exitstatus=initial_status)
+    conftest.pytest_sessionfinish(session, initial_status)
+    assert session.exitstatus == pytest.ExitCode.TESTS_FAILED
 
 
 @pytest.mark.parametrize(

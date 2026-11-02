@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/fixup_zero_kv.
@@ -49,16 +50,39 @@ def _input_fn(shape, cur_dtype, device):
     yield out, lse, kv_lens, cum, int(q_lens.max())
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, num_heads, v_head_dim, max_q) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "out": ("sum(q_lens)", num_heads, v_head_dim),
+            "lse": ("sum(q_lens)", num_heads),
+            "kv_lens": (bs,),
+            "cum": (bs + 1,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 11,
+            "_ZERO_FRAC": _ZERO_FRAC,
+            "bs": bs,
+            "num_heads": num_heads,
+            "v_head_dim": v_head_dim,
+            "max_q": max_q,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fixup_zero_kv
 def test_perf_fixup_zero_kv():
     bench = OpBenchmark(
         op_name="fixup_zero_kv",
         torch_op=get_reference("fixup_zero_kv"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, num_heads, v_head_dim, max_q",
     )
-    bench.set_gems(flaggems_sglang.fixup_zero_kv)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

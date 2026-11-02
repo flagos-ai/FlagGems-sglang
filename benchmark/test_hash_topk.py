@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/hash_topk.
@@ -55,16 +56,38 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, num_routed, topk_routed, shared) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "logits": (num_tokens, num_routed),
+            "input_ids": (num_tokens,),
+            "tid2eid": (_VOCAB, topk_routed),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_VOCAB": _VOCAB,
+            "num_tokens": num_tokens,
+            "num_routed": num_routed,
+            "topk_routed": topk_routed,
+            "shared": shared,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.hash_topk
 def test_perf_hash_topk():
     bench = OpBenchmark(
         op_name="hash_topk",
         torch_op=get_reference("hash_topk"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, num_routed, topk_routed, shared",
     )
-    bench.set_gems(flaggems_sglang.hash_topk)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/causal_conv1d_update.
@@ -60,16 +61,38 @@ def _input_fn(shape, cur_dtype, device):
     yield x, conv_state, weight, bias
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, dim, width, seqlen) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (batch, dim) if seqlen == 1 else (batch, dim, seqlen),
+            "conv_state": (batch, dim, width - 1),
+            "weight": (dim, width),
+            "bias": (dim,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "dim": dim,
+            "width": width,
+            "seqlen": seqlen,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.causal_conv1d_update
 def test_perf_causal_conv1d_update():
     bench = OpBenchmark(
         op_name="causal_conv1d_update",
         torch_op=get_reference("causal_conv1d_update"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, dim, width, seqlen",
     )
-    bench.set_gems(flaggems_sglang.causal_conv1d_update)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

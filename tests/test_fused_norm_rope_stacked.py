@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -157,13 +158,15 @@ def test_fused_norm_rope_stacked(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_norm_rope_stacked
+        candidate = get_candidate(
+            "fused_norm_rope_stacked", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/fused_norm_rope_stacked ops module not found")
         return
 
     try:
-        actual = fused_norm_rope_stacked(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/fused_norm_rope_stacked not yet implemented")
         return

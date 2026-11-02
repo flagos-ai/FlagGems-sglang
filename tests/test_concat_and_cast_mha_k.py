@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -109,13 +110,13 @@ def test_concat_and_cast_mha_k(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import concat_and_cast_mha_k
+        candidate = get_candidate("concat_and_cast_mha_k", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("kvcache/concat_and_cast_mha_k ops module not found")
         return
 
     try:
-        actual = concat_and_cast_mha_k(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("kvcache/concat_and_cast_mha_k not yet implemented")
         return
