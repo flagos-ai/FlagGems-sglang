@@ -3,4 +3,6 @@
 
 """Portable Torch oracle for the documented chunk_gated_delta_rule_fwd interface."""
 
-from .qwen36 import chunk_gated_delta_rule_fwd as reference  # noqa: F401
+from .operator_oracles import (  # noqa: F401
+    chunk_gated_delta_rule_fwd as reference,
+)

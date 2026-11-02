@@ -3,6 +3,6 @@
 
 """Portable Torch oracle for the documented fused_recurrent_gated_delta_rule_packed_decode interface."""
 
-from .qwen36 import (  # noqa: F401
+from .operator_oracles import (  # noqa: F401
     fused_recurrent_gated_delta_rule_packed_decode as reference,
 )

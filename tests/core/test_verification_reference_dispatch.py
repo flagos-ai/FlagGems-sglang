@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def helper():
     spec = importlib.util.spec_from_file_location(
-        "_test_qwen36_common", ROOT / "verification/qwen36_common.py"
+        "_test_operator_common", ROOT / "verification/operator_common.py"
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -30,7 +30,7 @@ def install_dispatch(monkeypatch, get_reference):
     monkeypatch.setitem(sys.modules, "flaggems_sglang.reference", reference)
 
 
-def test_qwen_replay_uses_selected_vendor_reference(monkeypatch):
+def test_operator_replay_uses_selected_vendor_reference(monkeypatch):
     selected = []
 
     def get_reference(operator):

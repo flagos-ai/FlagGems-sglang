@@ -3,4 +3,4 @@
 
 """Portable Torch oracle for the documented select_experts interface."""
 
-from .qwen36 import select_experts as reference  # noqa: F401
+from .operator_oracles import select_experts as reference  # noqa: F401

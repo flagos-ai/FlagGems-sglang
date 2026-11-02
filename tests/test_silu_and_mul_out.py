@@ -1,17 +1,19 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Correctness for the Qwen3.6 silu_and_mul_out workload interface."""
-
 import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
-from flaggems_sglang.testing.qwen36_workloads import build_inputs, workloads
+from flaggems_sglang.testing.operator_workloads import (
+    build_inputs,
+    case_id,
+    workloads,
+)
 
 from . import conftest as cfg
-from .qwen36_utils import clone_inputs, validate_result
+from .operator_assertions import clone_inputs, validate_result
 
 CASES = workloads("silu_and_mul_out", comprehensive=True)
 
@@ -20,10 +22,7 @@ CASES = workloads("silu_and_mul_out", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[
-        f"{row['model']}-{row['tokens']}-{row['role']}-{row['variant']}"
-        for row in CASES
-    ],
+    ids=[case_id(row) for row in CASES],
 )
 def test_silu_and_mul_out(case):
     reference = get_reference("silu_and_mul_out")

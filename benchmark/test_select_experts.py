@@ -1,15 +1,13 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Case listing, exact replay and timing for Qwen3.6 select_experts."""
-
 import pytest
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import reference_mode_enabled
-from flaggems_sglang.testing.qwen36_workloads import (
+from flaggems_sglang.testing.operator_workloads import (
     baseline_key,
     build_inputs,
     describe,
@@ -57,7 +55,7 @@ def test_perf_select_experts():
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
-        shape_desc="explicit Qwen3.6 workload index",
+        shape_desc="input configuration index",
         baseline_key_fn=_baseline_key,
         input_reset_factory=reset_factory(OPERATOR),
     )

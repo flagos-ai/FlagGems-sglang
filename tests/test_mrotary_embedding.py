@@ -1,8 +1,6 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Compare candidates with native NVIDIA or portable Torch mRoPE."""
-
 from copy import deepcopy
 
 import pytest
@@ -96,7 +94,7 @@ _CASE_FACTORIES = [lambda row=row: _make_case(row) for row in WORKLOADS]
     "case_idx",
     range(len(WORKLOADS)),
     ids=[
-        f"{c['model']}-{c['tokens']}-stride{c['position_stride']}"
+        f"qh{c['q_heads']}-t{c['tokens']}-stride{c['position_stride']}"
         + ("-axis-routing" if c.get("axis_routing") else "")
         for c in WORKLOADS
     ],

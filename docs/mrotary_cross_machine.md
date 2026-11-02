@@ -1,6 +1,6 @@
 # mrotary_embedding across devices
 
-The six model benchmark configurations and the seventh correctness-only
+The six benchmark configurations and the seventh correctness-only
 axis-routing case remain unchanged. NVIDIA `get_reference` dispatch uses the
 original SGLang v0.5.11 Triton implementation. The default reference is now a
 portable Torch implementation with the same in-place q/k, None-returning ABI.
@@ -71,8 +71,8 @@ is target/reference capability for the measured bottleneck resource. Record the
 actual chip and factor used. Missing factors yield the framework's raw ratio;
 that is not a hardware-normalized result. This is an estimate based on the
 existing ops-baseline model, not a measured vendor-native target baseline.
-The shared timer repeats the in-place operator, matching existing collection
-semantics; input creation and cache construction are outside the timed callable.
+The shared timer restores q/k before each invocation. Restoration and cache
+preparation are outside device timing events and profile scopes.
 
 If the NVIDIA host cannot reach KS3, use `export --output-dir` there, transfer the
 bundle unchanged, then use `op-verify upload --input-dir` on a connected host.
