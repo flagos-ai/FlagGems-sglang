@@ -50,6 +50,11 @@ def check_plugins(
                 "Dataset replay did not return every selected problem"
             )
         for name, problem in zip(names, problems):
+            result = report["results"][problem]
+            if len(result.get("cases", [])) != DATASETS[name]["cases"]:
+                raise RuntimeError(
+                    f"{name}: replay did not cover the fixed dataset cases"
+                )
             output["results"][name] = dict(
                 report["results"][problem],
                 dataset_problem=problem,

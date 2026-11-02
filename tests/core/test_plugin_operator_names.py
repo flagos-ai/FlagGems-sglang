@@ -212,10 +212,29 @@ def test_replay_maps_results_without_rewriting_dataset_or_config(cases):
         assert device == "cuda" and isolate is True
         return dict(
             results={
-                p: {"status": "PASS", "cases": [{"status": "PASS"}]}
+                p: {
+                    "status": "PASS",
+                    "cases": [{"status": "PASS"}]
+                    * next(
+                        d["cases"]
+                        for d in replay.DATASETS.values()
+                        if d["problem"] == p
+                    ),
+                }
                 for p in problems
             },
-            summary=dict(total_pass=len(problems), total_fail=0, total_skip=0),
+            summary=dict(
+                total_pass=sum(
+                    next(
+                        d["cases"]
+                        for d in replay.DATASETS.values()
+                        if d["problem"] == p
+                    )
+                    for p in problems
+                ),
+                total_fail=0,
+                total_skip=0,
+            ),
         )
 
     result = replay.check_plugins(
@@ -224,7 +243,7 @@ def test_replay_maps_results_without_rewriting_dataset_or_config(cases):
     assert len(called) == 2 and set(result["results"]) == set(
         cases.PLUGIN_OPERATORS
     )
-    assert result["summary"] == dict(total_pass=8, total_fail=0, total_skip=0)
+    assert result["summary"] == dict(total_pass=35, total_fail=0, total_skip=0)
     assert (
         config.ks3_prefix == "unrelated" and config.problems_dir == "elsewhere"
     )
@@ -236,6 +255,18 @@ def test_replay_maps_results_without_rewriting_dataset_or_config(cases):
             [cases.PLUGIN_OPERATORS[0]],
             config=config,
             checker=lambda *a, **kw: {"results": {}},
+        )
+    with pytest.raises(RuntimeError, match="fixed dataset cases"):
+        replay.check_plugins(
+            [cases.PLUGIN_OPERATORS[0]],
+            config=config,
+            checker=lambda *a, **kw: {
+                "results": {
+                    replay.DATASETS[cases.PLUGIN_OPERATORS[0]]["problem"]: {
+                        "cases": []
+                    }
+                }
+            },
         )
     with pytest.raises(ValueError, match="Unknown"):
         replay.check_plugins(

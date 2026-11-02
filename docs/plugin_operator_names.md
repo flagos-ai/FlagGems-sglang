@@ -78,6 +78,19 @@ Add this checkout's `verification` directory to `PYTHONPATH` for op-verify
 workers. `--cache-dir` supplies a parent containing `qwen36-cache` and
 `mrope-cache`; these caches may be copied from previous runs to reuse tensor
 files. The output uses plugin names, retains the original dataset IDs/prefixes,
-and exits unsuccessfully on missing results, numerical failures or skipped
-cases. It never exports or uploads data. Historical receipts under
+and verifies all 35 fixed cases. Missing results/cases, numerical failures or
+skipped cases fail the replay. It never exports or uploads data. Historical receipts under
 `docs/validation` retain their original names, source revisions and hashes.
+
+## Reusable CLI regression
+
+`pytest tests/core/test_plugin_suite_cli.py -q` runs twelve real CLI checks on a
+CUDA-compatible device: correctness collection, benchmark list-cases, both
+reference-as-candidate modes, and one dummy run per plugin over correctness and
+benchmark together. It requires all 45 correctness cases, 34 benchmark records
+and 79 dummy invocations. Host-only environments skip this device regression;
+the paired static-data/name/reset checks are in `test_plugin_operator_names.py`.
+The CI selector explicitly includes the device regression when its source or
+the shared workload module changes. Default plugin tests can skip when no
+plugin implementation is supplied; the explicit reference/dummy regressions
+must cover every case successfully.
