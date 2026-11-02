@@ -295,3 +295,41 @@ def test_readwrite_plugin_names_keep_reset_enabled():
         )
     assert reset.reset_factory("gemma_rmsnorm_plugin") is None
     assert reset.reset_factory("other_plugin") is None
+
+
+def test_isolated_workers_inherit_dataset_and_current_sources(monkeypatch):
+    import subprocess
+
+    replay = load(
+        "verification/check_plugins.py", "_plugin_worker_environment"
+    )
+    monkeypatch.setenv("OP_VERIFY_KS3_PREFIX", "unrelated-prefix")
+    monkeypatch.setenv("OP_VERIFY_PROBLEMS_DIR", "old-checkout")
+    monkeypatch.setenv("OP_VERIFY_CACHE_DIR", "old-cache")
+    monkeypatch.setenv("PYTHONPATH", "vendor-sdk")
+    config = SimpleNamespace(
+        ks3_prefix="unrelated-prefix",
+        problems_dir="old-checkout",
+        cache_dir="cache",
+    )
+    operator = "gemma_fused_add_rmsnorm_plugin"
+    dataset = replay.DATASETS[operator]
+
+    def checker(local, **kwargs):
+        paths = [str(ROOT / "src"), str(ROOT / "verification")]
+        code = (
+            "import os;"
+            f"assert os.environ['OP_VERIFY_KS3_PREFIX']=={dataset['prefix']!r};"
+            f"assert os.environ['OP_VERIFY_PROBLEMS_DIR']=={str(ROOT / 'verification/legacy')!r};"
+            f"assert os.environ['OP_VERIFY_CACHE_DIR']=={str(Path('cache') / dataset['cache_group'])!r};"
+            f"assert os.environ['PYTHONPATH'].split(os.pathsep)[:2]=={paths!r}"
+        )
+        subprocess.run([sys.executable, "-c", code], check=True)
+        raise RuntimeError("fixture worker failure")
+
+    with pytest.raises(RuntimeError, match="fixture worker failure"):
+        replay.check_plugins([operator], config=config, checker=checker)
+    assert os.environ["OP_VERIFY_KS3_PREFIX"] == "unrelated-prefix"
+    assert os.environ["OP_VERIFY_PROBLEMS_DIR"] == "old-checkout"
+    assert os.environ["OP_VERIFY_CACHE_DIR"] == "old-cache"
+    assert os.environ["PYTHONPATH"] == "vendor-sdk"

@@ -5,10 +5,46 @@
 import argparse
 import copy
 import json
+import os
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DATASETS = json.loads((ROOT / "plugin_datasets.json").read_text())
+
+
+@contextmanager
+def _worker_environment(config):
+    # op-verify's isolated worker reloads Config from its environment rather
+    # than receiving the parent Config object. Bind that same dataset/source
+    # and credentials without putting secrets in arguments or files.
+    fields = {
+        "problems_dir": "OP_VERIFY_PROBLEMS_DIR",
+        "cache_dir": "OP_VERIFY_CACHE_DIR",
+        "ks3_prefix": "OP_VERIFY_KS3_PREFIX",
+        "ks3_endpoint": "OP_VERIFY_KS3_ENDPOINT",
+        "ks3_bucket": "OP_VERIFY_KS3_BUCKET",
+        "ks3_ak": "OP_VERIFY_KS3_AK",
+        "ks3_sk": "OP_VERIFY_KS3_SK",
+    }
+    updates = {
+        env: str(getattr(config, field))
+        for field, env in fields.items()
+        if hasattr(config, field)
+    }
+    updates["PYTHONPATH"] = os.pathsep.join(
+        [str(ROOT.parent / "src"), str(ROOT), os.environ.get("PYTHONPATH", "")]
+    )
+    before = {key: os.environ.get(key) for key in updates}
+    try:
+        os.environ.update(updates)
+        yield
+    finally:
+        for key, value in before.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def check_plugins(
@@ -44,7 +80,10 @@ def check_plugins(
         group = DATASETS[names[0]]["cache_group"]
         local.cache_dir = str(Path(cache_dir or config.cache_dir) / group)
         problems = [DATASETS[name]["problem"] for name in names]
-        report = checker(local, problems=problems, device=device, isolate=True)
+        with _worker_environment(local):
+            report = checker(
+                local, problems=problems, device=device, isolate=True
+            )
         if set(report.get("results", {})) != set(problems):
             raise RuntimeError(
                 "Dataset replay did not return every selected problem"
