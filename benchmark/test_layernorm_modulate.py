@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(b, s, 2240) for b in (1, 2) for s in (77, 1024, 4096)]
@@ -40,16 +41,34 @@ def _input_fn(shape, cur_dtype, device):
     yield _t(batch, seq, hidden), _t(batch, hidden), _t(batch, hidden), _EPS
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, seq, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (batch, seq, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "seq": seq,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.layernorm_modulate
 def test_perf_layernorm_modulate():
     bench = OpBenchmark(
         op_name="layernorm_modulate",
         torch_op=get_reference("layernorm_modulate"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, seq, hidden",
     )
-    bench.set_gems(flaggems_sglang.layernorm_modulate)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

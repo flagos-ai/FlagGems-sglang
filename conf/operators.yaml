@@ -153,6 +153,20 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: chunk_gated_delta_rule_fwd
+    description: |
+      Chunked gated delta-rule forward (Qwen3-Next / vLLM-Ascend chunk.py).
+      Gated delta-rule recurrence scheduled over decay-horizon segments, with optional in-kernel q/k L2 norm.
+    for:
+      - chunk_gated_delta_rule_fwd
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: chunk_local_cumsum_scalar
     description: |
       Computes local cumulative sum over chunked sequences with optional scaling and reverse direction.
@@ -709,6 +723,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_moe
+    description: |
+      Fused MoE experts (unquantized path), SGLang fused_experts semantics.
+      Sorted grouped-GEMM gate/up projection with activation, down projection and top-k combine.
+    for:
+      - fused_moe
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_moe_dispatch_index
     description: |
       Builds the permuted grouped-GEMM destination indices for masked/DeepGEMM MoE in a single launch.
@@ -827,6 +855,34 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_recurrent_gated_delta_rule
+    description: |
+      Fused recurrent gated delta-rule (Qwen3-Next / FLA linear attention).
+      Sequential delta-rule recurrence with a per-step scalar gate and optional in-kernel q/k L2 norm.
+    for:
+      - fused_recurrent_gated_delta_rule
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_recurrent_gated_delta_rule_packed_decode
+    description: |
+      Packed single-token decode of the gated delta-rule straight from the packed QKV projection.
+      One recurrence step into the paged SSM state, indexed per request with padding-slot handling.
+    for:
+      - fused_recurrent_gated_delta_rule_packed_decode
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
     kind:
       - NeuralNetwork
     stages:
@@ -1676,6 +1732,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: sglang_fl_rotary_embedding
+    description: |
+      SGLang fused in-place RoPE over packed query/key tensors.
+      Position-indexed cos/sin cache applied in neox (half-split) or interleaved pair form; extra head lanes pass through.
+    for:
+      - sglang_fl_rotary_embedding
+    labels:
+      - fused
+      - sglang
+      - PositionEmbedding
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: sigmoid_gate_mul
     description: |
       Elementwise sigmoid gating multiply over same-shaped operands: x * sigmoid(gate).
@@ -1889,6 +1959,20 @@ ops:
       - MoE
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: topk_softmax
+    description: |
+      SGLang MoE top-k gating: fp32 softmax over experts then the k largest per token.
+      Writes descending weights/ids into the preallocated buffers, with optional renormalization.
+    for:
+      - topk_softmax
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: unpad_draft_extend_output

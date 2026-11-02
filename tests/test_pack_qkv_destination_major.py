@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -132,7 +133,9 @@ def test_pack_qkv_destination_major(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import pack_qkv_destination_major
+        candidate = get_candidate(
+            "pack_qkv_destination_major", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "diffusion/pack_qkv_destination_major ops module not found"
@@ -140,7 +143,7 @@ def test_pack_qkv_destination_major(case_idx):
         return
 
     try:
-        actual = pack_qkv_destination_major(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/pack_qkv_destination_major not yet implemented")
         return

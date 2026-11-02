@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -141,13 +142,13 @@ def test_qk_gemma_rmsnorm_rope(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import qk_gemma_rmsnorm_rope
+        candidate = get_candidate("qk_gemma_rmsnorm_rope", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("rope/qk_gemma_rmsnorm_rope ops module not found")
         return
 
     try:
-        actual = qk_gemma_rmsnorm_rope(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("rope/qk_gemma_rmsnorm_rope not yet implemented")
         return

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(t, 4096, 8, max(t * 8, 16)) for t in (1, 8, 64, 512)]
@@ -55,16 +56,37 @@ def _input_fn(shape, cur_dtype, device):
     yield input_tensor, ids, weight, index, out
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, hidden, topk, num_src) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "recv_x": (num_src, hidden),
+            "topk_ids": (num_tokens, topk),
+            "out": (num_tokens, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "hidden": hidden,
+            "topk": topk,
+            "num_src": num_src,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.ep_gather
 def test_perf_ep_gather():
     bench = OpBenchmark(
         op_name="ep_gather",
         torch_op=get_reference("ep_gather"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, hidden, topk, num_src",
     )
-    bench.set_gems(flaggems_sglang.ep_gather)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()
