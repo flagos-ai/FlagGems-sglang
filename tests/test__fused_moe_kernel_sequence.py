@@ -22,7 +22,7 @@ CASES = workloads("_fused_moe_kernel_sequence", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[case_id("_fused_moe_kernel_sequence", row) for row in CASES],
 )
 def test__fused_moe_kernel_sequence(case):
     reference = get_reference("_fused_moe_kernel_sequence")

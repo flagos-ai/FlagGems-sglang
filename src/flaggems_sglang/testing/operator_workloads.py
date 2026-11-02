@@ -130,11 +130,14 @@ def workloads(operator, comprehensive=False):
     return rows
 
 
-def case_id(row):
-    return (
-        f"h{row['hidden']}-qh{row['q_heads']}-vh{row['value_heads']}"
-        f"-pool{row['pool']}-t{row['tokens']}-{row['role']}-{row['variant']}"
+def case_id(operator, row):
+    shapes = describe(operator, row)
+    geometry = "-".join(
+        f"{name}={'x'.join(str(dim) for dim in shape)}"
+        for name, shape in shapes.items()
+        if shape is not None
     )
+    return f"{geometry}-{row['role']}-{row['variant']}"
 
 
 def describe(operator, row):

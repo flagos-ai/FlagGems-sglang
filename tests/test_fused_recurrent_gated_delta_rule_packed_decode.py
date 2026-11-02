@@ -24,7 +24,10 @@ CASES = workloads(
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[
+        case_id("fused_recurrent_gated_delta_rule_packed_decode", row)
+        for row in CASES
+    ],
 )
 def test_fused_recurrent_gated_delta_rule_packed_decode(case):
     reference = get_reference("fused_recurrent_gated_delta_rule_packed_decode")

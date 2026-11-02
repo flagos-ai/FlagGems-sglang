@@ -22,7 +22,7 @@ CASES = workloads("select_experts", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[case_id("select_experts", row) for row in CASES],
 )
 def test_select_experts(case):
     reference = get_reference("select_experts")

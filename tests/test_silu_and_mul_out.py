@@ -22,7 +22,7 @@ CASES = workloads("silu_and_mul_out", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[case_id("silu_and_mul_out", row) for row in CASES],
 )
 def test_silu_and_mul_out(case):
     reference = get_reference("silu_and_mul_out")

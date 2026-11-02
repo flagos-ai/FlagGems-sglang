@@ -22,7 +22,7 @@ CASES = workloads("chunk_gated_delta_rule_fwd", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[case_id("chunk_gated_delta_rule_fwd", row) for row in CASES],
 )
 def test_chunk_gated_delta_rule_fwd(case):
     reference = get_reference("chunk_gated_delta_rule_fwd")

@@ -22,7 +22,7 @@ CASES = workloads("gemma_fused_add_rmsnorm", comprehensive=True)
 @pytest.mark.parametrize(
     "case",
     CASES,
-    ids=[case_id(row) for row in CASES],
+    ids=[case_id("gemma_fused_add_rmsnorm", row) for row in CASES],
 )
 def test_gemma_fused_add_rmsnorm(case):
     reference = get_reference("gemma_fused_add_rmsnorm")
