@@ -16,11 +16,11 @@ sources, so they do not require installing the SGLang runtime or C++ extensions.
 ```sh
 export PYTHONPATH="$PWD/verification:$PYTHONPATH"
 # Set op-verify credentials privately; reuse the original seven-case dataset.
-python verification/check_plugins.py --operator mrotary_embedding_plugin \
+python verification/check_sglang_fl.py --operator sglang_fl_mrotary_embedding \
   --device npu --output mrotary-plugin-replay.json
 ```
 
-New exports use `rope/mrotary_embedding_plugin` with
+New exports use `rope/sglang_fl_mrotary_embedding` with
 `OP_VERIFY_PROBLEMS_DIR=$PWD/verification/problems` and a **fresh** KS3 prefix.
 Keep the published `op-verify/sglang-mrotary/20261029-native-v1` prefix unchanged.
 
@@ -37,7 +37,7 @@ candidate behavior, exact trailing channels, immutable inputs and in-place ABI.
 Do not treat reference-as-candidate alone as independent correctness evidence.
 
 For a necessary vendor specialization, use the existing
-`reference/vendors/_<vendor>/mrotary_embedding_plugin.py` dispatch and point op-verify's
+`reference/vendors/_<vendor>/sglang_fl_mrotary_embedding.py` dispatch and point op-verify's
 local vendor adapter at the same implementation. Revalidate it on the same
 NVIDIA dataset. No vendor specialization is introduced without evidence of a
 failure in the common Torch implementation.
@@ -63,8 +63,8 @@ fallback. Source and target must use matching versions of this case contract.
 On the target, benchmark the injected candidate locally:
 
 ```sh
-pytest benchmark/test_mrotary_embedding_plugin.py -m mrotary_embedding_plugin --level core \
-  --override mrotary_embedding_plugin:/absolute/path/candidate.py:kernel \
+pytest benchmark/test_sglang_fl_mrotary_embedding.py -m sglang_fl_mrotary_embedding --level core \
+  --override sglang_fl_mrotary_embedding:/absolute/path/candidate.py:kernel \
   --metrics latency --base-data /absolute/path/op_sglang_mrotary_h800.json
 ```
 

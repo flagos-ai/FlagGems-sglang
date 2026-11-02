@@ -16,25 +16,27 @@ NATIVE_OPERATORS = (
     "select_experts",
     "_fused_moe_kernel_sequence",
 )
-PLUGIN_TO_NATIVE = {
-    name + "_plugin": name
+SGLANG_FL_TO_NATIVE = {
+    "sglang_fl_" + name.lstrip("_"): name
     for name in NATIVE_OPERATORS + ("mrotary_embedding",)
 }
-OPERATORS = tuple(name + "_plugin" for name in NATIVE_OPERATORS)
-PLUGIN_OPERATORS = tuple(PLUGIN_TO_NATIVE)
+NATIVE_TO_SGLANG_FL = {
+    native: public for public, native in SGLANG_FL_TO_NATIVE.items()
+}
+OPERATORS = tuple(NATIVE_TO_SGLANG_FL[name] for name in NATIVE_OPERATORS)
+SGLANG_FL_OPERATORS = tuple(SGLANG_FL_TO_NATIVE)
 
 
 def native_operator(operator):
-    """Map only the eight documented plugin names to immutable native/data IDs."""
-    return PLUGIN_TO_NATIVE.get(operator, operator)
+    """Map only the eight documented names to immutable native/data IDs."""
+    return SGLANG_FL_TO_NATIVE.get(operator, operator)
 
 
-def plugin_operator(operator):
+def suite_operator(operator):
     native = native_operator(operator)
-    plugin = native + "_plugin"
-    if plugin not in PLUGIN_TO_NATIVE:
+    if native not in NATIVE_TO_SGLANG_FL:
         raise ValueError(f"Unknown documented operator: {operator}")
-    return plugin
+    return NATIVE_TO_SGLANG_FL[native]
 
 
 CONFIGURATIONS = (

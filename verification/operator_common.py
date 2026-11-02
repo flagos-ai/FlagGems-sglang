@@ -56,7 +56,7 @@ def reference(operator, native=False):
         # Use the same vendor dispatch as correctness and benchmark tests.
         from flaggems_sglang.reference import get_reference
 
-        fn = get_reference(cases_module().plugin_operator(operator))
+        fn = get_reference(cases_module().suite_operator(operator))
 
     def invoke(**inputs):
         if native:

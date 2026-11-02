@@ -82,7 +82,9 @@ class InputReset:
 
 
 def _reset_name(operator):
-    aliases = {name + "_plugin": name for name in SPEC["read_write"]}
+    aliases = {
+        "sglang_fl_" + name.lstrip("_"): name for name in SPEC["read_write"]
+    }
     return aliases.get(operator, operator)
 
 

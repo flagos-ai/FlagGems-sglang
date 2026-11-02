@@ -35,22 +35,22 @@ NON_TEST_FILES = {
 }
 
 EXPLICIT_SOURCE_TO_TESTS = {
-    "tests/core/test_plugin_operator_names.py": [
-        "tests/core/test_plugin_operator_names.py"
+    "tests/core/test_sglang_fl_operator_names.py": [
+        "tests/core/test_sglang_fl_operator_names.py"
     ],
-    "verification/check_plugins.py": [
-        "tests/core/test_plugin_operator_names.py"
+    "verification/check_sglang_fl.py": [
+        "tests/core/test_sglang_fl_operator_names.py"
     ],
-    "verification/plugin_datasets.json": [
-        "tests/core/test_plugin_operator_names.py"
+    "verification/sglang_fl_datasets.json": [
+        "tests/core/test_sglang_fl_operator_names.py"
     ],
     # Run the document-suite CLI contract even though it lives under core/.
-    "tests/core/test_plugin_suite_cli.py": [
-        "tests/core/test_plugin_suite_cli.py"
+    "tests/core/test_sglang_fl_suite_cli.py": [
+        "tests/core/test_sglang_fl_suite_cli.py"
     ],
     "src/flaggems_sglang/testing/operator_workloads.py": [
-        "tests/core/test_plugin_suite_cli.py",
-        "tests/core/test_plugin_operator_names.py",
+        "tests/core/test_sglang_fl_suite_cli.py",
+        "tests/core/test_sglang_fl_operator_names.py",
     ],
 }
 

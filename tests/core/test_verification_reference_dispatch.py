@@ -38,8 +38,8 @@ def test_operator_replay_uses_selected_vendor_reference(monkeypatch):
         return lambda **inputs: ("vendor-result", inputs)
 
     install_dispatch(monkeypatch, get_reference)
-    result = helper().reference("silu_and_mul_out_plugin")(input=7)
-    assert selected == ["silu_and_mul_out_plugin"]
+    result = helper().reference("sglang_fl_silu_and_mul_out")(input=7)
+    assert selected == ["sglang_fl_silu_and_mul_out"]
     assert result == ("vendor-result", {"input": 7})
 
 
@@ -55,7 +55,8 @@ def test_native_export_keeps_explicit_native_selection(monkeypatch):
     )
     monkeypatch.setattr(module, "native_module", lambda: native)
     assert (
-        module.reference("silu_and_mul_out_plugin", native=True)(input=7) == 8
+        module.reference("sglang_fl_silu_and_mul_out", native=True)(input=7)
+        == 8
     )
 
 
@@ -71,11 +72,11 @@ def test_mrope_replay_uses_existing_vendor_dispatch(monkeypatch):
     module = runpy.run_path(
         str(
             ROOT
-            / "verification/problems/rope/mrotary_embedding_plugin/reference_torch.py"
+            / "verification/problems/rope/sglang_fl_mrotary_embedding/reference_torch.py"
         )
     )
     assert module["reference"] is reference
-    assert selected == ["mrotary_embedding_plugin"]
+    assert selected == ["sglang_fl_mrotary_embedding"]
 
 
 def test_mrope_nvidia_replay_keeps_portable_torch_oracle(monkeypatch):
@@ -91,7 +92,7 @@ def test_mrope_nvidia_replay_keeps_portable_torch_oracle(monkeypatch):
     module = runpy.run_path(
         str(
             ROOT
-            / "verification/problems/rope/mrotary_embedding_plugin/reference_torch.py"
+            / "verification/problems/rope/sglang_fl_mrotary_embedding/reference_torch.py"
         )
     )
     assert module["reference"] is reference

@@ -1,0 +1,6 @@
+# Copyright 2026 FlagOS Contributors
+# SPDX-License-Identifier: Apache-2.0
+
+"""Portable Torch oracle for the documented sglang_fl_select_experts interface."""
+
+from .operator_oracles import select_experts as reference  # noqa: F401
