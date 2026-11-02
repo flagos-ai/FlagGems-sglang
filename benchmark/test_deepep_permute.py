@@ -34,10 +34,17 @@ def _input_fn(shape, cur_dtype, device):
         num_tokens, hidden, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
     # torch_gcu randperm hangs on-device; generate on CPU then move.
-    dst = torch.randperm(
-        n, device="cpu", generator=torch.Generator(device="cpu").manual_seed(0)
-    ).to(device)
-    yield x, dst
+    src2dst = (
+        torch.randperm(
+            n, generator=torch.Generator(device="cpu").manual_seed(0)
+        )
+        .reshape(num_tokens, topk)
+        .to(torch.int32)
+        .to(device)
+    )
+    gateup_input = torch.zeros(n, hidden, dtype=cur_dtype, device=device)
+    topk_ids = torch.zeros(num_tokens, topk, dtype=torch.int32, device=device)
+    yield x, gateup_input, src2dst, topk_ids, topk, hidden
 
 
 @pytest.mark.deepep_permute

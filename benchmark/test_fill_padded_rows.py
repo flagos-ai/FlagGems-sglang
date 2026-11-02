@@ -32,7 +32,10 @@ def _input_fn(shape, cur_dtype, device):
     x = torch.randn(
         rows, cols, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
-    yield (x, mask_len)
+    num_token_non_padded = torch.tensor(
+        [mask_len], dtype=torch.int32, device=device
+    )
+    yield (x, num_token_non_padded, -1.0)
 
 
 @pytest.mark.fill_padded_rows

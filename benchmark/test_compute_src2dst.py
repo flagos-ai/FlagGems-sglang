@@ -28,11 +28,12 @@ MORE_SHAPES = [(n,) for n in (1048576,)]
 
 def _input_fn(shape, cur_dtype, device):
     (n,) = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    src_to_dst = torch.randint(
-        0, n, (n,), dtype=torch.int32, device=device, generator=g
+    # torch_gcu randperm hangs on-device; generate on CPU then move.
+    g = torch.Generator(device="cpu").manual_seed(0)
+    reorder_ids = torch.randperm(n, generator=g).to(
+        dtype=torch.int32, device=device
     )
-    yield (src_to_dst,)
+    yield (reorder_ids, n)
 
 
 @pytest.mark.compute_src2dst

@@ -22,29 +22,38 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(t, 16, 192, 512) for t in (1, 8, 64, 512)]
-MORE_SHAPES = [(t, 16, 192, 512) for t in (4096,)]
+SHAPES = [(t, 128, 128, 64) for t in (1, 8, 64, 512)]
+MORE_SHAPES = [(t, 128, 128, 64) for t in (4096,)]
 
 
 def _input_fn(shape, cur_dtype, device):
-    total_tokens, num_heads, head_dim, kv_lora_rank = shape
+    total_tokens, num_heads, nope_dim, rope_dim = shape
     g = torch.Generator(device=device).manual_seed(0)
+    k = torch.randn(
+        total_tokens,
+        num_heads,
+        nope_dim + rope_dim,
+        dtype=torch.float32,
+        device=device,
+        generator=g,
+    ).to(cur_dtype)
     k_nope = torch.randn(
         total_tokens,
         num_heads,
-        head_dim,
+        nope_dim,
         dtype=torch.float32,
         device=device,
         generator=g,
     ).to(cur_dtype)
-    k_pe = torch.randn(
+    k_rope = torch.randn(
         total_tokens,
-        kv_lora_rank,
+        1,
+        rope_dim,
         dtype=torch.float32,
         device=device,
         generator=g,
     ).to(cur_dtype)
-    yield k_nope, k_pe
+    yield k, k_nope, k_rope
 
 
 @pytest.mark.concat_mla_k
@@ -56,7 +65,7 @@ def test_perf_concat_mla_k():
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
-        shape_desc="total_tokens, num_heads, head_dim, kv_lora_rank",
+        shape_desc="total_tokens, num_heads, nope_dim, rope_dim",
     )
     bench.set_gems(flaggems_sglang.concat_mla_k)
     bench.run()
