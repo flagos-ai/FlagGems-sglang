@@ -32,7 +32,7 @@ def test_gemma_fused_add_rmsnorm_plugin(case):
         )
     except ImportError:
         pytest.skip(
-            "gemma_fused_add_rmsnorm: no public candidate on this backend"
+            "gemma_fused_add_rmsnorm_plugin: no public candidate on this backend"
         )
     inputs = build_inputs(
         "gemma_fused_add_rmsnorm_plugin", case, torch.bfloat16, cfg.device
@@ -44,7 +44,7 @@ def test_gemma_fused_add_rmsnorm_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "gemma_fused_add_rmsnorm: candidate not implemented on this backend"
+            "gemma_fused_add_rmsnorm_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "gemma_fused_add_rmsnorm_plugin",

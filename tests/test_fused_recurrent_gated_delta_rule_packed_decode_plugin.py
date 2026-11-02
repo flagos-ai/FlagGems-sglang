@@ -40,7 +40,7 @@ def test_fused_recurrent_gated_delta_rule_packed_decode_plugin(case):
         )
     except ImportError:
         pytest.skip(
-            "fused_recurrent_gated_delta_rule_packed_decode: no public candidate on this backend"
+            "fused_recurrent_gated_delta_rule_packed_decode_plugin: no public candidate on this backend"
         )
     inputs = build_inputs(
         "fused_recurrent_gated_delta_rule_packed_decode_plugin",
@@ -55,7 +55,7 @@ def test_fused_recurrent_gated_delta_rule_packed_decode_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "fused_recurrent_gated_delta_rule_packed_decode: candidate not implemented on this backend"
+            "fused_recurrent_gated_delta_rule_packed_decode_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "fused_recurrent_gated_delta_rule_packed_decode_plugin",

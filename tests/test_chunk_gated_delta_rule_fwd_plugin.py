@@ -32,7 +32,7 @@ def test_chunk_gated_delta_rule_fwd_plugin(case):
         )
     except ImportError:
         pytest.skip(
-            "chunk_gated_delta_rule_fwd: no public candidate on this backend"
+            "chunk_gated_delta_rule_fwd_plugin: no public candidate on this backend"
         )
     inputs = build_inputs(
         "chunk_gated_delta_rule_fwd_plugin", case, torch.bfloat16, cfg.device
@@ -44,7 +44,7 @@ def test_chunk_gated_delta_rule_fwd_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "chunk_gated_delta_rule_fwd: candidate not implemented on this backend"
+            "chunk_gated_delta_rule_fwd_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "chunk_gated_delta_rule_fwd_plugin",

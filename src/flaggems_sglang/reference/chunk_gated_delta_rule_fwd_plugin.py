@@ -1,7 +1,7 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Portable Torch oracle for the documented chunk_gated_delta_rule_fwd interface."""
+"""Portable Torch oracle for the documented chunk_gated_delta_rule_fwd_plugin interface."""
 
 from .operator_oracles import (  # noqa: F401
     chunk_gated_delta_rule_fwd as reference,

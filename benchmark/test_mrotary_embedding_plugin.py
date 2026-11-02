@@ -65,6 +65,6 @@ def test_perf_mrotary_embedding_plugin():
             bench.set_gems_from_module(flaggems_sglang)
         except AttributeError:
             pytest.skip(
-                "mrotary_embedding: supply a candidate with --override"
+                "mrotary_embedding_plugin: supply a candidate with --override"
             )
     bench.run()

@@ -32,7 +32,7 @@ def test__fused_moe_kernel_sequence_plugin(case):
         )
     except ImportError:
         pytest.skip(
-            "_fused_moe_kernel_sequence: no public candidate on this backend"
+            "_fused_moe_kernel_sequence_plugin: no public candidate on this backend"
         )
     inputs = build_inputs(
         "_fused_moe_kernel_sequence_plugin", case, torch.bfloat16, cfg.device
@@ -44,7 +44,7 @@ def test__fused_moe_kernel_sequence_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "_fused_moe_kernel_sequence: candidate not implemented on this backend"
+            "_fused_moe_kernel_sequence_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "_fused_moe_kernel_sequence_plugin",

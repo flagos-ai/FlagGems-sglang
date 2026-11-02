@@ -29,7 +29,9 @@ def test_select_experts_plugin(case):
     try:
         candidate = get_candidate("select_experts_plugin", reference=reference)
     except ImportError:
-        pytest.skip("select_experts: no public candidate on this backend")
+        pytest.skip(
+            "select_experts_plugin: no public candidate on this backend"
+        )
     inputs = build_inputs(
         "select_experts_plugin", case, torch.bfloat16, cfg.device
     )
@@ -40,7 +42,7 @@ def test_select_experts_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "select_experts: candidate not implemented on this backend"
+            "select_experts_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "select_experts_plugin",

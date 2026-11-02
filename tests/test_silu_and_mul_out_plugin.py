@@ -31,7 +31,9 @@ def test_silu_and_mul_out_plugin(case):
             "silu_and_mul_out_plugin", reference=reference
         )
     except ImportError:
-        pytest.skip("silu_and_mul_out: no public candidate on this backend")
+        pytest.skip(
+            "silu_and_mul_out_plugin: no public candidate on this backend"
+        )
     inputs = build_inputs(
         "silu_and_mul_out_plugin", case, torch.bfloat16, cfg.device
     )
@@ -42,7 +44,7 @@ def test_silu_and_mul_out_plugin(case):
         actual = candidate(**inputs)
     except NotImplementedError:
         pytest.skip(
-            "silu_and_mul_out: candidate not implemented on this backend"
+            "silu_and_mul_out_plugin: candidate not implemented on this backend"
         )
     validate_result(
         "silu_and_mul_out_plugin",

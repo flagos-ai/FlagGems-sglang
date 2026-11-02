@@ -110,6 +110,8 @@ def test_mrotary_embedding_plugin(case_idx):
             "mrotary_embedding_plugin", reference=reference
         )
     except ImportError:
-        pytest.skip("mrotary_embedding: supply a candidate with --override")
+        pytest.skip(
+            "mrotary_embedding_plugin: supply a candidate with --override"
+        )
     actual = candidate(**case)
     check(actual, expected)
