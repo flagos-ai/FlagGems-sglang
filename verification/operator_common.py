@@ -31,7 +31,7 @@ def oracle(operator):
     module = load(
         "src/flaggems_sglang/reference/operator_oracles.py", "_operator_torch"
     )
-    return getattr(module, operator)
+    return getattr(module, cases_module().native_operator(operator))
 
 
 def native_module():
@@ -39,6 +39,7 @@ def native_module():
 
 
 def canonical_output(operator, result):
+    operator = cases_module().native_operator(operator)
     if operator == "select_experts":
         # Expert order is unspecified; preserve ID/weight pairing for comparison.
         weights, ids, logits = result
@@ -50,16 +51,18 @@ def canonical_output(operator, result):
 def reference(operator, native=False):
     if native:
         native_impl = native_module()
-        fn = native_impl.get_native(operator)
+        fn = native_impl.get_native(cases_module().native_operator(operator))
     else:
         # Use the same vendor dispatch as correctness and benchmark tests.
         from flaggems_sglang.reference import get_reference
 
-        fn = get_reference(operator)
+        fn = get_reference(cases_module().suite_operator(operator))
 
     def invoke(**inputs):
         if native:
-            inputs = native_impl.prepare_inputs(operator, inputs)
+            inputs = native_impl.prepare_inputs(
+                cases_module().native_operator(operator), inputs
+            )
         return canonical_output(operator, fn(**inputs))
 
     return invoke

@@ -59,11 +59,11 @@ def _invoke_body(operator, monkeypatch, mutate=None):
 @pytest.mark.parametrize(
     "operator",
     [
-        "gemma_rmsnorm",
-        "gemma_fused_add_rmsnorm",
-        "chunk_gated_delta_rule_fwd",
-        "fused_recurrent_gated_delta_rule_packed_decode",
-        "select_experts",
+        "sglang_fl_gemma_rmsnorm",
+        "sglang_fl_gemma_fused_add_rmsnorm",
+        "sglang_fl_chunk_gated_delta_rule_fwd",
+        "sglang_fl_fused_recurrent_gated_delta_rule_packed_decode",
+        "sglang_fl_select_experts",
     ],
 )
 def test_honest_reference_executes_the_original_assertions(
@@ -75,7 +75,9 @@ def test_honest_reference_executes_the_original_assertions(
 def test_gemma_cannot_replace_output_with_zeros(monkeypatch):
     with pytest.raises(AssertionError):
         _invoke_body(
-            "gemma_rmsnorm", monkeypatch, lambda out, _: torch.zeros_like(out)
+            "sglang_fl_gemma_rmsnorm",
+            monkeypatch,
+            lambda out, _: torch.zeros_like(out),
         )
 
 
@@ -85,7 +87,7 @@ def test_gemma_readonly_weight_write_is_detected(monkeypatch):
         return result
 
     with pytest.raises(AssertionError):
-        _invoke_body("gemma_rmsnorm", monkeypatch, mutation)
+        _invoke_body("sglang_fl_gemma_rmsnorm", monkeypatch, mutation)
 
 
 def test_packed_decode_cannot_return_nonalias_copies(monkeypatch):
@@ -94,7 +96,7 @@ def test_packed_decode_cannot_return_nonalias_copies(monkeypatch):
 
     with pytest.raises(AssertionError):
         _invoke_body(
-            "fused_recurrent_gated_delta_rule_packed_decode",
+            "sglang_fl_fused_recurrent_gated_delta_rule_packed_decode",
             monkeypatch,
             mutation,
         )
@@ -109,7 +111,7 @@ def test_unselected_state_writes_are_exact_even_below_numeric_tolerance(
 
     with pytest.raises(AssertionError):
         _invoke_body(
-            "fused_recurrent_gated_delta_rule_packed_decode",
+            "sglang_fl_fused_recurrent_gated_delta_rule_packed_decode",
             monkeypatch,
             mutation,
         )
@@ -122,7 +124,9 @@ def test_chunk_intermediate_output_cannot_be_discarded(monkeypatch):
         return tuple(changed)
 
     with pytest.raises(AssertionError):
-        _invoke_body("chunk_gated_delta_rule_fwd", monkeypatch, mutation)
+        _invoke_body(
+            "sglang_fl_chunk_gated_delta_rule_fwd", monkeypatch, mutation
+        )
 
 
 def test_chunk_none_slots_are_part_of_the_contract(monkeypatch):
@@ -132,7 +136,9 @@ def test_chunk_none_slots_are_part_of_the_contract(monkeypatch):
         return tuple(changed)
 
     with pytest.raises(AssertionError):
-        _invoke_body("chunk_gated_delta_rule_fwd", monkeypatch, mutation)
+        _invoke_body(
+            "sglang_fl_chunk_gated_delta_rule_fwd", monkeypatch, mutation
+        )
 
 
 def test_topk_allows_consistent_expert_permutations(monkeypatch):
@@ -141,7 +147,7 @@ def test_topk_allows_consistent_expert_permutations(monkeypatch):
             result[0].flip(-1), result[1].flip(-1), result[2]
         )
 
-    _invoke_body("select_experts", monkeypatch, mutation)
+    _invoke_body("sglang_fl_select_experts", monkeypatch, mutation)
 
 
 def test_topk_rejects_disassociated_ids_and_weights(monkeypatch):
@@ -149,7 +155,7 @@ def test_topk_rejects_disassociated_ids_and_weights(monkeypatch):
         return StandardTopKOutput(result[0], result[1].flip(-1), result[2])
 
     with pytest.raises(AssertionError):
-        _invoke_body("select_experts", monkeypatch, mutation)
+        _invoke_body("sglang_fl_select_experts", monkeypatch, mutation)
 
 
 def test_topk_preserves_router_logits_alias(monkeypatch):
@@ -157,14 +163,14 @@ def test_topk_preserves_router_logits_alias(monkeypatch):
         return StandardTopKOutput(result[0], result[1], result[2].clone())
 
     with pytest.raises(AssertionError):
-        _invoke_body("select_experts", monkeypatch, mutation)
+        _invoke_body("sglang_fl_select_experts", monkeypatch, mutation)
 
 
 def test_silu_out_native_abi_checks_supplied_output_alias(monkeypatch):
-    _invoke_body("silu_and_mul_out", monkeypatch)
+    _invoke_body("sglang_fl_silu_and_mul_out", monkeypatch)
     with pytest.raises(AssertionError):
         _invoke_body(
-            "silu_and_mul_out",
+            "sglang_fl_silu_and_mul_out",
             monkeypatch,
             lambda result, inputs: result.clone(),
         )
@@ -185,4 +191,4 @@ def test_gemma_reallocation_cannot_update_the_storage_snapshot(monkeypatch):
         return result
 
     with pytest.raises(AssertionError):
-        _invoke_body("gemma_rmsnorm", monkeypatch, mutate)
+        _invoke_body("sglang_fl_gemma_rmsnorm", monkeypatch, mutate)

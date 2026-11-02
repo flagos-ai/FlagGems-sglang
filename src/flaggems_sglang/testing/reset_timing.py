@@ -81,12 +81,21 @@ class InputReset:
         cache.zero_()
 
 
+def _reset_name(operator):
+    aliases = {
+        "sglang_fl_" + name.lstrip("_"): name for name in SPEC["read_write"]
+    }
+    return aliases.get(operator, operator)
+
+
 def capture_reset(operator, inputs):
+    operator = _reset_name(operator)
     names = SPEC["read_write"].get(operator)
     return InputReset(inputs, names) if names else None
 
 
 def reset_factory(operator):
+    operator = _reset_name(operator)
     if operator not in SPEC["read_write"]:
         return None
 

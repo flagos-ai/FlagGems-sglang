@@ -7,6 +7,8 @@ from copy import deepcopy
 
 import torch
 
+from flaggems_sglang.testing.operator_workloads import native_operator
+
 # Engineering thresholds, not values supplied by the workload documents.
 # BF16 relative resolution follows the repository's testing.RESOLUTION (0.016).
 BF16_TOLERANCE = dict(atol=2e-3, rtol=0.016)
@@ -72,6 +74,7 @@ def compare_tensor(actual, expected, device, *, tolerance=None, exact=False):
 
 
 def compare_output(actual, expected, device, operator):
+    operator = native_operator(operator)
     if isinstance(expected, torch.Tensor):
         compare_tensor(actual, expected, device)
     elif expected is None:
@@ -96,6 +99,7 @@ def compare_output(actual, expected, device, operator):
 def validate_result(
     operator, actual, expected, inputs, expected_inputs, before
 ):
+    operator = native_operator(operator)
     device = next(
         value.device
         for value in inputs.values()

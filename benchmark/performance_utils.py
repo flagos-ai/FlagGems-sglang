@@ -758,7 +758,7 @@ class Benchmark:
         --base-data was supplied (see conftest._load_base_data)."""
         base_rec, miss_reason = lookup_base_record_ex(
             Config.base_data,
-            self.op_name,
+            getattr(self, "baseline_op_name", None) or self.op_name,
             dtype,
             metric.shape_detail,
         )

@@ -34,7 +34,25 @@ NON_TEST_FILES = {
     "workflow.md",
 }
 
-EXPLICIT_SOURCE_TO_TESTS = {}
+EXPLICIT_SOURCE_TO_TESTS = {
+    "tests/core/test_sglang_fl_operator_names.py": [
+        "tests/core/test_sglang_fl_operator_names.py"
+    ],
+    "verification/check_sglang_fl.py": [
+        "tests/core/test_sglang_fl_operator_names.py"
+    ],
+    "verification/sglang_fl_datasets.json": [
+        "tests/core/test_sglang_fl_operator_names.py"
+    ],
+    # Run the document-suite CLI contract even though it lives under core/.
+    "tests/core/test_sglang_fl_suite_cli.py": [
+        "tests/core/test_sglang_fl_suite_cli.py"
+    ],
+    "src/flaggems_sglang/testing/operator_workloads.py": [
+        "tests/core/test_sglang_fl_suite_cli.py",
+        "tests/core/test_sglang_fl_operator_names.py",
+    ],
+}
 
 EXPLICIT_SOURCE_TO_BENCHMARKS = {}
 
