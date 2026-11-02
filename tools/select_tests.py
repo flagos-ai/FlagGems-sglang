@@ -34,7 +34,15 @@ NON_TEST_FILES = {
     "workflow.md",
 }
 
-EXPLICIT_SOURCE_TO_TESTS = {}
+EXPLICIT_SOURCE_TO_TESTS = {
+    # Run the document-suite CLI contract even though it lives under core/.
+    "tests/core/test_plugin_suite_cli.py": [
+        "tests/core/test_plugin_suite_cli.py"
+    ],
+    "src/flaggems_sglang/testing/operator_workloads.py": [
+        "tests/core/test_plugin_suite_cli.py"
+    ],
+}
 
 EXPLICIT_SOURCE_TO_BENCHMARKS = {}
 
