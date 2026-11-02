@@ -208,7 +208,18 @@ def describe(operator, row):
 
 def parameters(operator, row):
     """Record literals, layouts and mixed dtypes without building a Tensor."""
-    params = dict(row)
+    # Shared fixture axes are represented by each operator's input geometry;
+    # they are not scalar ABI parameters for every operator in the fixture.
+    params = {
+        key: value
+        for key, value in row.items()
+        if key not in CONFIGURATIONS[0]
+    }
+    if operator in {
+        "chunk_gated_delta_rule_fwd",
+        "fused_recurrent_gated_delta_rule_packed_decode",
+    }:
+        params["pool"] = row["pool"]
     params["source"] = "SGLang v0.5.11 operator ABI"
     params["input_distribution"] = (
         "seeded FP32 N(0,0.5), cast to BF16; see builder for weights/gates"
