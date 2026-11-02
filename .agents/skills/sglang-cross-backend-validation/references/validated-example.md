@@ -1,17 +1,17 @@
-# 已验证实例：Qwen3.6 与 mRoPE
+# 已验证算子实例
 
 以下为历史样例。复用前检查相关 PR 的当前状态、commit、接口及原始日志。
 
 ## 功能来源与依赖
 
 - [FlagGems-sglang #249](https://github.com/flagos-ai/FlagGems-sglang/pull/249)：mRoPE portable reference 与跨机接入，已合并。作为本 skill 分支基点的 `kernelgen-dev` commit 为 `310f079`。
-- [FlagGems-sglang #251](https://github.com/flagos-ai/FlagGems-sglang/pull/251)：其余七个 workload 接口、共享 Torch reference、native adapters 和多后端验证，整理本 skill 时仍未合并，验证源码为 `0617e9a60057716e4408c2e6b8a2a473352ca692`。
+- [FlagGems-sglang #251](https://github.com/flagos-ai/FlagGems-sglang/pull/251)：其余七个 workload 接口、共享 Torch reference、native adapters 和多后端验证，本段保留早期验证时状态，验证源码为 `0617e9a60057716e4408c2e6b8a2a473352ca692`。
 - [op-verify #9](https://github.com/lukatao/op-verify/pull/9)：v2 返回/变更/alias 契约、逐输出阈值、压缩 bundle、目标平台支持；整理时未合并，验证源码为 `9b4703b896a48aa6792198eb19cd21a0ffb57e51`。
-- [ops-baseline #68](https://github.com/zhaojs12345/ops-baseline/pull/68)：独立 `ops/sglang_qwen36` recipes 和 H800 artifact，整理时未合并，验证源码为 `c43874649248de6024e4b492e08a7a48ebed512c`。
+- [ops-baseline #68](https://github.com/zhaojs12345/ops-baseline/pull/68)：独立 recipes 和 H800 artifact（现用路径 `ops/sglang_native`），本段保留早期验证时状态，验证源码为 `c43874649248de6024e4b492e08a7a48ebed512c`。
 
 ## Workload 与数据
 
-[主 workload 文档](https://jwolpxeehx.feishu.cn/wiki/VTUbwwCzsiynr5kKe2Zcpd2cnpf) 与 27B/35B 子文档提供几何和调用配置；此次核对版本分别为 107、21、54。tensor 值为确定性合成值，并非实际推理 dump。
+[主 workload 文档](https://jwolpxeehx.feishu.cn/wiki/VTUbwwCzsiynr5kKe2Zcpd2cnpf) 与两个子文档提供几何和调用配置；此次核对版本分别为 107、21、54。tensor 值为确定性合成值，并非实际推理 dump。
 
 | 公共算子名 | benchmark core | 正确性 |
 | --- | ---: | ---: |
@@ -26,16 +26,18 @@
 
 共 34 core、45 correctness。固定 NVIDIA golden 为七个新接口的 28 core 加 mRoPE 的 7 correctness，即 35 cases，不能声称 golden 覆盖所有 45 个 correctness cases。
 
-MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `qwen36/fused_moe_kernel_sequence`，注意与公共算子名的映射。已有 `silu_and_mul` 与新 `silu_and_mul_out` 的 ABI 不同，不互相替换。
+新 problem ID 适用于新导出的数据。历史 KS3 manifest 的对象 ID 保持原样；重放时将 `OP_VERIFY_PROBLEMS_DIR` 指向 `verification/legacy`。
 
-- Qwen golden prefix：`op-verify/sglang-qwen36/20261030-native-v1`
-- Qwen manifest SHA256：`d37d49f2dab3c14108acdd0ad730cb1d11d32424f7c19f5b03045ae377ca4ece`
+MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `operators/fused_moe_kernel_sequence`，注意与公共算子名的映射。已有 `silu_and_mul` 与新 `silu_and_mul_out` 的 ABI 不同，不互相替换。
+
+- 历史 golden prefix：`op-verify/sglang-qwen36/20261030-native-v1`
+- 历史 manifest SHA256：`d37d49f2dab3c14108acdd0ad730cb1d11d32424f7c19f5b03045ae377ca4ece`
 - mRoPE prefix：`op-verify/sglang-mrotary/20261029-native-v1`
 - mRoPE manifest SHA256：`22d91f78dfc1f702732ebe57747c6a376fdd3a7c405dab3742fc4c384a74efee`
-- 七个新接口 H800 artifact：ops-baseline 的 `op_sglang_qwen36_h800_perf_baseline.json`，SHA256 `d27aba1e52f7ac41800b0b3e108c383dd8c044256dc7789ac4574318b39aa09f`，28 latency + 28 有效 NCU 记录。
+- 七个接口的现用 H800 artifact：ops-baseline 的 `op_sglang_native_h800_perf_baseline.json`。历史采集摘要与原始 artifact 哈希保存在 `docs/validation/`，不能把历史哈希当成重命名后的文件哈希。
 - 已有 mRoPE artifact：ops-baseline 的 `op_sglang_mrotary_h800_perf_baseline.json`。
 
-原生环境详情见 #251 的 `docs/qwen36_workloads.md` 与已合并的 `docs/mrotary_cross_machine.md`；两次采集使用不同环境。
+原生环境详情见 #251 的 `docs/operator_workloads.md` 与已合并的 `docs/mrotary_cross_machine.md`；不同历史采集使用的环境以对应 receipt 为准。
 
 ## 精度策略
 
@@ -54,7 +56,7 @@ MoE marker 为 `underscore_fused_moe_kernel_sequence`，problem ID 为 `qwen36/f
 
 本次验证覆盖 Ascend、Iluvatar、Kunlunxin、Hygon、MetaX，以及用户追加的 T-Head PPU 和 MThreads MUSA。Suiyuan 按用户要求跳过；没有验收 Cambricon。共享数学 Torch reference 在上述七类目标上均可使用，无需新增 vendor 数学特化。
 
-逐机结果见 #251 的 `docs/qwen36_multibackend_validation.json`；这些记录验证 reference/测试管线，不代表优化 candidate 性能评估。
+逐机结果见 #251 的 `docs/validation/operator_multibackend_validation.json`；这些记录验证 reference/测试管线，不代表优化 candidate 性能评估。
 
 有复用价值的环境差异：
 

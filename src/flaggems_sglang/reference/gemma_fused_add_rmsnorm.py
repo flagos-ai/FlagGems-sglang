@@ -3,4 +3,6 @@
 
 """Portable Torch oracle for the documented gemma_fused_add_rmsnorm interface."""
 
-from .qwen36 import gemma_fused_add_rmsnorm as reference  # noqa: F401
+from .operator_oracles import gemma_fused_add_rmsnorm
+
+reference = gemma_fused_add_rmsnorm

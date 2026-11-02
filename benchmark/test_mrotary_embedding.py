@@ -1,8 +1,6 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tensor-free listing, exact replay and real mRoPE candidate timing."""
-
 import pytest
 import torch
 
@@ -52,7 +50,7 @@ def test_perf_mrotary_embedding():
         build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
-        shape_desc="Qwen3.6 TP4 mRoPE configuration",
+        shape_desc="tokens, q_heads, position_stride",
         baseline_key_fn=_baseline_key,
         input_reset_factory=reset_factory("mrotary_embedding"),
     )

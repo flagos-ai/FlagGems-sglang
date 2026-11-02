@@ -6,15 +6,12 @@ import json
 
 import torch
 
-# Only model inputs explicitly recorded by the two workload documents.
+# Explicit query-head counts, token counts and position strides.
 WORKLOADS = [
-    dict(model=model, tokens=tokens, q_heads=heads, position_stride=tokens)
-    for model, heads in (("27b", 6), ("35b", 4))
+    dict(tokens=tokens, q_heads=heads, position_stride=tokens)
+    for heads in (6, 4)
     for tokens in (20, 1)
-] + [
-    dict(model="35b", tokens=tokens, q_heads=4, position_stride=512)
-    for tokens in (20, 1)
-]
+] + [dict(tokens=tokens, q_heads=4, position_stride=512) for tokens in (20, 1)]
 
 
 def describe_inputs(case):

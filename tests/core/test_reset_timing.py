@@ -198,6 +198,7 @@ def test_reference_and_candidate_share_the_original_snapshot():
     value = torch.tensor([3.0])
     captures, observations = [], []
     bench = SimpleNamespace(
+        op_name="_fused_moe_kernel_sequence",
         to_bench_metrics=["latency_base", "latency", "speedup"],
         torch_op="reference",
         unpack_to_args_kwargs=lambda v: ((), dict(hidden_states=v)),

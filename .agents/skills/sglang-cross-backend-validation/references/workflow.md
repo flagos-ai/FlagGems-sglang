@@ -112,7 +112,7 @@ python tools/collect_baseline_nvidia.py --repo sglang --ops mrotary_embedding \
   --output "$BASELINE_JSON"
 ```
 
-新 Qwen3.6 recipes 使用独立的 `--repo sglang_qwen36`，不要误用旧同名 `sglang` profiles。`--reference-chip H800` 只是缩放参考配置，仍需检查实际 collection GPU 是 H800。
+独立算子 recipes 使用独立的 `--repo sglang_native`，不要误用旧同名 `sglang` profiles。`--reference-chip H800` 只是缩放参考配置，仍需检查实际 collection GPU 是 H800。
 
 需要资源折算时保留 NCU，不能只用 `--no-ncu` 延迟采集声称完成。检查每 case 延迟、有效 NCU 结果、瓶颈、单位和真实 `_environment`，保留 raw reports/软件与源码版本。不要将合并后的静态 snapshot 当作 resume 输入。
 

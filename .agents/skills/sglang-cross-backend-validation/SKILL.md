@@ -5,7 +5,7 @@ description: 为 FlagGems-sglang 新算子开发 test、benchmark、definition�
 
 # SGLang 算子跨后端开发与验证
 
-按 [流程与命令](references/workflow.md) 开发并验证算子。复用 Qwen3.6/mRoPE 数据时，再读 [已验证实例与阈值](references/validated-example.md)；其中的机器、版本和阈值不是新任务的默认配置。
+按 [流程与命令](references/workflow.md) 开发并验证算子。复用已有算子的跨机验证数据时，再读 [已验证实例与阈值](references/validated-example.md)；其中的机器、版本和阈值不是新任务的默认配置。
 
 ## 开始前
 
