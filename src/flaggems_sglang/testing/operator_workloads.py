@@ -137,6 +137,8 @@ def case_id(operator, row):
         for name, shape in shapes.items()
         if shape is not None
     )
+    if operator == "gemma_rmsnorm" and row["role"] == "k":
+        geometry += f"-stride{row['k_stride']}"
     return f"{geometry}-{row['role']}-{row['variant']}"
 
 
