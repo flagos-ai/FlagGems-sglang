@@ -14,14 +14,16 @@ both export and replay machines. The verification adapters load standalone
 sources, so they do not require installing the SGLang runtime or C++ extensions.
 
 ```sh
-export OP_VERIFY_PROBLEMS_DIR="$PWD/verification/problems"
-export OP_VERIFY_KS3_PREFIX=op-verify/sglang-mrotary/20261029-native-v1
-# Set OP_VERIFY_KS3_AK / OP_VERIFY_KS3_SK privately.
-# On NVIDIA:
-op-verify export -p rope/mrotary_embedding --reference-source native
-# On a target, after loading its existing Torch vendor runtime:
-op-verify check -p rope/mrotary_embedding --device npu
+export PYTHONPATH="$PWD/verification:$PYTHONPATH"
+# Set op-verify credentials privately; reuse the original seven-case dataset.
+python verification/check_plugins.py --operator mrotary_embedding_plugin \
+  --device npu --output mrotary-plugin-replay.json
 ```
+
+New exports use `rope/mrotary_embedding_plugin` with
+`OP_VERIFY_PROBLEMS_DIR=$PWD/verification/problems` and a **fresh** KS3 prefix.
+Keep the published `op-verify/sglang-mrotary/20261029-native-v1` prefix unchanged.
+
 
 The native adapter always calls the version-pinned Triton source; it never uses
 the portable reference to generate golden outputs. Export serializes input
@@ -35,7 +37,7 @@ candidate behavior, exact trailing channels, immutable inputs and in-place ABI.
 Do not treat reference-as-candidate alone as independent correctness evidence.
 
 For a necessary vendor specialization, use the existing
-`reference/vendors/_<vendor>/mrotary_embedding.py` dispatch and point op-verify's
+`reference/vendors/_<vendor>/mrotary_embedding_plugin.py` dispatch and point op-verify's
 local vendor adapter at the same implementation. Revalidate it on the same
 NVIDIA dataset. No vendor specialization is introduced without evidence of a
 failure in the common Torch implementation.
@@ -61,8 +63,8 @@ fallback. Source and target must use matching versions of this case contract.
 On the target, benchmark the injected candidate locally:
 
 ```sh
-pytest benchmark/test_mrotary_embedding.py -m mrotary_embedding --level core \
-  --override mrotary_embedding:/absolute/path/candidate.py:kernel \
+pytest benchmark/test_mrotary_embedding_plugin.py -m mrotary_embedding_plugin --level core \
+  --override mrotary_embedding_plugin:/absolute/path/candidate.py:kernel \
   --metrics latency --base-data /absolute/path/op_sglang_mrotary_h800.json
 ```
 

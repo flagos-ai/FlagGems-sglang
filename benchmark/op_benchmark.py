@@ -55,6 +55,7 @@ class OpBenchmark(GenericBenchmark):
         shape_desc: str,
         more_shapes: Optional[Iterable[Sequence[int]]] = None,
         baseline_key_fn=None,
+        baseline_op_name=None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -63,6 +64,7 @@ class OpBenchmark(GenericBenchmark):
         self.shapes = list(self.core_shapes)
         self.shape_desc = shape_desc
         self.baseline_key_fn = baseline_key_fn
+        self.baseline_op_name = baseline_op_name or self.op_name
 
     def record_shapes(self, *args, **kwargs):
         shapes = super().record_shapes(*args, **kwargs)
@@ -72,6 +74,8 @@ class OpBenchmark(GenericBenchmark):
             inputs=shapes,
             baseline_key=self.baseline_key_fn(*args, **kwargs),
         )
+        if self.baseline_op_name != self.op_name:
+            result["baseline_operator"] = self.baseline_op_name
         if self._active_input_reset is not None:
             from flaggems_sglang.testing.reset_timing import TIMING
 

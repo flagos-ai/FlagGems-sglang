@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 
-OPERATORS = (
+NATIVE_OPERATORS = (
     "gemma_rmsnorm",
     "silu_and_mul_out",
     "gemma_fused_add_rmsnorm",
@@ -16,6 +16,27 @@ OPERATORS = (
     "select_experts",
     "_fused_moe_kernel_sequence",
 )
+PLUGIN_TO_NATIVE = {
+    name + "_plugin": name
+    for name in NATIVE_OPERATORS + ("mrotary_embedding",)
+}
+OPERATORS = tuple(name + "_plugin" for name in NATIVE_OPERATORS)
+PLUGIN_OPERATORS = tuple(PLUGIN_TO_NATIVE)
+
+
+def native_operator(operator):
+    """Map only the eight documented plugin names to immutable native/data IDs."""
+    return PLUGIN_TO_NATIVE.get(operator, operator)
+
+
+def plugin_operator(operator):
+    native = native_operator(operator)
+    plugin = native + "_plugin"
+    if plugin not in PLUGIN_TO_NATIVE:
+        raise ValueError(f"Unknown documented operator: {operator}")
+    return plugin
+
+
 CONFIGURATIONS = (
     dict(
         hidden=5120,
@@ -57,6 +78,7 @@ class TopKConfig:
 
 
 def workloads(operator, comprehensive=False):
+    operator = native_operator(operator)
     rows = []
     for config in CONFIGURATIONS:
         if (
@@ -131,6 +153,7 @@ def workloads(operator, comprehensive=False):
 
 
 def case_id(operator, row):
+    operator = native_operator(operator)
     shapes = describe(operator, row)
     geometry = "-".join(
         f"{name}={'x'.join(str(dim) for dim in shape)}"
@@ -143,6 +166,7 @@ def case_id(operator, row):
 
 
 def describe(operator, row):
+    operator = native_operator(operator)
     cfg = row
     count, hidden, heads = row["tokens"], cfg["hidden"], cfg["value_heads"]
     pool = row.get("pool", cfg["pool"])
@@ -208,6 +232,7 @@ def describe(operator, row):
 
 def parameters(operator, row):
     """Record literals, layouts and mixed dtypes without building a Tensor."""
+    operator = native_operator(operator)
     # Shared fixture axes are represented by each operator's input geometry;
     # they are not scalar ABI parameters for every operator in the fixture.
     params = {
@@ -307,6 +332,7 @@ def parameters(operator, row):
 
 
 def build_inputs(operator, row, dtype, device):
+    operator = native_operator(operator)
     import torch
 
     shape = describe(operator, row)
@@ -532,6 +558,7 @@ def build_inputs(operator, row, dtype, device):
 
 def baseline_key(operator, inputs):
     """Portable exact geometry/ABI key; callable outside the measured region."""
+    operator = native_operator(operator)
     import dataclasses
     import hashlib
     import json
@@ -574,6 +601,7 @@ def baseline_key(operator, inputs):
 
 
 def timing_contract(operator):
+    operator = native_operator(operator)
     import json
     from pathlib import Path
 

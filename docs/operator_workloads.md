@@ -7,17 +7,17 @@ values: the documents supply geometry and call configuration, not tensor dumps.
 
 | Interface | Documented cases | Comprehensive cases |
 | --- | ---: | ---: |
-| `gemma_rmsnorm` | 12 | 13 |
-| `gemma_fused_add_rmsnorm` | 4 | 5 |
-| `silu_and_mul_out` | 4 | 5 |
-| `select_experts` | 2 | 3 |
-| `_fused_moe_kernel_sequence` | 2 | 3 |
-| `chunk_gated_delta_rule_fwd` | 2 | 6 |
-| `fused_recurrent_gated_delta_rule_packed_decode` | 2 | 3 |
+| `gemma_rmsnorm_plugin` | 12 | 13 |
+| `gemma_fused_add_rmsnorm_plugin` | 4 | 5 |
+| `silu_and_mul_out_plugin` | 4 | 5 |
+| `select_experts_plugin` | 2 | 3 |
+| `_fused_moe_kernel_sequence_plugin` | 2 | 3 |
+| `chunk_gated_delta_rule_fwd_plugin` | 2 | 6 |
+| `fused_recurrent_gated_delta_rule_packed_decode_plugin` | 2 | 3 |
 
 The existing single-argument `silu_and_mul` interface is unchanged; the new
 `*_out` name exposes the native optional-out ABI. MoE uses the
-`underscore_fused_moe_kernel_sequence` pytest marker. Correctness includes the
+`underscore_fused_moe_kernel_sequence_plugin` pytest marker. Correctness includes the
 comprehensive cases; benchmark `--level core` selects the 28 documented cases.
 Use ordinary pytest `--collect-only` to list correctness cases and benchmark
 `--list-cases` for its inner shape catalog.
@@ -69,7 +69,7 @@ version 2 (companion op-verify PR #9). Set `PYTHONPATH` to include this checkout
 `verification/problems`. Export each problem explicitly, for example:
 
 ```sh
-op-verify export -p operators/chunk_gated_delta_rule_fwd \
+op-verify export -p operators/chunk_gated_delta_rule_fwd_plugin \
   --reference-source native --compress --output-dir /workspace/golden-bundle
 ```
 
@@ -159,7 +159,10 @@ correctness or exact baseline-case matching.
 ## Naming and stored-data compatibility
 
 Cases are identified by dimensions, head counts, state-pool capacity, layout and
-operator options. The public operator names and markers remain unchanged.
+operator options. The eight documented public operator names, Definitions, test functions and
+markers use `_plugin`. `silu_and_mul` and master's ordinary operator names are
+unchanged. Internal native implementation names and stored-data IDs are
+explicitly mapped, not renamed.
 The paired ops-baseline cleanup provides `op_sglang_native_h800_perf_baseline.json`
 and `--repo sglang_native`. Only the key prefix and descriptive parameters were
 normalized; the geometry/ABI digest and all collected measurements are identical.
@@ -172,5 +175,5 @@ revisions, not a new execution of the renamed checkout. New exports use
 `verification/problems/operators`. To replay an existing dataset whose manifest
 contains the original problem IDs, set `OP_VERIFY_PROBLEMS_DIR` to
 `verification/legacy` and use that dataset's original KS3 prefix. That isolated
-lookup root resolves the old object IDs to the current adapters and is not used
+lookup root resolves the old object IDs to the current `_plugin` adapters and is not used
 for new problem discovery. No tensor or KS3 object is rewritten by this cleanup.
