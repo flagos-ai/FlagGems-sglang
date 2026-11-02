@@ -122,6 +122,6 @@ python tools/collect_baseline_nvidia.py --repo sglang --ops mrotary_embedding \
 
 ## 6. PR 与可复核结果
 
-按算子×机器汇总 collected、golden passed/failed/skipped、默认/CPU reference、dummy 逐 case 触达、reference-as-candidate、实际 override、实际 core 计时、精确 baseline 命中与缩放状态。PR 写明 workload 来源、阈值理由、环境与源码版本、KS3 prefix/摘要、静态 baseline 和限制。保留命令、原始日志与失败诊断，公开材料不含凭证或私有接入信息。按 [SKILL.md 的任务收尾要求](../SKILL.md#任务结束后清理机器) 归档必要证据并清理各机器上的本任务中间产物、已结束的自有进程与连接；交付记录同时列出清理结果和明确保留复用的路径。
+按算子×机器汇总 collected、golden passed/failed/skipped、默认/CPU reference、dummy 逐 case 触达、reference-as-candidate、实际 override、实际 core 计时、精确 baseline 命中与缩放状态。PR 写明 workload 来源、阈值理由、环境与源码版本、KS3 prefix/摘要、静态 baseline 和限制，公开材料不含凭证或私有接入信息。按 [SKILL.md 的任务收尾要求](../SKILL.md#任务结束后清理机器) 清理各机器上的本任务中间产物及已不再需要的自有连接；默认不额外保留日志证据包、备份或清理记录，只有用户明确要求时才保存相应内容。清理完成情况在回复中简要说明即可。
 
 说明依赖 PR 和未验证项；引用历史结果时标明其源码与覆盖范围，未经用户要求不合并 PR。
