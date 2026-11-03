@@ -41,24 +41,18 @@ def _input_fn(shape, cur_dtype, device):
 
 
 def _case_fn(shape, cur_dtype):
-    (m, d, num_experts, top_k) = shape
+    (m, hd_in, hd_out) = shape
     yield BenchmarkCasePlan(
         shape={
-            "a": (m, d),
-            "b": (num_experts, d, d),
-            "topk_weights": (m, top_k),
-            "topk_ids": (m, top_k),
-            "sorted_token_ids": (m,),
-            "expert_ids": (num_experts,),
-            "num_tokens_post_padded": (num_experts,),
+            "a": (m, hd_in),
+            "b": (hd_in, hd_out),
         },
         params={
             "configuration": shape,
             "seed": 0,
             "m": m,
-            "d": d,
-            "num_experts": num_experts,
-            "top_k": top_k,
+            "hd_in": hd_in,
+            "hd_out": hd_out,
         },
         builder_args=(shape,),
     )

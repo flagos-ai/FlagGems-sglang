@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -120,13 +121,13 @@ def test_qk_head_layernorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import qk_head_layernorm
+        candidate = get_candidate("qk_head_layernorm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/qk_head_layernorm ops module not found")
         return
 
     try:
-        actual = qk_head_layernorm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/qk_head_layernorm not yet implemented")
         return

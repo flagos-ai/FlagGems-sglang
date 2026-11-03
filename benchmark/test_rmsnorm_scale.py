@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(r, d) for r in (8, 64, 1024) for d in (2048, 4096)]
@@ -42,16 +43,35 @@ def _input_fn(shape, cur_dtype, device):
     yield _t(rows, dim), _t(dim), _t(rows, dim), _EPS
 
 
+def _case_fn(shape, cur_dtype):
+    (num_rows, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (num_rows, hidden),
+            "weight": (hidden,),
+            "scale": (num_rows, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_rows": num_rows,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.rmsnorm_scale
 def test_perf_rmsnorm_scale():
     bench = OpBenchmark(
         op_name="rmsnorm_scale",
         torch_op=get_reference("rmsnorm_scale"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_rows, hidden",
     )
-    bench.set_gems(flaggems_sglang.rmsnorm_scale)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

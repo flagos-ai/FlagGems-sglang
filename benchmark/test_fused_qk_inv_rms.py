@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(1, n, 16, 128) for n in (64, 512, 4096)]
@@ -37,16 +38,36 @@ def _input_fn(shape, cur_dtype, device):
     yield qkv, _EPS
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, num_tokens, heads, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (batch, num_tokens, heads, head_dim),
+            "k": (batch, num_tokens, heads, head_dim),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "num_tokens": num_tokens,
+            "heads": heads,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_qk_inv_rms
 def test_perf_fused_qk_inv_rms():
     bench = OpBenchmark(
         op_name="fused_qk_inv_rms",
         torch_op=get_reference("fused_qk_inv_rms"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, num_tokens, heads, head_dim",
     )
-    bench.set_gems(flaggems_sglang.fused_qk_inv_rms)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

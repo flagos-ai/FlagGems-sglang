@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -103,13 +104,13 @@ def test_one_pass_rms_norm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import one_pass_rms_norm
+        candidate = get_candidate("one_pass_rms_norm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/one_pass_rms_norm ops module not found")
         return
 
     try:
-        actual = one_pass_rms_norm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/one_pass_rms_norm not yet implemented")
         return
