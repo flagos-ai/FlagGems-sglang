@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -115,13 +116,13 @@ def test_fused_qk_inv_rms(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_qk_inv_rms
+        candidate = get_candidate("fused_qk_inv_rms", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/fused_qk_inv_rms ops module not found")
         return
 
     try:
-        actual = fused_qk_inv_rms(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/fused_qk_inv_rms not yet implemented")
         return

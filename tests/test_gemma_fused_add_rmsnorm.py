@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -121,7 +122,9 @@ def test_gemma_fused_add_rmsnorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import gemma_fused_add_rmsnorm
+        candidate = get_candidate(
+            "gemma_fused_add_rmsnorm", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "activation_norm/gemma_fused_add_rmsnorm ops module not found"
@@ -129,7 +132,7 @@ def test_gemma_fused_add_rmsnorm(case_idx):
         return
 
     try:
-        actual = gemma_fused_add_rmsnorm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "activation_norm/gemma_fused_add_rmsnorm not yet implemented"

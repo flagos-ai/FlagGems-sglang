@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -115,13 +116,13 @@ def test_layernorm_modulate(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import layernorm_modulate
+        candidate = get_candidate("layernorm_modulate", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/layernorm_modulate ops module not found")
         return
 
     try:
-        actual = layernorm_modulate(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/layernorm_modulate not yet implemented")
         return

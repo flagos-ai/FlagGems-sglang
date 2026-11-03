@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(b, s, 2048) for b in (1, 2) for s in (77, 1024, 4096)]
@@ -48,16 +49,34 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, seq, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (batch, seq, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "seq": seq,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.scale_residual_rmsnorm_scale_shift
 def test_perf_scale_residual_rmsnorm_scale_shift():
     bench = OpBenchmark(
         op_name="scale_residual_rmsnorm_scale_shift",
         torch_op=get_reference("scale_residual_rmsnorm_scale_shift"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, seq, hidden",
     )
-    bench.set_gems(flaggems_sglang.scale_residual_rmsnorm_scale_shift)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

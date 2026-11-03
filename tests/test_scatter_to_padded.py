@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -130,13 +131,13 @@ def test_scatter_to_padded(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import scatter_to_padded
+        candidate = get_candidate("scatter_to_padded", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/scatter_to_padded ops module not found")
         return
 
     try:
-        actual = scatter_to_padded(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/scatter_to_padded not yet implemented")
         return

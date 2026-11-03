@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -131,13 +132,13 @@ def test_rmsnorm_tanh_residual(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import rmsnorm_tanh_residual
+        candidate = get_candidate("rmsnorm_tanh_residual", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/rmsnorm_tanh_residual ops module not found")
         return
 
     try:
-        actual = rmsnorm_tanh_residual(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/rmsnorm_tanh_residual not yet implemented")
         return
