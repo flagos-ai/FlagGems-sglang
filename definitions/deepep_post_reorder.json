@@ -1,0 +1,59 @@
+{
+  "api_version": "v6.0",
+  "name": "deepep_post_reorder",
+  "requires_triton_kernel": true,
+  "description": "deepep_post_reorder(down_output, output, src2dst, topk_ids, topk_weights, topk, hidden_size, routed_scaling_factor) -> output. down_output has shape [num_tokens*topk, hidden] and output has shape [num_tokens, hidden]; src2dst is [num_tokens, topk] int32 and topk_weights is [num_tokens, topk] float32. For each token and hidden column, accumulate sum_i down_output[src2dst[t, i]] * (topk_weights[t, i] cast to down_output.dtype as fp32 * routed_scaling_factor) over slots with src2dst[t, i] >= 0, in fp32, then cast to output.dtype. The native kernel writes the supplied output buffer in place and returns the same tensor; output is mutated and aliases the return value. down_output is read-only. topk_ids is accepted for ABI compatibility but is not used by the reorder. A zero-token, zero-hidden, or zero-topk call returns output unchanged. The exercised cases use bf16 down_output and topk 2, 4, or 8.",
+  "parameters": [
+    {
+      "name": "down_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "src2dst",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "hidden_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [
+      "output"
+    ],
+    "returns_alias_of": {
+      "output": "output"
+    }
+  }
+}

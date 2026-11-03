@@ -1,0 +1,42 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_moe_router_cudacore",
+  "requires_triton_kernel": true,
+  "description": "fused_moe_router_cudacore(x, router_weight, topk, moe_softcapping, correction_bias=None) -> (topk_weights, topk_ids). x is [B, H] and router_weight is [E, H]. Compute logits = x.float() @ router_weight.float().T; when moe_softcapping != 0, apply logits = tanh(logits / cap) * cap; when correction_bias is provided, add it. Compute probs = softmax(logits, dim=-1), topk_ids = the descending top-k expert indices, and topk_weights = gather(probs, topk_ids), using the full-expert softmax without top-k renormalization. Returns newly allocated float32 topk_weights [B, topk] and int32 topk_ids [B, topk]. No input mutation. The exercised dtype is bfloat16 with E in {8, 16, 32, 256}, topk 1 to 8, optional softcap 30, and optional bias.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "router_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "moe_softcapping",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "correction_bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "topk_weights",
+    "topk_ids"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

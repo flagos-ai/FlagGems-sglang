@@ -1,0 +1,42 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_moe_router_tensorcore",
+  "requires_triton_kernel": true,
+  "description": "fused_moe_router_tensorcore(x, router_weight, topk, moe_softcapping, correction_bias=None) -> (topk_weights, topk_ids). This has the same router math as fused_moe_router_cudacore: logits = x.float() @ router_weight.float().T, optional tanh soft-cap when moe_softcapping != 0, optional correction bias, full-expert softmax, descending top-k ids, and top-k weights gathered from the full softmax without renormalization. The tensor-core implementation uses a pure-fp32 FMA tiling path for M <= 8 and a tiled tl.dot GEMM for M > 8, with NVIDIA tf32/tf32x3 or non-NVIDIA ieee precision selection. The documented supported top-k range is topk <= 2, matching the exercised cases. Returns newly allocated float32 topk_weights [B, topk] and int32 topk_ids [B, topk]. No input mutation. Exercised with bfloat16 x/router_weight, E up to 256, optional softcap and bias.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "router_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "moe_softcapping",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "correction_bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "topk_weights",
+    "topk_ids"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

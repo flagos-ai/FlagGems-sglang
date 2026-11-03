@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "draft_topk1",
+  "requires_triton_kernel": true,
+  "description": "draft_topk1(next_token_logits, positions, draft_tokens=None, draft_token_column=0) -> (topk_p, topk_index, out_positions, out_draft_tokens). next_token_logits is [B, V] float32 and positions is an integer [B] tensor. Each row finds the global argmax over the vocabulary, using lowest-index tie-breaking. topk_p is a new float32 [B, 1] tensor filled with 1.0; topk_index is the new int64 argmax tensor shaped [B, 1]; out_positions is positions + 1 as int64 [B]. If draft_tokens is provided as [B, C], out_draft_tokens is a clone with column draft_token_column replaced by the selected argmax and is otherwise unchanged; negative draft_token_column values wrap from the end. If draft_tokens is None, out_draft_tokens is None. No input is mutated. The public implementation uses the streaming argmax kernel for vocab_size <= 32768 and the partitioned partial/finalize argmax for larger vocab; the direct single-block kernel branch is unreachable because its threshold is below the streaming threshold.",
+  "parameters": [
+    {
+      "name": "next_token_logits",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "draft_tokens",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "draft_token_column",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 0
+    }
+  ],
+  "outputs": [
+    "topk_p",
+    "topk_index",
+    "out_positions",
+    "out_draft_tokens"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

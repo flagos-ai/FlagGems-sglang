@@ -1,0 +1,41 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_dual_residual_rmsnorm",
+  "requires_triton_kernel": true,
+  "description": "fused_dual_residual_rmsnorm(x, residual, weight1, weight2, eps) -> (output, mid). x and residual have shape [B, H], and weight1 and weight2 have shape [H]. Compute in fp32 n1 = (x / sqrt(mean(x^2) + eps)) * weight1, cast n1 to residual.dtype, and form mid = (residual + n1) cast to residual.dtype. Then compute output = ((mid / sqrt(mean(mid^2) + eps)) * weight2) cast to x.dtype. Returns newly allocated tensors output with x.dtype and mid with residual.dtype; residual itself is not mutated. For hidden > 8192 the implementation uses a multi-kernel fp32-intermediate path; otherwise it uses the fused single-pass kernel. The exercised dtype is bfloat16 with hidden sizes 16 to 8192.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output",
+    "mid"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

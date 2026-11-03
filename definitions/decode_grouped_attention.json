@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "decode_grouped_attention",
+  "requires_triton_kernel": true,
+  "description": "decode_grouped_attention(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale) -> output. This is the grouped-query decode-attention form: q is [B, H_Q, D], k_buffer and v_buffer are [total_tokens, H_KV, D], kv_indptr is [B+1], and kv_indices identifies KV rows. With group_size = H_Q / H_KV, each query head selects KV head query_head // group_size; K/V are repeated across the group. For each request, compute softmax(q dot k * sm_scale) over the gathered sequence and the weighted sum of V, using fp32 accumulation. The newly allocated float32 output has shape [B, H_Q, v_buffer.shape[-1]]. The implementation uses a row kernel in general and a grouped fast path for the exercised bf16 128-query-head/1-KV-head/head_dim=128 shape. No causal mask and no input mutation.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_buffer",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_buffer",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indptr",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sm_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

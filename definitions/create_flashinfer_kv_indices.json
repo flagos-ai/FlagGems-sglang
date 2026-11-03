@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "create_flashinfer_kv_indices",
+  "requires_triton_kernel": true,
+  "description": "create_flashinfer_kv_indices(req_to_token, req_pool_indices, page_kernel_lens, kv_indptr, kv_start_idx, kv_indices) -> kv_indices. For each request j in [0, bs), let n = page_kernel_lens[j], beg = kv_indptr[j], pool = req_pool_indices[j], and start = kv_start_idx[j] when kv_start_idx is provided, otherwise 0. Copy req_to_token[pool, start:start+n] into kv_indices[beg:beg+n]. The supplied one-dimensional int32 kv_indices is written in place and returned; entries outside the written ranges are left unchanged. kv_start_idx may be None to disable the start offset. The exercised ABI uses int32 index tensors; the implementation also handles int64 pool/lens/indptr/start tensors through an int32 storage reinterpretation path. The op assumes kv_indices has enough space for all per-request ranges.",
+  "parameters": [
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_kernel_lens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indptr",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_start_idx",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "kv_indices"
+  ],
+  "effects": {
+    "mutates": [
+      "kv_indices"
+    ],
+    "returns_alias_of": {
+      "kv_indices": "kv_indices"
+    }
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "ernie45_rope_fused",
+  "requires_triton_kernel": true,
+  "description": "ernie45_rope_fused(q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim) -> (q_out, k_out). q is [T, n_qh*head_size], k is [T, n_kh*head_size], cos_sin_cache is [max_pos, rotary_dim], and positions is [3, T]. mrope_section is [section_h, section_w, section_t] with section_h == section_w and section_h + section_w + section_t == rotary_dim/2. For each token and rotary pair, the first section_hw = section_h + section_w pairs alternate height (even pair) and width (odd pair) positions, while the remaining pairs use the temporal position. Cos/sin values are gathered from the cache. Apply half-split RoPE to the first rotary_dim dimensions of every Q/K head: out1 = x1*cos - x2*sin and out2 = x2*cos + x1*sin; dimensions [rotary_dim, head_size) are copied unchanged. Returns newly allocated q_out and k_out with the input dtype and matching input shapes. No input mutation. The exercised dtype is bfloat16, with head_size equal to or larger than rotary_dim.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cos_sin_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "mrope_section",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "rotary_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

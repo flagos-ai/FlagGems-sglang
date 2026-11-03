@@ -1,0 +1,47 @@
+{
+  "api_version": "v6.0",
+  "name": "fixup_zero_kv",
+  "requires_triton_kernel": true,
+  "description": "fixup_zero_kv(out, lse, kv_lens, cum_seq_lens, max_seq_len) -> (out, lse). out has shape [total_tokens, num_heads, v_head_dim] and lse has shape [total_tokens, num_heads]; kv_lens has shape [batch] and cum_seq_lens has shape [batch+1]. For each batch index i with kv_lens[i] == 0, set out[cum_seq_lens[i]:cum_seq_lens[i+1]] to zero and lse[same rows, :] to -inf. All other entries retain their input values. The native function mutates and returns the same out and lse tensors, with no new output. It supports contiguous flat/2D layouts and a strided 3D/2D fallback. max_seq_len is a sizing/tuning argument; exercised shapes use 1 to 257 requests and 16 heads by 128 value dimensions.",
+  "parameters": [
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "lse",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_lens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cum_seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "max_seq_len",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out",
+    "lse"
+  ],
+  "effects": {
+    "mutates": [
+      "out",
+      "lse"
+    ],
+    "returns_alias_of": {
+      "out": "out",
+      "lse": "lse"
+    }
+  }
+}

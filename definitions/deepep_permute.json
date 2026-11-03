@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "deepep_permute",
+  "requires_triton_kernel": true,
+  "description": "deepep_permute(input, gateup_input, src2dst, topk_ids, topk, hidden_size) -> out. input is [num_tokens, hidden] and gateup_input is [num_tokens*topk, hidden]; src2dst is an integer [num_tokens, topk] destination table. For each flat slot in row-major repeat_interleave order, if dst = src2dst[row, slot] is non-negative, copy input[row] to gateup_input[dst]; negative slots are skipped. topk_ids is accepted for ABI compatibility but is not used by the permutation. The native path writes into a contiguous gateup_input and returns it; when gateup_input is already contiguous the returned out aliases and mutates it, otherwise the op writes a contiguous copy and returns that copy. input is read-only. The exercised cases use bf16 and hidden sizes including 2048, 4096, and 7168.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gateup_input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "src2dst",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "hidden_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "gateup_input"
+    ],
+    "returns_alias_of": {
+      "out": "gateup_input"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_rmsnorm",
+  "requires_triton_kernel": true,
+  "description": "fused_rmsnorm(x, weight, eps) -> out. x may have any nonzero number of dimensions; weight must be one-dimensional with length equal to x.shape[-1]. In fp32, out = (x / sqrt(mean(x^2 over the last dimension) + eps)) * weight, cast to x.dtype, with the same shape as x. The native implementation makes x and weight contiguous and processes x as flattened rows over the last dimension. Returns a newly allocated tensor and does not mutate the inputs. Raises ValueError for scalar x, mismatched weight, or an empty x. The exercised dtype is bfloat16 with hidden sizes 16 to 8192 and several leading dimensions.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

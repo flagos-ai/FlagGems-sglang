@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "decode_attention",
+  "requires_triton_kernel": true,
+  "description": "decode_attention(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale) -> output. q has shape [B, H_Q, D]; k_buffer and v_buffer have shape [total_tokens, H_KV, D] and are laid out token-major; kv_indptr has shape [B+1]; kv_indices stores the KV row ids. For each batch b and query head, gather K/V rows kv_indices[kv_indptr[b]:kv_indptr[b+1]], repeat KV heads by H_Q/H_KV when grouped, compute softmax(q dot k * sm_scale using stable fp32 accumulation, and take the weighted sum of V. The returned tensor is newly allocated float32 with shape [B, H_Q, v_buffer.shape[-1]]. There is no causal masking and no input mutation. The exercised correctness and benchmark inputs are bfloat16, while the output is always float32.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_buffer",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_buffer",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indptr",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sm_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

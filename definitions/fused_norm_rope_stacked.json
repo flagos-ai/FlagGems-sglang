@@ -1,0 +1,56 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_norm_rope_stacked",
+  "requires_triton_kernel": true,
+  "description": "fused_norm_rope_stacked(kv, k_norm_weight, eps, cos_sin_cache, positions, num_kv_heads, head_dim, rotary_dim) -> (k_out, v_out). kv has shape [T, L, 2*H*D] with H=num_kv_heads and D=head_dim; the first H*D channels are K and the second H*D channels are V per layer. k_norm_weight is [L, D]-compatible, eps is [L]-compatible, cos_sin_cache is [max_pos, rotary_dim], positions is [T], and rotary_dim must be even. For each layer and token, normalize K over D in fp32 as k * rsqrt(mean(k^2) + eps_layer) * weight_layer. Apply half-split RoPE to the first rotary_dim dims: out1 = k1*cos - k2*sin, out2 = k2*cos + k1*sin, using cos_sin_cache[pos, :half] and cos_sin_cache[pos, half:rotary_dim]; dims beyond rotary_dim are copied. V is copied unchanged. Return newly allocated k_out and v_out permuted to [L, T, H, D], with k_out cast to kv.dtype. No input mutation. The exercised dtype is bfloat16.",
+  "parameters": [
+    {
+      "name": "kv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_norm_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cos_sin_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_kv_heads",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "rotary_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "k_out",
+    "v_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

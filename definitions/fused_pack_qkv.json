@@ -1,0 +1,37 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_pack_qkv",
+  "requires_triton_kernel": true,
+  "description": "fused_pack_qkv(q, k, v, indices) -> (q_out, k_out, v_out). q, k, and v must share shape [B, S, H, D], dtype, and device; indices is a one-dimensional int32/int64 tensor. With N = indices.numel(), the result is q.reshape(B*S, H, D)[indices], k.reshape(B*S, H, D)[indices], and v.reshape(B*S, H, D)[indices], each with shape [N, H, D]. Negative indices wrap modulo B*S. The native implementation returns three new tensors that are views of a single (3, N, H, D) allocation; q, k, and v are not mutated. Input q/k/v strides are honored, and the op raises ValueError/TypeError for mismatched shapes, dtypes, devices, or invalid indices. The exercised dtype is bfloat16.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out",
+    "v_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

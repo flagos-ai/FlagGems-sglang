@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "create_flashmla_kv_indices",
+  "requires_triton_kernel": true,
+  "description": "create_flashmla_kv_indices(req_to_token, req_pool_indices, page_kernel_lens, kv_start_idx, kv_indices, page_size) -> kv_indices. For each request i, let n = page_kernel_lens[i], start = kv_start_idx[i] when provided else 0, and num_pages = ceil(n / page_size). Gather req_to_token[pool, start + p*page_size] for p < num_pages and store each gathered slot divided by page_size into kv_indices[i, :num_pages]. The supplied two-dimensional int32 kv_indices is mutated in place and returned; columns beyond num_pages retain their prior contents. kv_start_idx may be None. req_to_token's row stride is honored and wide address arithmetic is selected when the maximum address exceeds 32-bit indexing.",
+  "parameters": [
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_kernel_lens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_start_idx",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "kv_indices"
+  ],
+  "effects": {
+    "mutates": [
+      "kv_indices"
+    ],
+    "returns_alias_of": {
+      "kv_indices": "kv_indices"
+    }
+  }
+}
