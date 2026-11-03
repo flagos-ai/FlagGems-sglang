@@ -2,7 +2,7 @@
   "api_version": "v6.0",
   "name": "gelu_and_mul",
   "requires_triton_kernel": true,
-  "description": "Fused gated exact GELU. Splits hidden_states of shape [...,2*d] into x1=...[:d] and x3=...[d:], computes gelu_exact(x1.float())*x3.float() in float32, and casts to the input dtype. The Triton candidate currently assumes a 2-D contiguous input; the reference supports leading dimensions. Returns a new tensor shaped [...,d]. Current tests exercise bfloat16 2-D inputs with d 16..8192; no mutation.",
+  "description": "Fused gated exact GELU. Splits hidden_states of shape [..., 2*d] into x1 = hidden_states[..., :d] and x3 = hidden_states[..., d:], computes gelu_exact(x1.float()) * x3.float() in float32, and casts the result back to the input dtype. The reference supports leading dimensions; the Triton candidate requires a 2-D input of shape [batch, 2*d] but honors arbitrary row and column strides of that input (only the last dimension is split), and returns a newly allocated contiguous tensor of shape [batch, d] on the input device without mutating or aliasing the input. Current tests exercise bfloat16 2-D inputs with d 16..8192.",
   "parameters": [
     {
       "name": "hidden_states",
