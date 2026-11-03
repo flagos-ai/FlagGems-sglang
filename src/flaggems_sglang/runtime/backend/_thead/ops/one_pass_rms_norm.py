@@ -301,7 +301,7 @@ def _plan(M, N):
     return "masked", None, block_n, 4
 
 
-def one_pass_rms_norm(x, weight, eps=1e-06):
+def one_pass_rms_norm(x, w, eps=1e-06):
     N = x.shape[-1]
     M = x.numel() // N if N > 0 else 0
     out = torch.empty(x.shape, dtype=x.dtype, device=x.device)
@@ -319,7 +319,7 @@ def one_pass_rms_norm(x, weight, eps=1e-06):
         cw0, cw1, cw2, cw3 = (tuple(chunks) + (0, 0, 0, 0))[:4]
         _rms_norm_chunks[grid](
             x,
-            weight,
+            w,
             out,
             stride_xm,
             stride_xn,
@@ -338,7 +338,7 @@ def one_pass_rms_norm(x, weight, eps=1e-06):
     elif kind == "masked":
         _rms_norm_masked[grid](
             x,
-            weight,
+            w,
             out,
             stride_xm,
             stride_xn,
@@ -354,7 +354,7 @@ def one_pass_rms_norm(x, weight, eps=1e-06):
     else:
         _rms_norm_loop[grid](
             x,
-            weight,
+            w,
             out,
             stride_xm,
             stride_xn,

@@ -200,7 +200,7 @@ def _plan(block_h, m):
     return 1, max(4, min(16, block_h // 512))
 
 
-def one_pass_rms_norm(x, weight, eps=1e-06):
+def one_pass_rms_norm(x, w, eps=1e-06):
     H = x.shape[-1]
     xr = x.reshape(-1, H)
     M = xr.shape[0]
@@ -208,7 +208,7 @@ def one_pass_rms_norm(x, weight, eps=1e-06):
     if M == 0:
         return out
     yr = out.reshape(-1, H)
-    w = weight.reshape(-1)
+    w = w.reshape(-1)
     BLOCK_H = max(triton.next_power_of_2(H), 16)
 
     if H == _SPLIT_H and M >= _SPLIT_MIN_M:
