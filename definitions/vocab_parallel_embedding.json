@@ -1,0 +1,57 @@
+{
+  "api_version": "v6.0",
+  "name": "vocab_parallel_embedding",
+  "requires_triton_kernel": true,
+  "description": "Vocabulary-parallel embedding lookup with original and added vocabulary windows. input_ is an integer token tensor and weight is [local_vocab, hidden]. Tokens in [org_vocab_start_index, org_vocab_end_index) map to local row token - org_vocab_start_index; tokens in [added_vocab_start_index, added_vocab_end_index) map to token - (added_vocab_start_index - (org_vocab_end_index - org_vocab_start_index) - num_org_vocab_padding); out-of-window tokens produce an all-zero row. Returns a newly allocated tensor with shape (*input_.shape, hidden) and weight.dtype, without mutating inputs. Index bounds may be passed as None, in which case the native implementation treats them as zero, and padding may be None. Suites exercise int32 tokens and bfloat16 weight.",
+  "parameters": [
+    {
+      "name": "input_",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "org_vocab_start_index",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int | None"
+    },
+    {
+      "name": "org_vocab_end_index",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int | None"
+    },
+    {
+      "name": "num_org_vocab_padding",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int | None"
+    },
+    {
+      "name": "added_vocab_start_index",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int | None"
+    },
+    {
+      "name": "added_vocab_end_index",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int | None"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

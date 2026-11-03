@@ -1,0 +1,37 @@
+{
+  "api_version": "v6.0",
+  "name": "wide_row_softmax",
+  "requires_triton_kernel": true,
+  "description": "Wide-row softmax with an optional temperature and an externally supplied output buffer. logits is [B,V] float32, temperatures is either None or a per-row [B] tensor, and out is a [B,out_stride] float32 buffer with out_stride >= V. Compute y = softmax(logits / temperatures[:,None]) in float32 column tiles, writing only the first V columns of out; any trailing columns are left untouched. The native kernel writes into out in place and returns it. logits and temperatures are read only. Suites exercise float32 logits, with and without temperatures, and out row strides both equal to and wider than V.",
+  "parameters": [
+    {
+      "name": "logits",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "temperatures",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor | None"
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "out"
+    ],
+    "returns_alias_of": {
+      "out": "out"
+    }
+  }
+}

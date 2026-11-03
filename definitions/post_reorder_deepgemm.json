@@ -1,0 +1,73 @@
+{
+  "api_version": "v6.0",
+  "name": "post_reorder_deepgemm",
+  "requires_triton_kernel": true,
+  "description": "Gather-and-reduce DeepGEMM expert outputs into token rows. down_output is [num_tokens*topk, hidden_size], src2dst/topk_ids/topk_weights are [num_tokens, topk], and output is a preallocated [num_tokens, hidden_size] tensor. For each token and slot k, out[t,h] = routed_scaling_factor * sum_k down_output[src2dst[t,k],h] * topk_weights[t,k] for slots with topk_ids[t,k] >= 0; invalid (-1) slots contribute exactly zero. Accumulation is float32 and the result is cast to output.dtype. The kernel writes output in place and returns that same tensor. Suites exercise bfloat16 down_output/output, int32 indices and float32 weights.",
+  "parameters": [
+    {
+      "name": "down_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src2dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "num_tokens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "hidden_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [
+      "output"
+    ],
+    "returns_alias_of": {
+      "output": "output"
+    }
+  }
+}

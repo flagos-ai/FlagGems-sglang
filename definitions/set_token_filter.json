@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "set_token_filter",
+  "requires_triton_kernel": true,
+  "description": "Update a paged-vocabulary bitmask for one batch row. vocab_mask is an int32 [batch, n_words] bitmask (word = token_id >> 5, bit = token_id & 31), token_ids is a Python list of token ids, and batch_idx selects a row (negative indices wrap). If reset_vocab_mask is true the selected row is first set to 0 when is_allowed, otherwise to -1; then each token sets its bit with atomic OR when is_allowed or clears it with atomic AND when not. The native function writes into vocab_mask (or into a contiguous copy if the supplied tensor is non-contiguous) and returns that tensor. Empty token_ids is allowed and still performs the reset. Suites exercise int32 masks, list token ids and both allow/deny modes.",
+  "parameters": [
+    {
+      "name": "vocab_mask",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "token_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "list[int]"
+    },
+    {
+      "name": "batch_idx",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "is_allowed",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    },
+    {
+      "name": "reset_vocab_mask",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "vocab_mask"
+  ],
+  "effects": {
+    "mutates": [
+      "vocab_mask"
+    ],
+    "returns_alias_of": {
+      "vocab_mask": "vocab_mask"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "sgemm_lora_a",
+  "requires_triton_kernel": true,
+  "description": "Segmented LoRA-A projection. x is [S, K], weights is [num_lora, R, K], and batch_info provides seg_indptr, weight_indices and an optional permutation. For each segment and row in its token range, out[row] = x[row] @ weights[weight_indices[b]].T, with accumulation in float32 and the result cast to x.dtype; rows are gathered through permutation when present. The native implementation stages partial K-splits internally and returns a newly allocated [S, R] tensor, leaving inputs unchanged. stack_num is accepted for SGLang API compatibility but is not used by this implementation. Suites exercise bfloat16 x/weights and int32 batch metadata.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "object"
+    },
+    {
+      "name": "stack_num",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

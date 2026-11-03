@@ -1,0 +1,58 @@
+{
+  "api_version": "v6.0",
+  "name": "store_cache_4d",
+  "requires_triton_kernel": true,
+  "description": "Scatter new KV rows into a paged cache. k_view/v_view are [num_pages, page_size, num_heads, head_dim], cache_k/cache_v are [N, num_heads, head_dim], and loc is an int64 [N] vector of flat cache slots. For each i, page = loc[i] // page_size and token = loc[i] % page_size, and the corresponding cache row is copied into k_view[page, token] and v_view[page, token]. The native kernel mutates k_view and v_view in place and returns those same two tensors; cache_k/cache_v and loc are read only. If the cache inputs alias the views, the implementation first copies the views to fresh buffers before scattering. Suites exercise bfloat16 caches and int64 locations.",
+  "parameters": [
+    {
+      "name": "k_view",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "v_view",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_v",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "page_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "k_view",
+    "v_view"
+  ],
+  "effects": {
+    "mutates": [
+      "k_view",
+      "v_view"
+    ],
+    "returns_alias_of": {
+      "k_view": "k_view",
+      "v_view": "v_view"
+    }
+  }
+}

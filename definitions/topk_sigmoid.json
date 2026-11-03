@@ -1,0 +1,52 @@
+{
+  "api_version": "v6.0",
+  "name": "topk_sigmoid",
+  "requires_triton_kernel": true,
+  "description": "Fused sigmoid top-k routing. gating_output is [num_tokens, n_experts]; scores are sigmoid(gating_output) in float32, and each row's K largest scores are selected and written in descending-score order. topk_weights and topk_ids are caller-provided [num_tokens, K] buffers, with ids int32. When renormalize is true the selected weights are rescaled to sum to 1 and multiplied by routed_scaling_factor; otherwise the raw sigmoid values are written. Tie ordering is not part of the contract; suites use fp32 logits to keep the ordering well defined. The native kernel mutates both topk_weights and topk_ids in place and returns the same two tensors. Suites exercise float32 gating and weights with int32 ids, including renormalize on/off.",
+  "parameters": [
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gating_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "renormalize",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "topk_weights",
+    "topk_ids"
+  ],
+  "effects": {
+    "mutates": [
+      "topk_weights",
+      "topk_ids"
+    ],
+    "returns_alias_of": {
+      "topk_weights": "topk_weights",
+      "topk_ids": "topk_ids"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "state_scatter_with_mask",
+  "requires_triton_kernel": true,
+  "description": "Masked cache state scatter for speculative decoding. dst is [layers, cache, *state_shape], src is [layers, requests, draft, *state_shape], and dst_indices_raw/step_indices_raw are int32 [requests]. For every request i with step_indices_raw[i] >= 0, copy the full state slice src[:, i, step_indices_raw[i], ...] into dst[:, dst_indices_raw[i], ...]; requests with a negative step are skipped. The native kernel writes dst in place and returns it (or a contiguous copy if the input is non-contiguous); src and the index tensors are read only. Suites exercise float32 state tensors plus one bfloat16 case.",
+  "parameters": [
+    {
+      "name": "dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dst_indices_raw",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "step_indices_raw",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "dst"
+  ],
+  "effects": {
+    "mutates": [
+      "dst"
+    ],
+    "returns_alias_of": {
+      "dst": "dst"
+    }
+  }
+}

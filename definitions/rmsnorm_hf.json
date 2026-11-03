@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "rmsnorm_hf",
+  "requires_triton_kernel": true,
+  "description": "HuggingFace LlamaRMSNorm semantics: for each row x and one-dimensional weight w, y = cast(x * rsqrt(mean(x^2, dim=-1) + eps), input.dtype) and out = cast(w * y, out_dtype). The mean and normalization are computed in float32, but y is rounded to input.dtype before the weight multiply, unlike fused_rmsnorm. The output dtype is weight.dtype when it equals input.dtype, otherwise torch.promote_types(weight.dtype, input.dtype). Returns a newly allocated tensor of the input shape and does not mutate inputs. Suites exercise bfloat16 input/weight with eps=1e-6.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

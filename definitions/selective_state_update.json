@@ -1,0 +1,80 @@
+{
+  "api_version": "v6.0",
+  "name": "selective_state_update",
+  "requires_triton_kernel": true,
+  "description": "Mamba selective state update. For each (b,h,p), dt' = softplus(dt + dt_bias) when dt_softplus is true (otherwise dt + dt_bias when dt_bias is present, else dt); dA = exp(dt' * A); new_state = state*dA + (x*dt')*B, where B/C are repeat-interleaved from ngroups to nheads by ratio = nheads//ngroups. y = sum_n(new_state*C) + D*x, then y = y * z * sigmoid(z) when z is present. state is [batch,nheads,dim,dstate], x/dt are [batch,nheads,dim], B/C are [batch,ngroups,dstate], D/dt_bias are [nheads,dim] or None, z is [batch,nheads,dim] or None, and A is either [nheads,dim,dstate] or [nheads,dstate]. Returns (y in x.dtype, out_state in state.dtype) as two newly allocated tensors; the input state tensor is not modified. D, z and dt_bias are optional and dt_softplus defaults to False. Suites exercise bfloat16 state/x/dt/B/C/z with float32 A/D/dt_bias, including missing D/z/dt_bias and ngroups>1.",
+  "parameters": [
+    {
+      "name": "state",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dt",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "C",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "D",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor | None"
+    },
+    {
+      "name": "z",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor | None"
+    },
+    {
+      "name": "dt_bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor | None"
+    },
+    {
+      "name": "dt_softplus",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "y",
+    "out_state"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

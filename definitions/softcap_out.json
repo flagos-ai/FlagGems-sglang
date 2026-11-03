@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "softcap_out",
+  "requires_triton_kernel": true,
+  "description": "Soft-capping activation: out = softcap_const * tanh(x / softcap_const), evaluated in float32. x and out have the same shape; out is always float32 regardless of x.dtype. Returns a newly allocated tensor and does not mutate x. The autotune argument is accepted for SGLang API compatibility but is ignored; a deterministic size-based launch heuristic is used. Suites exercise bfloat16 x with float32 output and softcap_const=30.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "softcap_const",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    },
+    {
+      "name": "autotune",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

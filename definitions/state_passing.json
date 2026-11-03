@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "state_passing",
+  "requires_triton_kernel": true,
+  "description": "Mamba2 inter-chunk state-passing scan. states is [B, nchunks, nheads, dim], dA_cumsum is [B, nheads, nchunks, L] and only its last L element per chunk is used; initial_states is an optional [B, nheads, dim] tensor. With cur initialized from initial_states.float() (or zeros when None), for c = 0..nchunks-1: out[:,c] = cur cast to states.dtype; cur = cur * exp(dA_cumsum[b,h,c,-1]) + states[:,c]. Returns (out [B,nchunks,nheads,dim] in states.dtype, final_states [B,nheads,dim] float32) as new tensors; inputs are read only. Suites exercise bfloat16 states with and without initial_states and float32 dA_cumsum.",
+  "parameters": [
+    {
+      "name": "states",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dA_cumsum",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "initial_states",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor | None"
+    }
+  ],
+  "outputs": [
+    "out",
+    "final_states"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

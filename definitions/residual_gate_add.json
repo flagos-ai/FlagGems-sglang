@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "residual_gate_add",
+  "requires_triton_kernel": true,
+  "description": "Gated residual add for diffusion blocks: product = cast(update * gate, residual.dtype); out = cast(residual + product, residual.dtype). gate may have the same shape as residual/update or be a single row [1, hidden] broadcast over rows. Returns a newly allocated tensor with residual's shape and dtype; inputs are read only. The suites exercise bfloat16 tensors in both full and broadcast gate layouts.",
+  "parameters": [
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "update",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "seqlens_expand",
+  "requires_triton_kernel": true,
+  "description": "Build the per-token KV-cache position list for a speculative extend batch. extend_seq_lens and seq_lens are one-dimensional int32 arrays; the result has total_len int32 elements laid out by concatenating requests in order. For request i occupying output rows [exclusive_cumsum(extend_seq_lens)[i], +extend_seq_lens[i]), out[pos] = max(seq_lens[i] - extend_seq_lens[i] + 1 + local_pos, 0). Returns a newly allocated int32 tensor and does not mutate inputs. max_q_len is accepted for API compatibility but does not affect the computation. Suites exercise int32 lengths with total_len equal to sum(extend_seq_lens).",
+  "parameters": [
+    {
+      "name": "extend_seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "total_len",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "max_q_len",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

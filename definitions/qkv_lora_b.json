@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "qkv_lora_b",
+  "requires_triton_kernel": true,
+  "description": "Grouped LoRA-B projection over ragged segments. x is [S, n_slices*r], qkv_lora_b is [num_lora, total_output_dim, r], and base_output is [S, total_output_dim]. output_offset contains n_slices+1 boundaries selecting the Q/K/V output slices. For each segment with rows [seg_indptr[b], seg_indptr[b+1]) and adapter weight_indices[b] whose lora_ranks entry is nonzero, out[rows, o_start:o_end] = base_output[rows, o_start:o_end] + scalings[w] * (x[rows, slice*r:(slice+1)*r] @ qkv_lora_b[w, o_start:o_end, :].T), accumulated in float32 and cast to base_output.dtype. If permutation is present, rows are gathered through it; empty segments and zero-rank adapters are skipped. Returns a newly allocated tensor; base_output is read only. batch_info is the SGLang LoRA metadata object. Suites exercise bfloat16 tensors and int32 offsets.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "qkv_lora_b",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "object"
+    },
+    {
+      "name": "output_offset",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "max_qkv_out_dim",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

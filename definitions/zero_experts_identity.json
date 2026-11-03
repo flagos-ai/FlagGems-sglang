@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "zero_experts_identity",
+  "requires_triton_kernel": true,
+  "description": "Identity-expert contribution for MoE. expert_indices is int32 [num_tokens, top_k], expert_scales is float32 of the same shape, and hidden_states is [num_tokens, hidden_dim]. An expert slot is an identity expert when expert_indices[t,k] >= num_experts; its scale is summed in float32, and out[t,:] = cast(hidden_states[t,:].float() * total_scale, hidden_states.dtype). Returns a newly allocated tensor and does not mutate inputs. zero_expert_type is accepted for API compatibility but is not used by the native identity path. Suites exercise int32 indices, float32 scales and bfloat16 hidden_states.",
+  "parameters": [
+    {
+      "name": "expert_indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "expert_scales",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "zero_expert_type",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "str"
+    },
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

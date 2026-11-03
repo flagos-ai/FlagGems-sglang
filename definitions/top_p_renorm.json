@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "top_p_renorm",
+  "requires_triton_kernel": true,
+  "description": "Top-p (nucleus) renormalization. probs is [batch, vocab] of nonnegative probabilities; top_p may be a Python scalar, a single-element tensor, or a per-row tensor. For each row, sort probabilities ascending, form their cumulative sum, find the cutoff at cumulative mass 1-p, take the value at that cutoff as the pivot, keep every entry >= pivot (including ties), and normalize kept entries by their sum. Returns a newly allocated float32 [batch, vocab] tensor; probs is not modified. The native kernel performs a vectorized threshold search and stores the normalized result into a fresh output. Suites exercise float32 probs/scalars and a per-row top_p tensor.",
+  "parameters": [
+    {
+      "name": "probs",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "top_p",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float | torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

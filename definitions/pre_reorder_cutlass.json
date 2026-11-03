@@ -1,0 +1,73 @@
+{
+  "api_version": "v6.0",
+  "name": "pre_reorder_cutlass",
+  "requires_triton_kernel": true,
+  "description": "Broadcast token rows into a paged expert input buffer. input is [num_tokens, hidden_size], gateup_input is [num_tokens*topk, hidden_size], and src2dst/topk_ids are [num_tokens, topk]. A slot is live when topk_ids[t,k] != num_local_experts; its destination row gateup_input[src2dst[t,k], :] is overwritten with input[t, :] scaled by 1/a1_scales when a1_scales is not None (otherwise unscaled), with scaling in float32 and a cast to gateup_input.dtype. Slots whose id equals num_local_experts leave their destination row untouched, and an empty topk_ids returns gateup_input unchanged. For contiguous inputs the kernel mutates gateup_input and returns it; a non-contiguous gateup_input is first made contiguous and that copy is written and returned. Suites exercise bfloat16 input/gateup_input, int32 ids/dst and an fp32 scalar scale.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gateup_input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src2dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "a1_scales",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor | None"
+    },
+    {
+      "name": "num_local_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "num_tokens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "hidden_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "gateup_input"
+    ],
+    "returns_alias_of": {
+      "out": "gateup_input"
+    }
+  }
+}

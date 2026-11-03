@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "sigmoid_gate_mul",
+  "requires_triton_kernel": true,
+  "description": "Elementwise gated product: out = cast(x.float() * sigmoid(gate.float()), x.dtype), with x and gate having identical shapes. Returns a newly allocated tensor of x's shape and dtype and does not mutate either input. The suites exercise two-dimensional bfloat16 tensors.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

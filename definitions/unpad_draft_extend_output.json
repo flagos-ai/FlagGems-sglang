@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "unpad_draft_extend_output",
+  "requires_triton_kernel": true,
+  "description": "Remove per-request draft padding and concatenate sequences. raw_out is [bs, T, H, D], cu_seqlens_q is an int32 [bs+1] prefix sum, seq_lens_q is an int32 [bs] vector, and sum_seq_lens_q is the total valid token count. For each request b, copy raw_out[b, :seq_lens_q[b]] to out[cu_seqlens_q[b]:cu_seqlens_q[b]+seq_lens_q[b]]. Returns a newly allocated [sum_seq_lens_q, H, D] tensor and does not mutate inputs. Suites exercise bfloat16 raw_out.",
+  "parameters": [
+    {
+      "name": "raw_out",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cu_seqlens_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "seq_lens_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "sum_seq_lens_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
