@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "fill_accept_out_cache_loc",
+  "requires_triton_kernel": true,
+  "description": "fill_accept_out_cache_loc(accept_index, out_cache_loc, accept_out_cache_loc, size) -> accept_out_cache_loc. Consider only accept_index[:size]. Entries greater than -1 are kept, compacted toward the front in their original order, and filled with out_cache_loc at those indices; let n be the number of kept entries. The native kernel writes the first n positions of the supplied accept_out_cache_loc in place and returns that same tensor. Positions beyond n have no defined value from the op and retain whatever the caller supplied. size <= 0 returns the input buffer unchanged. The exercised inputs are int64, and accept_out_cache_loc is both mutated and aliased as the return value.",
+  "parameters": [
+    {
+      "name": "accept_index",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out_cache_loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "accept_out_cache_loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "accept_out_cache_loc"
+  ],
+  "effects": {
+    "mutates": [
+      "accept_out_cache_loc"
+    ],
+    "returns_alias_of": {
+      "accept_out_cache_loc": "accept_out_cache_loc"
+    }
+  }
+}

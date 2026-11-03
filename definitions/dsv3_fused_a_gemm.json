@@ -1,0 +1,25 @@
+{
+  "api_version": "v6.0",
+  "name": "dsv3_fused_a_gemm",
+  "requires_triton_kernel": true,
+  "description": "dsv3_fused_a_gemm(mat_a, mat_b) -> out. mat_a has shape [m, k] and mat_b has shape [k, n]. Compute out = (mat_a.float() @ mat_b.float()) cast to mat_a.dtype, returning a newly allocated [m, n] tensor. mat_b may be column-major or otherwise strided; the native implementation uses the supplied A/B strides. Several m-dependent Triton paths are selected, including GEMV, shared-B, transposed, and CTA-aligned paths. No input is mutated. The exercised inputs are bfloat16 with k in the 4096 and 7168 range and n in the 1536 and 2112 range.",
+  "parameters": [
+    {
+      "name": "mat_a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "mat_b",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_sigmoid_mul",
+  "requires_triton_kernel": true,
+  "description": "fused_sigmoid_mul(attn_output, gate) -> out. attn_output has shape [N, H]. gate may either have the same [N, H] shape or have a three-dimensional [N, G, D] shape with G*D = H. Compute out = attn_output.float() * sigmoid(gate.reshape(N, H).float()) in fp32, then cast to attn_output.dtype, returning a newly allocated [N, H] tensor. The native kernel uses gate strides directly for the 3D case and a flat path for the 2D case. No input mutation. The exercised dtype is bfloat16, including the strided 3D gate layout.",
+  "parameters": [
+    {
+      "name": "attn_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

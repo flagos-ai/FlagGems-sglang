@@ -1,0 +1,31 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_moe_dispatch_index",
+  "requires_triton_kernel": true,
+  "description": "fused_moe_dispatch_index(topk_ids, num_local_experts, m_max) -> (masked_m, dst). topk_ids has shape [T, K] with int32 expert ids; negative ids are padding, and num_local_experts is E. Returns newly allocated masked_m (int32 [E]) containing each expert's valid occurrence count and dst (int32 [T*K]) containing destination indices. For a valid flat slot routed to expert e, dst[slot] = e*m_max + a per-expert rank; padding slots store 0. Small inputs use a per-expert scan that assigns ranks in input order; larger inputs use a sort/atomic path whose rank ordering within an expert bucket can depend on kernel scheduling, and the correctness suite compares sorted dst values. No input mutation. The exercised inputs include padding-free int32 topk_ids and E=32.",
+  "parameters": [
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_local_experts",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "m_max",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "masked_m",
+    "dst"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

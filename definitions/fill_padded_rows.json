@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "fill_padded_rows",
+  "requires_triton_kernel": true,
+  "description": "fill_padded_rows(x, num_token_non_padded, fill_value) -> out. x has shape [R, C] and num_token_non_padded is a device scalar or Python integer n giving the number of valid rows. Return a newly allocated copy of x in which rows n through R-1 are set to fill_value cast to x.dtype; rows before n are copied unchanged. If n >= R, no row is changed. The native implementation reads n on device and uses a flat contiguous path when possible, or a row-strided 2D path for non-contiguous row layouts. No input mutation. The exercised dtypes include int32, float32, and bfloat16, with fill_value -1 or 0.0.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_token_non_padded",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "fill_value",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

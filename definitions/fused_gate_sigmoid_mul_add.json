@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_gate_sigmoid_mul_add",
+  "requires_triton_kernel": true,
+  "description": "fused_gate_sigmoid_mul_add(hidden_states, gate_weight, shared_output, final_hidden_states) -> output. hidden_states, shared_output, and final_hidden_states have shape [N, D]; gate_weight has shape [D]. Compute gate = sum(hidden_states.float * gate_weight.float, dim=-1) in fp32, then output = final_hidden_states.float + sigmoid(gate)[:, None] * shared_output.float, cast to final_hidden_states.dtype. Returns a newly allocated [N, D] tensor. No input mutation. The native kernel honors input strides and writes a contiguous output. The exercised dtype is bfloat16 with hidden sizes 1024 to 7168.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "shared_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "final_hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

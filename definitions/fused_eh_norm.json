@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_eh_norm",
+  "requires_triton_kernel": true,
+  "description": "fused_eh_norm(inputs_embeds, previous_hidden, enorm_weight, hnorm_weight, eps) -> out. inputs_embeds and previous_hidden have shape [N, D]; enorm_weight and hnorm_weight have shape [D]. Compute e = RMSNorm(inputs_embeds, enorm_weight, eps) and h = RMSNorm(previous_hidden, hnorm_weight, eps) in fp32 as x * rsqrt(mean(x^2) + eps) * weight, then concatenate [e, h] along the last dimension and cast to inputs_embeds.dtype. Returns a newly allocated [N, 2D] tensor. No input mutation. The exercised dtype is bfloat16 with D in {512, 2048, 4096, 7168}.",
+  "parameters": [
+    {
+      "name": "inputs_embeds",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "previous_hidden",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "enorm_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "hnorm_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

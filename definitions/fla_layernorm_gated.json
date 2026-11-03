@@ -1,0 +1,53 @@
+{
+  "api_version": "v6.0",
+  "name": "fla_layernorm_gated",
+  "requires_triton_kernel": true,
+  "description": "fla_layernorm_gated(x, g, weight, bias, activation='swish', eps=1e-5, is_rms_norm=True) -> out. x and g have shape [rows, dim]. weight and bias are [dim] tensors or None; both are required arguments but may be None. In fp32, compute x_hat = x * rsqrt(mean(x^2) + eps) when is_rms_norm is true, otherwise x_hat = (x - mean(x)) * rsqrt(var(x) + eps). Apply y = x_hat * weight + bias, skipping None terms. For activation 'swish' or 'silu', y = y * g * sigmoid(g); for activation 'sigmoid', y = y * sigmoid(g); other activation names leave y ungated. Returns a newly allocated tensor with x.dtype and shape [rows, dim]. No input mutation. The exercised dtype is bfloat16, including RMSNorm, LayerNorm, swish, sigmoid, bias-present, and bias-absent cases.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "activation",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "swish"
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-05
+    },
+    {
+      "name": "is_rms_norm",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

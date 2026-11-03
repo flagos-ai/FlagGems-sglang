@@ -1,0 +1,41 @@
+{
+  "api_version": "v6.0",
+  "name": "embedding_lora_a",
+  "requires_triton_kernel": true,
+  "description": "embedding_lora_a(input_ids, weights, batch_info, vocab_size, extra_embeddings=None) -> out. input_ids is a one-dimensional token-id tensor; weights has shape [num_lora, r, vocab_size]; batch_info supplies bs, seg_indptr, weight_indices, lora_ranks, and max_len; vocab_size is the base vocabulary size. For each segment b, let w_idx = weight_indices[b] and active_r = lora_ranks[w_idx]. For token positions in the segment, out[start:end, :active_r] is weights[w_idx, :active_r, token].T, or extra_embeddings[w_idx, token-vocab_size, :active_r] when the token exceeds vocab_size and extra_embeddings is provided. Positions beyond the active rank are zero. Returns a new [S, r] tensor with weights.dtype. Empty token sets return an empty output. No input mutation; the exercised dtype is bfloat16.",
+  "parameters": [
+    {
+      "name": "input_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "vocab_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "extra_embeddings",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

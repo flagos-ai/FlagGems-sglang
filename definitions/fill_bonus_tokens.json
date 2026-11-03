@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "fill_bonus_tokens",
+  "requires_triton_kernel": true,
+  "description": "fill_bonus_tokens(accept_tokens, accept_lens, bonus_tokens, accept_stride) -> out. accept_tokens is a two-dimensional token table with row stride accept_stride, accept_lens is an integer [B] tensor of per-row lengths in [1, accept_stride], and bonus_tokens is [B] and is used only as the dtype/device template. For each row i, select accept_tokens.reshape(-1)[i*accept_stride + accept_lens[i] - 1] and cast it to bonus_tokens.dtype. Returns a newly allocated [B] tensor. No input is mutated. The native kernels use accept_tokens/accept_lens contiguous copies and the supplied accept_stride; the exercised dtype is int64.",
+  "parameters": [
+    {
+      "name": "accept_tokens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "accept_lens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bonus_tokens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "accept_stride",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

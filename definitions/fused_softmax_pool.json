@@ -1,0 +1,25 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_softmax_pool",
+  "requires_triton_kernel": true,
+  "description": "fused_softmax_pool(kv_score, head_dim) -> out. kv_score has shape [bs, k, 2*head_dim]. The first head_dim channels along the last axis are values v and the last head_dim channels are scores s. For each batch b and column d in [0, head_dim), compute out[b, d] = sum_j v[b, j, d] * exp(s[b, j, d] - max_j s[b, j, d]) / sum_j exp(s[b, j, d] - max_j s[b, j, d]) in fp32, then cast to kv_score.dtype. Returns a newly allocated [bs, head_dim] tensor. No input mutation. When k == 0 and bs > 0, the output is filled with zeros. The exercised dtype is bfloat16 with k in {3, 4, 16, 64} and head_dim 64, 96, or 128.",
+  "parameters": [
+    {
+      "name": "kv_score",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

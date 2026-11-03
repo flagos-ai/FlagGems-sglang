@@ -1,0 +1,36 @@
+{
+  "api_version": "v6.0",
+  "name": "dcp_lse_combine",
+  "requires_triton_kernel": true,
+  "description": "dcp_lse_combine(recv_output, recv_lse, is_lse_base_on_e, return_lse) -> (out, out_lse). recv_output has shape [n, b, h, d] and recv_lse has shape [n, b, h], with n the leading shard axis. NaN or +inf LSE values are treated as -inf; then m = max over shards. The shard weights are exp(recv_lse - m) when is_lse_base_on_e is true, otherwise exp2(recv_lse - m). out[b, h, d] is the fp32 weighted average of recv_output over shards, cast to recv_output.dtype. When return_lse is true, out_lse is log(weight_sum) + m or log2(weight_sum) + m, cast to recv_lse.dtype; when false, out_lse is None. If all shards are ignored, the zero weight sum produces the reference's zero-denominator behavior. Returns new tensors and does not mutate the inputs.",
+  "parameters": [
+    {
+      "name": "recv_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "recv_lse",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "is_lse_base_on_e",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "return_lse",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out",
+    "out_lse"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

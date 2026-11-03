@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_moe_gemm",
+  "requires_triton_kernel": true,
+  "description": "fused_moe_gemm(A, B, topk_weights, topk_ids, top_k) -> Out. A is [T, K], B is [E, N, K], topk_weights is [T, J] float32, topk_ids is [T, J] integer expert ids, and top_k is expected to equal J. For each t, j, n, compute Out[t, j, n] = sum_k A[t, k] * B[topk_ids[t, j], n, k] in fp32, multiply by topk_weights[t, j], and cast to A.dtype. Returns a newly allocated [T, top_k, N] tensor. A and B may be non-contiguous because explicit strides are used; topk_weights and topk_ids are made contiguous and topk_ids is converted to int32. No input mutation. The exercised A/B dtype is bfloat16 with top_k 1 or 2.",
+  "parameters": [
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "top_k",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "Out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

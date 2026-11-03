@@ -1,0 +1,48 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_gdn_gating",
+  "requires_triton_kernel": true,
+  "description": "fused_gdn_gating(A_log, a, b, dt_bias, beta=1.0, threshold=20.0) -> (g, output_gate). A_log has shape [H], a and b have shape [B, H], and dt_bias has shape [H]. With x = a.float() + dt_bias.float(), compute softplus = (1/beta) * log(1 + exp(beta*x)) when beta*x <= threshold, otherwise softplus = x. Then g = -exp(A_log.float()) * softplus and output_gate = sigmoid(b.float()). Returns newly allocated float32 tensors of shape [1, B, H]. No input mutation. All exercised inputs are float32; beta and threshold affect only g.",
+  "parameters": [
+    {
+      "name": "A_log",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "dt_bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1.0
+    },
+    {
+      "name": "threshold",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 20.0
+    }
+  ],
+  "outputs": [
+    "g",
+    "output_gate"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

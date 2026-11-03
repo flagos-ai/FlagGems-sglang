@@ -1,0 +1,48 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_qkvzba_split_reshape_cat",
+  "requires_triton_kernel": true,
+  "description": "fused_qkvzba_split_reshape_cat(mixed_qkvz, mixed_ba, num_heads_qk, num_heads_v, head_qk, head_v) -> (mixed_qkv, z, b_out, a_out). mixed_qkvz has shape [B, nqk*(2*head_qk + 2*r*head_v)] and mixed_ba has shape [B, nqk*2*r], where nqk=num_heads_qk, nv=num_heads_v, and r=nv/nqk. Each QK group contains q of width head_qk, k of width head_qk, v of width r*head_v, and z of width r*head_v; each BA group contains b of width r followed by a of width r. The outputs are mixed_qkv [B, nqk*2*head_qk + nv*head_v] packing all Q heads, then all K heads, then all V; z [B, nv, head_v]; b_out [B, nv]; and a_out [B, nv]. All four are newly allocated and no input is mutated. mixed_qkv/z use mixed_qkvz.dtype; b_out/a_out use mixed_ba.dtype. B=0 or nqk=0 returns empty outputs. The exercised dtype is bfloat16.",
+  "parameters": [
+    {
+      "name": "mixed_qkvz",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "mixed_ba",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_heads_qk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_heads_v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_qk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_v",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "mixed_qkv",
+    "z",
+    "b_out",
+    "a_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
