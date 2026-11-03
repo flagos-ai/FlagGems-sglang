@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_group_quant_int8",
+  "requires_triton_kernel": true,
+  "description": "Symmetric int8 quantization per group along the flattened last dimension. x is reshaped to [num_groups,group_size]; for each group amax=max(abs(x)).clamp_min(1e-10), scale=amax/127, q=clamp(x/scale,-128,127).to(dtype). Returns q with x's shape and scales float32 with shape x.shape[:-1]+(x.shape[-1]//group_size,). group_size must divide the last dimension; dtype defaults to torch.int8. Current tests exercise bfloat16 inputs with group_size 64/128 and widths up to 8192; outputs are newly allocated.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "dtype",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "torch.int8",
+      "type_hint": "torch.dtype"
+    }
+  ],
+  "outputs": [
+    "q",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

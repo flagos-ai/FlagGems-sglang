@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_fused_mul_sum",
+  "requires_triton_kernel": true,
+  "description": "Weighted MoE reduction: out[t,h]=sum_k inputs[t,k,h]*topk_weights[t,k]*scale, where scale is routed_scaling_factor (1.0 if None). If expert_map is provided, slots with expert_map[topk_ids[t,k]]<0 are zeroed; otherwise if is_ep is True, slots with topk_ids[t,k]<0 are zeroed. Shapes: inputs [T,K,H], topk_weights [T,K], topk_ids [T,K] int32 or None, expert_map [E] int32 or None. Returns a new [T,H] tensor in inputs.dtype. Current tests exercise bfloat16 with K 2..8, H 128..4096, routed scaling, is_ep masking and expert_map masking.",
+  "parameters": [
+    {
+      "name": "inputs",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "Optional[torch.Tensor]"
+    },
+    {
+      "name": "expert_map",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "Optional[torch.Tensor]"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "Optional[float]"
+    },
+    {
+      "name": "is_ep",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

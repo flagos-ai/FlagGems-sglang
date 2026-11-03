@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "get_target_cache_loc",
+  "requires_triton_kernel": true,
+  "description": "Builds target and free cache-location lists for speculative verification. out_cache_loc is viewed as [bs,num_verify_tokens]; for each row b, target takes columns < num_correct_drafts[b]+1 in order, and free takes columns >= num_verify_tokens-to_free_num_slots[b] in order. Returns two 1-D int tensors backed by an internal buffer, with a zero sentinel for an empty list and for bs==0. out_cache_loc is read-only. Current tests exercise int64 with bs 1..256 and num_verify_tokens 4..16.",
+  "parameters": [
+    {
+      "name": "num_correct_drafts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "to_free_num_slots",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "out_cache_loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_verify_tokens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "target_cache_loc",
+    "free_cache_loc"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_align_single_token",
+  "requires_triton_kernel": true,
+  "description": "Aligns the distinct expert ids of a single token for grouped MoE dispatch. topk_ids is [1,K] int32 and must contain distinct experts. Returns sorted_ids [K*block_size] int32 (K at every position except block starts, original expert slots at block starts in ascending expert order), experts [K] int32 sorted ascending, and num_post [1] int32 equal to K*block_size. No input is mutated. Current tests exercise K 1..8 and block_size 16/64/128.",
+  "parameters": [
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "block_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "sorted_ids",
+    "experts",
+    "num_post"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

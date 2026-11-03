@@ -1,0 +1,21 @@
+{
+  "api_version": "v6.0",
+  "name": "gelu_and_mul",
+  "requires_triton_kernel": true,
+  "description": "Fused gated exact GELU. Splits hidden_states of shape [...,2*d] into x1=...[:d] and x3=...[d:], computes gelu_exact(x1.float())*x3.float() in float32, and casts to the input dtype. The Triton candidate currently assumes a 2-D contiguous input; the reference supports leading dimensions. Returns a new tensor shaped [...,d]. Current tests exercise bfloat16 2-D inputs with d 16..8192; no mutation.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

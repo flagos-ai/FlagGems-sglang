@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "log_scaling_tau",
+  "requires_triton_kernel": true,
+  "description": "Per-leading-row scaling: out=(x.float()*tau.reshape(rows,1,...)).to(x.dtype), where rows=x.shape[0] and tau has one value per row. x may be 2-D or higher-dimensional; tau is not broadcast beyond the leading dimension. Returns a new tensor with x's shape. Current tests exercise float16 with shapes (1,128), (37,8,64), (129,512) and (T,16,128) for T 1..8192.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "tau",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

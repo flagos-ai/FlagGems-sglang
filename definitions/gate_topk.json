@@ -1,0 +1,28 @@
+{
+  "api_version": "v6.0",
+  "name": "gate_topk",
+  "requires_triton_kernel": true,
+  "description": "Top-k over the last dimension of a 2-D tensor x of shape [M,N]. Returns the k largest values per row in descending order and their int32 column indices; values preserve x.dtype and indices are newly allocated int32. Ties are broken toward the smaller column index. The Triton kernel requires the last dimension to be contiguous and 1 <= k <= N. Current tests exercise float32 inputs with k in {1,4,8,32} and N in {64,128,256,384}; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "values",
+    "indices"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "ltx2_split_rotary",
+  "requires_triton_kernel": true,
+  "description": "Split-half rotary embedding for LTX2. x is [B,T,H*D] and cos/sin are [B,H,T,D/2]. Reshape x to [B,T,H,D], split the head dimension into halves x1/x2, compute o1=(x1*cos).to(bfloat16).float()-x2.float()*sin.float() and o2=(x2*cos).to(bfloat16).float()+x1.float()*sin.float(), concatenate and reshape back. The bfloat16 rounding of the cosine products is part of the contract. Returns a new tensor shaped like x. Current tests exercise bfloat16 with head_dim 64/128, heads 8/16 and T 1..2048.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cos",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "sin",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

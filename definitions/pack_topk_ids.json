@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "pack_topk_ids",
+  "requires_triton_kernel": true,
+  "description": "Packs each routing pair into one int32: out=(topk_ids<<16)|(bf16_bits(topk_weights)&0xFFFF). topk_ids is int32 and topk_weights is float32 with the same shape; the low 16 bits are the round-to-nearest-even bfloat16 bit pattern, not a fixed-point rescale. Returns a new int32 tensor with the input shape. Current tests exercise shapes up to [4096,2] and [512,8]; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

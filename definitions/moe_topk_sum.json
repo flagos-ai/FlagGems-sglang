@@ -1,0 +1,31 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_topk_sum",
+  "requires_triton_kernel": true,
+  "description": "In-place MoE sum over the expert axis. x is [M,topk,H]; computes the sum over topk in float32, casts to out.dtype, writes the result into the provided out tensor of shape [M,H], and returns that same out storage. x is read-only. Current tests exercise bfloat16 with topk 2/4/8 and H 1024..7168.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "result"
+  ],
+  "effects": {
+    "mutates": [
+      "out"
+    ],
+    "returns_alias_of": {
+      "result": "out"
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "api_version": "v6.0",
+  "name": "linear_decode_forward",
+  "requires_triton_kernel": true,
+  "description": "Linear-attention decode step. For each batch b with slot_idx[b]!=-1, computes state=k[b,:,0] outer v[b,:,0]+exp(-slope_rate[h])*kv_caches[slot_idx[b],h] in float32, writes the new state back into kv_caches, and returns out[b,h*d:(h+1)*d]=q[b,:,0] dot state. A slot_idx of -1 skips both the cache update and the output row; output contents for such rows are unspecified by the current implementation. Returns (out,kv_caches), where kv_caches is the same storage as the input and is mutated in place. Shapes: q/k/v [B,H,1,D], kv_caches [num_slots,H,D,D], slope_rate [H], slot_idx [B], out [B,H*D]. BLOCK_SIZE is accepted but unused. Current tests exercise float32 with B 1..8, H 2..8, D 32..128.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "kv_caches",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "slope_rate",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "slot_idx",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "BLOCK_SIZE",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out",
+    "kv_caches"
+  ],
+  "effects": {
+    "mutates": [
+      "kv_caches"
+    ],
+    "returns_alias_of": {
+      "kv_caches": "kv_caches"
+    }
+  }
+}

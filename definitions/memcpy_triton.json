@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "memcpy_triton",
+  "requires_triton_kernel": true,
+  "description": "Copy a slice between 2-D tensors. dim must be 0. With offset_src=True, dst[:sz]=src[offset:offset+sz]; otherwise dst[offset:offset+sz]=src[:sz]. offset and sz are one-element device int32 tensors loaded inside the kernel, not Python integers. For distinct dst/src storages the kernel writes dst in place and returns the same dst tensor. If dst and src share storage, it instead returns a newly allocated tensor and leaves dst unchanged. Current tests exercise bfloat16 with rows*cols up to 4096*2048 and both offset_src values.",
+  "parameters": [
+    {
+      "name": "dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dim",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "offset",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "sz",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "offset_src",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "dst"
+    ],
+    "returns_alias_of": {
+      "out": "dst"
+    }
+  }
+}

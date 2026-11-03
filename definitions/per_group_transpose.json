@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "per_group_transpose",
+  "requires_triton_kernel": true,
+  "description": "Per-expert transpose. a is [M,K] and expert_offsets is a length-(E+1) int32 cumulative offset vector. For each expert segment [start,end), the output's flat segment starting at start*K is a[start:end].transpose(0,1).contiguous().reshape(-1), i.e. K-major within the segment. m_alignment is accepted but unused. Returns a new tensor with a's shape. Current tests exercise bfloat16 with K 16/64/128 and uneven/empty expert segments; benchmarks use K up to 4096.",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "expert_offsets",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "m_alignment",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

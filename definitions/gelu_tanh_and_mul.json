@@ -1,0 +1,21 @@
+{
+  "api_version": "v6.0",
+  "name": "gelu_tanh_and_mul",
+  "requires_triton_kernel": true,
+  "description": "Fused gated tanh-approximated GELU. For input [...,2*d], computes 0.5*x1*(1+tanh(sqrt(2/pi)*(x1+0.044715*x1^3)))*x3 in float32 and casts back, where x1=input[...,:d] and x3=input[...,d:]. The Triton candidate makes non-contiguous inputs contiguous and supports leading dimensions. Returns a new [...,d] tensor. Current tests exercise bfloat16 2-D inputs; no mutation.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

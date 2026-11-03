@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "get_mla_kv_buffer",
+  "requires_triton_kernel": true,
+  "description": "Gathers MLA KV rows. For each loc entry, copies kv_buffer[loc] and splits the last dimension into nope_dim and rope_dim outputs. cache_k_nope and cache_k_rope are shape/dtype templates only; their values are not read. Returns two newly allocated tensors [n_loc,nope_dim] and [n_loc,rope_dim], or two empty tensors when n_loc==0. Current tests exercise bfloat16 kv_buffer with nope_dim=512, rope_dim=64 and n_loc 1..4096; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "kv_buffer",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_k_nope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_k_rope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "nope",
+    "rope"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

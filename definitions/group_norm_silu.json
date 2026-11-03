@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "group_norm_silu",
+  "requires_triton_kernel": true,
+  "description": "Fused GroupNorm followed by SiLU. x has shape [N,C,*spatial] (4-D in the tests), weight and bias have C elements, num_groups must divide C, and eps is the variance epsilon. Normalization uses the biased per-group variance over channels*spatial and float32 arithmetic; the result is y*sigmoid(y), cast back to x.dtype. Non-contiguous inputs are copied internally. Returns a new tensor with x's shape. Current tests exercise bfloat16 with C 64..512, spatial 8..64 and num_groups 8/32.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_groups",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
