@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_sum_reduce",
+  "requires_triton_kernel": true,
+  "description": "Reduces the expert axis: out=(input.float().sum(dim=1)*routed_scaling_factor).to(input.dtype). input is [T,top_k,H]; the result is [T,H]. Returns a new tensor. Current tests exercise bfloat16 with T 1..4096, top_k 2/4/8 and H 128..7168; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

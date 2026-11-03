@@ -1,0 +1,90 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_fused_gate",
+  "requires_triton_kernel": true,
+  "description": "Fused MoE router. scores is [M,N] and bias is [N]. scoring_func selects sigmoid, sqrtsoftplus, or softmax activation; softmax supports optional moe_softcapping. If num_expert_group>1, groups are scored by their top-2 biased experts and only topk_group groups remain. The top (topk-num_fused_shared_experts) experts are selected, renormalized when renormalize=True, optionally multiplied by routed_scaling_factor, and shared experts are appended with ids N+rank. Returns weights float32 [M,topk] and indices int32 [M,topk]. Constraints: topk>num_fused_shared_experts, N divisible by num_expert_group, 1<=topk_group<=num_expert_group. Current tests exercise bfloat16 scores (and one float32 case) with N 8..256, topk 2..8, all three scoring functions and grouped routing.",
+  "parameters": [
+    {
+      "name": "scores",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "scoring_func",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "sigmoid",
+      "type_hint": "str"
+    },
+    {
+      "name": "num_fused_shared_experts",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 0,
+      "type_hint": "int"
+    },
+    {
+      "name": "renormalize",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": true,
+      "type_hint": "bool"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1.0,
+      "type_hint": "float"
+    },
+    {
+      "name": "apply_routed_scaling_factor_on_output",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    },
+    {
+      "name": "moe_softcapping",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 0.0,
+      "type_hint": "float"
+    },
+    {
+      "name": "num_expert_group",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1,
+      "type_hint": "int"
+    },
+    {
+      "name": "topk_group",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "weights",
+    "indices"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

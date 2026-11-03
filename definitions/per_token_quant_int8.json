@@ -1,0 +1,22 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_quant_int8",
+  "requires_triton_kernel": true,
+  "description": "Per-row symmetric int8 quantization. x is [M,N]; for each row amax=max(abs(x)).clamp_min(1e-10), scale=amax/127, q=clamp(x/scale,-128,127).to(int8). Returns q int8 [M,N] and scales float32 [M,1]. This is the group-quantization case with group_size=N. Current tests exercise bfloat16 inputs with N 128..8192; no input mutation.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "q",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

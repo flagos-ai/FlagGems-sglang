@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "gate_up_lora_b",
+  "requires_triton_kernel": true,
+  "description": "Per-segment LoRA B update for gated MLP weights. For each segment b, rows are taken from x (optionally permuted by batch_info.permutation), split into gate/up halves of rank r, multiplied by gate_up_lora_b[adapter,:,:] with float32 accumulation, scaled by batch_info.scalings[adapter], and added to base_output. Segments with lora_ranks[adapter]==0 leave base_output unchanged. batch_info is a dataclass carrying seg_indptr, weight_indices, lora_ranks, scalings and optional permutation. Shapes: x [S,2r], weights [L,2*output_dim,r], base_output [S,2*output_dim]. Returns a new tensor; base_output is read-only. Current tests exercise bfloat16 with r 16..64, output_dim 64..4096, zero-length segments and shuffled permutation.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gate_up_lora_b",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "object"
+    },
+    {
+      "name": "output_dim",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

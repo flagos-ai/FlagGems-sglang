@@ -1,0 +1,28 @@
+{
+  "api_version": "v6.0",
+  "name": "l2norm",
+  "requires_triton_kernel": true,
+  "description": "L2 normalization over the last dimension: out=(x.float()*rsqrt(sum(x.float()**2,dim=-1,keepdim=True)+eps)).to(x.dtype). x may have any leading dimensions but the final dimension must be positive; eps defaults to 1e-6. Returns a new tensor with x's shape. Current tests exercise bfloat16 2-D inputs with widths 64..1024; no mutation.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-06,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

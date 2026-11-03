@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "hc_head",
+  "requires_triton_kernel": true,
+  "description": "Fused hc_head mixer. x is [T,hc_mult,hidden_size]; each token's flattened row is RMS-normalized, mixed by hc_fn (shape [hc_mult,hc_mult*hidden_size], fp32), gated by sigmoid(mixes*hc_scale+hc_base)+hc_eps, and used to form the weighted sum over the hc_mult axis. Arithmetic is float32 and the output is cast to x.dtype. The native dispatcher has fused kernels for hc_mult 2 and 4 and a generic two-kernel path otherwise. Returns a new [T,hidden_size] tensor. Current tests exercise bfloat16 with hc_mult 2/4 and hidden_size 128..7168.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "hc_fn",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "hc_scale",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "hc_base",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "norm_eps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    },
+    {
+      "name": "hc_eps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "y"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

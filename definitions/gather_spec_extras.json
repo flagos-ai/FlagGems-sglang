@@ -1,0 +1,48 @@
+{
+  "api_version": "v6.0",
+  "name": "gather_spec_extras",
+  "requires_triton_kernel": true,
+  "description": "Gathers speculative-decoding rows selected by integer indices from three pool buffers and optionally a hidden-state pool. Returns (topk_p, topk_index, output_tokens, hidden_states), each newly allocated; hidden_states is None when hidden_states_buf is None. Shapes: indices [M], topk_p_buf [P,topk], topk_index_buf [P,topk], output_tokens_buf [P], hidden_states_buf [P,hidden] or None. Current tests exercise M 1..2048, topk 8, hidden 4096/7168 and the no-hidden mode; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_p_buf",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_index_buf",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "output_tokens_buf",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "hidden_states_buf",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "Optional[torch.Tensor]"
+    }
+  ],
+  "outputs": [
+    "topk_p",
+    "topk_index",
+    "output_tokens",
+    "hidden_states"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

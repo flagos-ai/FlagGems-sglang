@@ -1,0 +1,67 @@
+{
+  "api_version": "v6.0",
+  "name": "mamba_layernorm_gated",
+  "requires_triton_kernel": true,
+  "description": "Mamba gated normalization. x is [M,N]; weight and bias have N elements; group_size defaults to N and must divide N. If is_rms_norm, normalize over each group by sqrt(mean(x^2)+eps); otherwise subtract the group mean first (LayerNorm). If z is provided, apply SiLU(z)=z*sigmoid(z) either before normalization (norm_before_gate=False) or after the affine transform (norm_before_gate=True). bias may be None. Output has x's shape/dtype. The native kernel specializes hidden_size=4096/group_size=128 and otherwise uses a generic grouped kernel. Returns a new tensor. Current tests exercise bfloat16 with N 64..4096, group sizes 64/128, both norm modes and the no-z case.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "Optional[torch.Tensor]"
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    },
+    {
+      "name": "z",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "Optional[torch.Tensor]"
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "Optional[int]"
+    },
+    {
+      "name": "norm_before_gate",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": true,
+      "type_hint": "bool"
+    },
+    {
+      "name": "is_rms_norm",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

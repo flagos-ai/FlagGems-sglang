@@ -1,0 +1,75 @@
+{
+  "api_version": "v6.0",
+  "name": "post_reorder_cutlass",
+  "requires_triton_kernel": true,
+  "description": "Final MoE post-reorder reduction. For each token t and hidden column h, out[t,h]=routed_scaling_factor*sum_i down_output[src2dst[t,i],h]*topk_weights[t,i]*(topk_ids[t,i]!=num_local_experts). Slots whose topk id equals num_local_experts are routed off this EP rank and contribute zero. down_output is [num_tokens*topk,hidden_size], output is a [num_tokens,hidden_size] shape/dtype template, and src2dst/topk_ids/topk_weights are [num_tokens,topk]. Returns a newly allocated tensor shaped like output; output itself is not read or mutated. Current tests exercise bfloat16 with topk 2/4/8, hidden 2048..7168 and scaling 1.0/2.5.",
+  "parameters": [
+    {
+      "name": "down_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src2dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_local_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "num_tokens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "hidden_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

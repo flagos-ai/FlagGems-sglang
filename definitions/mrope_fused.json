@@ -1,0 +1,58 @@
+{
+  "api_version": "v6.0",
+  "name": "mrope_fused",
+  "requires_triton_kernel": true,
+  "description": "Fused multimodal RoPE for query and key. q is [T,n_qh*head_size], k is [T,n_kh*head_size], cos_sin_cache is [max_pos,rotary_dim], and positions is [3,T] int64. The first rotary_dim/2 pairs are split into temporal, height and width sections by mrope_section; each pair selects cos/sin from the corresponding position row, then applies neox-style rotation to the first and second halves of each head. Dimensions beyond rotary_dim are copied unchanged. Returns newly allocated (q_out,k_out) with q/k shapes. Current tests exercise bfloat16 with head_size 64/128, rotary_dim 64/128 and T up to 8192.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cos_sin_cache",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "mrope_section",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "Sequence[int]"
+    },
+    {
+      "name": "head_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "rotary_dim",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

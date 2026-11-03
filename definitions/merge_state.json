@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "merge_state",
+  "requires_triton_kernel": true,
+  "description": "Merges two attention partial states. Let p=prefix_lse.float(), s=suffix_lse.float(), mapping +inf to -inf. Compute max_lse=max(p,s), p_se=exp(p-max_lse), s_se=exp(s-max_lse), out_se=p_se+s_se, output_lse=log(out_se)+max_lse, and output=prefix_output*(p_se/out_se)+suffix_output*(s_se/out_se). Returns (output,output_lse) with the shapes/dtypes of prefix_output and prefix_lse. Current tests exercise bfloat16 outputs and float32 lse with head_size 64/128/512; inputs are not mutated.",
+  "parameters": [
+    {
+      "name": "prefix_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "prefix_lse",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "suffix_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "suffix_lse",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "output",
+    "output_lse"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

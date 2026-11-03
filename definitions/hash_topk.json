@@ -1,0 +1,52 @@
+{
+  "api_version": "v6.0",
+  "name": "hash_topk",
+  "requires_triton_kernel": true,
+  "description": "Hash-routed MoE gate. Expert ids are looked up as tid2eid[input_ids], logits are gathered from router_logits, scored as sqrt(softplus(logit)), and normalized across routed slots. Shared slots get weight 1/routed_scaling_factor and ids num_routed+arange(num_fused_shared_experts). scoring_func must be 'sqrtsoftplus'. Returns weights float32 [T,topk_routed+shared] and ids int32 of the same shape. Current tests exercise bfloat16 router_logits, int32 ids/table, topk 4/8, shared 0/1 and scaling 2.5; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "router_logits",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "input_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "tid2eid",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_fused_shared_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    },
+    {
+      "name": "scoring_func",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "str"
+    }
+  ],
+  "outputs": [
+    "weights",
+    "ids"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

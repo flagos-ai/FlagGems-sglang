@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "indexed_scale_shift",
+  "requires_triton_kernel": true,
+  "description": "Per-row indexed affine transform with explicit bfloat16 rounding boundaries: idx=indices.long(); one=(1+scale[idx]).to(bfloat16).float(); v=(x.float()*one).to(bfloat16).float(); out=(v+shift[idx]).to(x.dtype). x is [rows,hidden], shift and scale are [variants,hidden], indices is [rows]; indices may be int32 or int64. Returns a new tensor shaped like x. Current tests exercise bfloat16 x/shift/scale with hidden 1024..3072 and int32 indices; inputs are read-only.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "shift",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

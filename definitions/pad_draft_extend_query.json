@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "pad_draft_extend_query",
+  "requires_triton_kernel": true,
+  "description": "Scatters ragged draft-extend query rows into a padded buffer. q is [total_tokens,H,D], padded_q is [bs,max_seq_len,H,D], seq_lens_q is [bs] int32 and cu_seqlens_q is [bs+1] int32 (exclusive prefix sums). For each b and t<seq_lens_q[b], writes padded_q[b,t]=q[cu_seqlens_q[b]+t]; rows at or beyond seq_lens_q[b] are left byte-identical to their prior padded_q contents. The native operator mutates padded_q in place and returns that same storage; the reference returns a clone with the same values. Current tests exercise bfloat16 with bs 1..64, max_seq_len 4..16 and head_dim 64/128.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "padded_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "seq_lens_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cu_seqlens_q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "padded_q"
+    ],
+    "returns_alias_of": {
+      "out": "padded_q"
+    }
+  }
+}
