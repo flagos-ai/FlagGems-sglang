@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "concat_mla_k",
+  "requires_triton_kernel": true,
+  "description": "MLA key concatenation with signature concat_mla_k(k, k_nope, k_rope). k is [total_tokens,h,nope_dim+rope_dim] and supplies output shape, device and dtype; k_nope is [total_tokens,h,nope_dim]; k_rope is [total_tokens,1,rope_dim]. Return a newly allocated [total_tokens,h,nope_dim+rope_dim] tensor of k.dtype formed by k_nope followed by k_rope broadcast over heads. The contents of k are not read or copied. No input is modified. The suite exercises bfloat16; the native implementation reads k_nope and k_rope through their own strides.",
+  "parameters": [
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k_nope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k_rope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

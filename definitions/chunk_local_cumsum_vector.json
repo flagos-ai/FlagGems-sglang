@@ -1,0 +1,41 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_local_cumsum_vector",
+  "requires_triton_kernel": true,
+  "description": "Per-chunk vector-gate cumulative sum with signature chunk_local_cumsum_vector(g, chunk_size, reverse=False, scale=None). g has shape [B,T,H,S] and T is partitioned into contiguous chunks of chunk_size. For every (b, head, vector column), compute the cumulative sum along the time axis within each chunk; reverse=True accumulates from the chunk end back toward its start, and scale multiplies the result when provided. Return a newly allocated float32 tensor with the same [B,T,H,S] shape; inputs are not modified. T is expected to be divisible by chunk_size. The native fast path covers forward, no-scale cases with power-of-two S <=128, and a general masked path covers other S and mode combinations. The suite exercises bfloat16 g with chunk sizes 16/32/64 and S from 16 to 128.",
+  "parameters": [
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "reverse",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

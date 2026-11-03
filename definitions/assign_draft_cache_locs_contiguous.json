@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "assign_draft_cache_locs_contiguous",
+  "requires_triton_kernel": true,
+  "description": "Speculative draft-cache gather with signature assign_draft_cache_locs_contiguous(req_pool_indices, req_to_token, seq_lens, out_cache_loc, topk, speculative_num_steps). For each request r < req_pool_indices.numel(), read n = topk*speculative_num_steps entries req_to_token[req_pool_indices[r], seq_lens[r]:seq_lens[r]+n] using req_to_token's own row stride and write them contiguously to out_cache_loc[r*n:(r+1)*n]. The native wrapper writes out_cache_loc in place and returns that same tensor; the reference returns an updated clone. out_cache_loc is therefore mutated. With zero requests no elements are written and the input is returned unchanged. The suite exercises int32 inputs, topk 1/4/8 and steps 1/3/5.",
+  "parameters": [
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "out_cache_loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "speculative_num_steps",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "out_cache_loc"
+    ],
+    "returns_alias_of": {
+      "out": "out_cache_loc"
+    }
+  }
+}

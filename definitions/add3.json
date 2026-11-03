@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "add3",
+  "requires_triton_kernel": true,
+  "description": "Elementwise three-input addition with signature add3(a, b, c) -> torch.Tensor. The inputs are expected to be contiguous tensors with identical shape and numel. The kernel linearizes the buffers and computes out = bf16(bf16(a + b) + c): each of the two additions is performed in float32 and rounded to bfloat16 exactly once, matching the Torch reference (a + b) + c rather than a single fused float32 accumulation. It returns a newly allocated tensor with the shape and dtype of a; inputs are read-only. An empty-numel input returns an empty tensor without launching. The implementation does not inspect strides, so non-contiguous inputs are outside the exercised layout. The current correctness and benchmark suites exercise contiguous 2-D bfloat16 inputs of shape [num_tokens, hidden].",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "c",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

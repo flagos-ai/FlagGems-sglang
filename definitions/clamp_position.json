@@ -1,0 +1,21 @@
+{
+  "api_version": "v6.0",
+  "name": "clamp_position",
+  "requires_triton_kernel": true,
+  "description": "Decode position clamp with signature clamp_position(seq_lens). Given a one-dimensional integer tensor of sequence lengths, return a newly allocated tensor of the same shape and dtype with out[i] = max(seq_lens[i] - 1, 0). The operation is elementwise and exact; seq_lens is not modified. The suite exercises int32 and int64 lengths from 1 to 16384 elements, including zero lengths.",
+  "parameters": [
+    {
+      "name": "seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

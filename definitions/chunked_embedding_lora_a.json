@@ -1,0 +1,38 @@
+{
+  "api_version": "v6.0",
+  "name": "chunked_embedding_lora_a",
+  "requires_triton_kernel": true,
+  "description": "Chunked LoRA-A embedding gather with signature chunked_embedding_lora_a(input_ids, weights, batch_info, vocab_size). input_ids is [S] integer token ids, weights is [num_loras, rank, vocab_size], and batch_info supplies seg_indptr [bs+1], weight_indices [bs], lora_ranks [num_loras] and a permutation mapping source positions to output rows. For each batch segment b, let rows = permutation[seg_indptr[b]:seg_indptr[b+1]] and r = lora_ranks[weight_indices[b]]; write out[rows, :r] = weights[weight_indices[b], :r, input_ids[rows]].T and leave remaining rank columns zero. Return a newly allocated [S, rank] tensor of weights dtype. No input is modified. The suite exercises bfloat16 weights, identity and shuffled permutations, ranks 16/32/64 and vocabularies up to 128256.",
+  "parameters": [
+    {
+      "name": "input_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "vocab_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

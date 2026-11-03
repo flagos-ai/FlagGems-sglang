@@ -1,0 +1,31 @@
+{
+  "api_version": "v6.0",
+  "name": "softcap_inplace_logits",
+  "requires_triton_kernel": true,
+  "description": "Apply final-logit softcapping in place with signature softcap_inplace_logits(full_logits, final_logit_softcapping) -> torch.Tensor. For a floating-point tensor, the entire buffer is treated as flat and each element is updated to cap * tanh(x / cap), evaluated in float32 as (2 * sigmoid(2 * x / cap) - 1) * cap and stored back in the input dtype, where cap = float(final_logit_softcapping). The function mutates full_logits and returns that same tensor; the Torch reference is out-of-place and returns a new tensor, so the correctness test clones the candidate input. Non-contiguous input is capped through a contiguous temporary and then copied back. An empty tensor is returned unchanged. cap is expected to be nonzero. The current correctness and benchmark suites exercise contiguous float32 inputs of shape [m, n] with cap=30.0; shapes include [1, 17], [37, 1024], [4, 32000], and larger [m, n] cases up to n=128256.",
+  "parameters": [
+    {
+      "name": "full_logits",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "final_logit_softcapping",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "full_logits"
+    ],
+    "returns_alias_of": {
+      "out": "full_logits"
+    }
+  }
+}

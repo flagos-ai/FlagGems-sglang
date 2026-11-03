@@ -1,0 +1,41 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_scaled_dot_kkt",
+  "requires_triton_kernel": true,
+  "description": "Chunked scaled KKT product with signature chunk_scaled_dot_kkt(k, beta, g_cumsum=None, chunk_size=64). k is [B,T,Hg,K], beta is [B,T,H] with H a multiple of Hg, and optional g_cumsum is [B,T,H]. For each chunk and head h, repeat the corresponding key group across H/Hg heads and compute A_ij = (sum_k k_i*k_j) * beta_i; if g_cumsum is given, multiply by exp(g_i-g_j) when g_i-g_j <=0 and by zero otherwise. The stored result is nonzero only for the strict causal region i > j and is zero on and above the diagonal. Return a newly allocated float32 tensor [B,T,H,chunk_size]. Inputs are not modified. The suite exercises bfloat16 k with float32 beta/g_cumsum, chunk sizes 16/32/64, with and without g_cumsum.",
+  "parameters": [
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "g_cumsum",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 64,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

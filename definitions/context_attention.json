@@ -1,0 +1,57 @@
+{
+  "api_version": "v6.0",
+  "name": "context_attention",
+  "requires_triton_kernel": true,
+  "description": "Packed prefill scaled dot-product attention with signature context_attention(q, k, v, b_start_loc, b_seq_len, max_input_len, is_causal). q, k, v are packed [total_tokens, num_heads, head_dim]; b_start_loc and b_seq_len are [B] integer offsets/lengths and max_input_len is a grid bound. For each sequence i, compute softmax(q[start:end] @ k[start:end].T / sqrt(head_dim)) @ v[start:end] with an optional per-sequence causal mask. Return a newly allocated float32 [total_tokens, num_heads, head_dim] tensor; inputs are not modified. The native grid uses max(max_input_len, max(b_seq_len)) so no query row is dropped. The suite exercises float32 inputs with head_dim 13/80/96/128, causal and non-causal modes, and up to 64 sequences.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "b_start_loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "b_seq_len",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "max_input_len",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "is_causal",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

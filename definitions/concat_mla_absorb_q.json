@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "concat_mla_absorb_q",
+  "requires_triton_kernel": true,
+  "description": "MLA absorbed-query concatenation with signature concat_mla_absorb_q(a, b). a and b have shapes [dim0, dim1, a_last] and [dim0, dim1, b_last] and are concatenated along the last dimension. Return a newly allocated contiguous tensor of shape [dim0, dim1, a_last+b_last] and dtype a.dtype. The native implementation handles both contiguous inputs and arbitrary input strides without mutating either input. The suite exercises bfloat16 with a_last=512 and b_last=64 over 1/13/128/512 tokens and 16/128 heads.",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_state",
+  "requires_triton_kernel": true,
+  "description": "Per-chunk Mamba2 state accumulation with signature chunk_state(B, x, dt, dA_cumsum). B is [batch,seqlen,ngroups,dstate], x is [batch,seqlen,nheads,headdim], and dt/dA_cumsum are [batch,nheads,nchunks,chunk_size] with seqlen=nchunks*chunk_size and nheads divisible by ngroups. For each batch, chunk and head, map the head to group h//(nheads/ngroups) and compute states[b,c,h,p,n] = sum_t x[b,c,t,h,p] * B[b,c,t,g,n] * exp(dA_cumsum[b,h,c,last] - dA_cumsum[b,h,c,t]) * dt[b,h,c,t]. Return a newly allocated float32 [batch,nchunks,nheads,headdim,dstate] tensor. The native implementation accumulates in float32 and, for bf16/fp16 inputs, applies the scale in float32 before native-precision tensor-core products. Inputs are not modified. The suite exercises bfloat16 B/x and float32 dt/dA.",
+  "parameters": [
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dt",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dA_cumsum",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "states"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

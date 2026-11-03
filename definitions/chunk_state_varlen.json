@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_state_varlen",
+  "requires_triton_kernel": true,
+  "description": "Variable-length final-chunk state accumulation with signature chunk_state_varlen(B, x, dt, dA_cumsum, cu_seqlens, chunk_states). B is [total_tokens,ngroups,dstate], x is [total_tokens,nheads,headdim], dt/dA_cumsum are [nheads,nchunks,chunk_size], cu_seqlens is the length-(batch+1) sequence offset array, and chunk_states is [nchunks,nheads,headdim,dstate]. For each sequence, take its final chunk, map each head to its group, and accumulate x * B * exp(dA_last - dA_cumsum) * dt over the in-chunk token span from max(start,chunk_start) to end. Return a newly allocated tensor [batch,nheads,headdim,dstate] with dtype chunk_states.dtype; chunk_states supplies the output dtype and is not read or modified. This path does not propagate state across chunks; the suite builds sequences that do not straddle chunk boundaries. x/B/chunk_states are exercised as bfloat16 with float32 dt/dA.",
+  "parameters": [
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dt",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dA_cumsum",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cu_seqlens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_states",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "states"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

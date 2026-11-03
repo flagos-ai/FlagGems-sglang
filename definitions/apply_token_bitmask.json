@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "apply_token_bitmask",
+  "requires_triton_kernel": true,
+  "description": "Grammar-mask application with signature apply_token_bitmask(logits, bitmask). logits has shape [B, V]; bitmask is int32 [B, ceil(V/32)] with bit j of word w selecting vocabulary entry 32*w+j. Return a newly allocated tensor of logits.dtype and shape [B, V] where entries with a set bit retain the corresponding logit and entries with a clear bit become -inf. The implementation is an exact bit test and preserves NaN/Inf logits for kept entries. The suite exercises float32 logits with V from 100 to 152064; inputs are not modified.",
+  "parameters": [
+    {
+      "name": "logits",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bitmask",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "conv_window_scatter_with_mask",
+  "requires_triton_kernel": true,
+  "description": "Masked convolution-window cache scatter with signature conv_window_scatter_with_mask(dst, src, dst_indices_raw, step_indices_raw). dst is [layers, cache, dim, win], src is an overlapping strided view [layers, requests, draft, dim, win], and dst_indices_raw/step_indices_raw are [requests] int32. For every request i with step_indices_raw[i] >= 0, write dst[:, dst_indices_raw[i], :, :] = src[:, i, step_indices_raw[i], :, :] using the source view's own strides. The native wrapper fills dst in place and returns that same tensor; requests with negative step indices are skipped, and dst_indices_raw/step_indices_raw/src are read-only. It raises RuntimeError unless dst is 4-D and src is 5-D. The suite exercises float32 and bfloat16 inputs, including negative-step masking.",
+  "parameters": [
+    {
+      "name": "dst",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "src",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dst_indices_raw",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "step_indices_raw",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "dst"
+    ],
+    "returns_alias_of": {
+      "out": "dst"
+    }
+  }
+}
