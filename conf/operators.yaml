@@ -568,6 +568,10 @@ ops:
       - sglang
       - MoE
       - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: ernie45_rope_fused
     description: |
       Fused multi-section Rotary Positional Embedding for the ERNIE 4.5 query and key layout.
@@ -793,17 +797,6 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
-  - id: fused_qk_gemma_rmsnorm_rope_gate
-    description: |
-      Qwen3.5 attention prologue in one launch: per-head GemmaRMSNorm, NeoX partial RoPE and gate deinterleaving.
-      The normalized value rounds to the output dtype before RoPE, matching the unfused two-kernel path.
-    for:
-      - fused_qk_gemma_rmsnorm_rope_gate
-    labels:
-      - fused
-      - sglang
-      - RoPE
-      - Normalization
   - id: fused_norm_rope_stacked
     description: |
       Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
@@ -815,6 +808,35 @@ ops:
       - sglang
       - Normalization
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_pack_qkv
+    description: |
+      Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
+      One launch gathers all three tensors instead of three independent advanced-index gathers.
+    for:
+      - fused_pack_qkv
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_qk_gemma_rmsnorm_rope_gate
+    description: |
+      Qwen3.5 attention prologue in one launch: per-head GemmaRMSNorm, NeoX partial RoPE and gate deinterleaving.
+      The normalized value rounds to the output dtype before RoPE, matching the unfused two-kernel path.
+    for:
+      - fused_qk_gemma_rmsnorm_rope_gate
+    labels:
+      - fused
+      - sglang
+      - RoPE
+      - Normalization
     kind:
       - NeuralNetwork
     stages:
@@ -831,18 +853,6 @@ ops:
       - Normalization
     kind:
       - Reduction
-  - id: fused_pack_qkv
-    description: |
-      Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
-      One launch gathers all three tensors instead of three independent advanced-index gathers.
-    for:
-      - fused_pack_qkv
-    labels:
-      - fused
-      - sglang
-      - Attention
-    kind:
-      - NeuralNetwork
     stages:
       - stable: '1.0'
   - id: fused_qkvzba_split_reshape_cat
@@ -1012,6 +1022,10 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: get_mla_kv_buffer
     description: |
       Gather counterpart of set_mla_kv_buffer.
@@ -1124,17 +1138,25 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: l2norm
+    description: |
+      Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
+    for:
+      - l2norm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: layernorm_modulate
     description: |
       Affine-free LayerNorm followed by AdaLN modulation: LN(x) * (1 + scale) + shift.
       One modulation vector per batch element, broadcast along the sequence dimension.
     for:
       - layernorm_modulate
-  - id: l2norm
-    description: |
-      Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
-    for:
-      - l2norm
     labels:
       - fused
       - sglang
@@ -1153,6 +1175,10 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: linear_decode_forward
     description: |
       Lightning-attention decode step: one token per sequence, updating each slot's [D, D] linear attention state.
@@ -1449,6 +1475,34 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: post_reorder_deepgemm
+    description: |
+      DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
+      Its validity gate is expert_id >= 0, not != num_local_experts, so the fused shared expert survives.
+    for:
+      - post_reorder_deepgemm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: pre_reorder_cutlass
+    description: |
+      CUTLASS-MoE input permutation with a fused per-tensor dequant scale.
+      Each token row is copied to its routed destinations, scaled by 1 / a1_scales on the way.
+    for:
+      - pre_reorder_cutlass
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: qk_gemma_rmsnorm_rope
     description: |
       MiniMax-M3 Q/K prologue: per-head GemmaRMSNorm plus RoPE in one kernel.
@@ -1474,30 +1528,6 @@ ops:
       - fused
       - sglang
       - Normalization
-  - id: post_reorder_deepgemm
-    description: |
-      DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
-      Its validity gate is expert_id >= 0, not != num_local_experts, so the fused shared expert survives.
-    for:
-      - post_reorder_deepgemm
-    labels:
-      - fused
-      - sglang
-      - MoE
-    kind:
-      - Reduction
-    stages:
-      - stable: '1.0'
-  - id: pre_reorder_cutlass
-    description: |
-      CUTLASS-MoE input permutation with a fused per-tensor dequant scale.
-      Each token row is copied to its routed destinations, scaled by 1 / a1_scales on the way.
-    for:
-      - pre_reorder_cutlass
-    labels:
-      - fused
-      - sglang
-      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -1558,6 +1588,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: rmsnorm_hf
+    description: |
+      RMSNorm with HuggingFace LlamaRMSNorm semantics.
+      The normalized activations cast back to the input dtype before the weight multiply, unlike fused_rmsnorm.
+    for:
+      - rmsnorm_hf
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: rmsnorm_scale
     description: |
       BF16-native RMSNorm(x) * weight * scale, where one scale row can cover several rows of x.
@@ -1592,12 +1636,6 @@ ops:
       The gate broadcasts over rows the same way rmsnorm_scale's scale does.
     for:
       - rmsnorm_tanh_residual
-  - id: rmsnorm_hf
-    description: |
-      RMSNorm with HuggingFace LlamaRMSNorm semantics.
-      The normalized activations cast back to the input dtype before the weight multiply, unlike fused_rmsnorm.
-    for:
-      - rmsnorm_hf
     labels:
       - fused
       - sglang
