@@ -2,7 +2,7 @@
   "api_version": "v6.0",
   "name": "tma_align_input_scale",
   "requires_triton_kernel": true,
-  "description": "DeepGEMM TMA scale-layout adapter. Semantically this is a layout operation only: values are unchanged, but a non-contiguous input is transposed and padded so each column is 16-byte aligned (M padded to a multiple of 16/element_size) and returned as a transposed view. For an already row-major contiguous input the native fast path returns the input tensor itself unchanged; otherwise it returns a newly allocated padded buffer view. The reference returns input_scale directly. input_scale is a two-dimensional fp32 activation-scale tensor [M,K]; the suites exercise fp32 inputs. The output therefore aliases the input only on the contiguous fast path.",
+  "description": "DeepGEMM TMA scale-layout adapter for a two-dimensional fp32 activation-scale tensor [M, K]. Semantically this is a layout operation only: values are unchanged. Whenever the input is contiguous, including every suite case (a freshly built row-major torch.rand [M, K]), the native entry point returns the input tensor object itself, so the result aliases input_scale; the pure-torch reference `return input_scale` aliases in the same way. Only for a non-contiguous/strided input does the native path allocate a fresh buffer and write the width-transposed, padded layout into it (M padded to a multiple of 16/element_size, pad columns zeroed), returning a transposed view of that new buffer, which does not alias the input. Inputs are never mutated.",
   "parameters": [
     {
       "name": "input_scale",
@@ -16,6 +16,8 @@
   ],
   "effects": {
     "mutates": [],
-    "returns_alias_of": {}
+    "returns_alias_of": {
+      "output": "input_scale"
+    }
   }
 }
