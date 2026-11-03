@@ -38,6 +38,8 @@ def base_heads(
     GATE: tl.constexpr,
     BH: tl.constexpr,
     BD: tl.constexpr,
+    BP: tl.constexpr,
+    BT: tl.constexpr,
     CACHE: tl.constexpr,
     TOKEN,
     GROUP,
@@ -53,7 +55,7 @@ def base_heads(
     out = (TOKEN * H + h) * D
     if RD > 0:
         half: tl.constexpr = RD // 2
-        p = tl.arange(0, triton.next_power_of_2(half))
+        p = tl.arange(0, BP)
         pm = (h[:, None] < H) & (p[None, :] < half)
         x1 = tl.load(
             X + base[:, None] + p[None, :] * XS1, pm, 0, cache_modifier=CACHE
@@ -92,7 +94,7 @@ def base_heads(
             pm,
         )
     if RD < D:
-        tail = RD + tl.arange(0, triton.next_power_of_2(D - RD))
+        tail = RD + tl.arange(0, BT)
         tm = (h[:, None] < H) & (tail[None, :] < D)
         xt = tl.load(
             X + base[:, None] + tail[None, :] * XS1,
@@ -134,6 +136,8 @@ def base_krows(
     GATE: tl.constexpr,
     BH: tl.constexpr,
     BD: tl.constexpr,
+    BP: tl.constexpr,
+    BT: tl.constexpr,
     CACHE: tl.constexpr,
     GROUP,
     T: tl.constexpr,
@@ -151,7 +155,7 @@ def base_krows(
     out = (TOKEN * H + h) * D
     if RD > 0:
         half: tl.constexpr = RD // 2
-        p = tl.arange(0, triton.next_power_of_2(half))
+        p = tl.arange(0, BP)
         pm = (TOKEN[:, None] < T) & (p[None, :] < half)
         x1 = tl.load(
             X + base[:, None] + p[None, :] * XS1, pm, 0, cache_modifier=CACHE
@@ -184,7 +188,7 @@ def base_krows(
         tl.store(Y + out[:, None] + p[None, :], n1 * cos - n2 * sin, pm)
         tl.store(Y + out[:, None] + half + p[None, :], n2 * cos + n1 * sin, pm)
     if RD < D:
-        tail = RD + tl.arange(0, triton.next_power_of_2(D - RD))
+        tail = RD + tl.arange(0, BT)
         tm = (TOKEN[:, None] < T) & (tail[None, :] < D)
         xt = tl.load(
             X + base[:, None] + tail[None, :] * XS1,
@@ -233,6 +237,8 @@ def base_fused(
     GATE: tl.constexpr,
     BH: tl.constexpr,
     BD: tl.constexpr,
+    BP: tl.constexpr,
+    BT: tl.constexpr,
     CACHE: tl.constexpr,
     T: tl.constexpr,
     KR: tl.constexpr,
@@ -262,6 +268,8 @@ def base_fused(
             GATE,
             BH,
             BD,
+            BP,
+            BT,
             CACHE,
             token,
             group,
@@ -287,6 +295,8 @@ def base_fused(
             False,
             KR,
             BD,
+            BP,
+            BT,
             CACHE,
             block - T * QG,
             T,
@@ -353,6 +363,8 @@ def base_call(
         has_gate,
         heads,
         triton.next_power_of_2(head_dim),
+        triton.next_power_of_2(max(1, rotary_dim // 2)),
+        triton.next_power_of_2(max(1, head_dim - rotary_dim)),
         cache,
         t,
         8,
