@@ -35,10 +35,29 @@ def _input_fn(shape, cur_dtype, device):
         n, hidden, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
     # torch_gcu randperm hangs on-device; generate on CPU then move.
-    dst = torch.randperm(
-        n, device="cpu", generator=torch.Generator(device="cpu").manual_seed(0)
-    ).to(device)
-    yield down, dst, {"scaling": scaling}
+    src2dst = (
+        torch.randperm(
+            n, generator=torch.Generator(device="cpu").manual_seed(0)
+        )
+        .reshape(num_tokens, topk)
+        .to(torch.int32)
+        .to(device)
+    )
+    output = torch.zeros(num_tokens, hidden, dtype=cur_dtype, device=device)
+    topk_ids = torch.zeros(num_tokens, topk, dtype=torch.int32, device=device)
+    topk_weights = torch.rand(
+        num_tokens, topk, dtype=torch.float32, device=device, generator=g
+    )
+    yield (
+        down,
+        output,
+        src2dst,
+        topk_ids,
+        topk_weights,
+        topk,
+        hidden,
+        scaling,
+    )
 
 
 def _case_fn(shape, cur_dtype):

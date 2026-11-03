@@ -29,26 +29,41 @@ MORE_SHAPES = [(bs, 16, 4096) for bs in (128,)]
 
 def _input_fn(shape, cur_dtype, device):
     bs, page_size, max_len = shape
+    max_batch, max_context = 256, 8192
     g = torch.Generator(device=device).manual_seed(0)
-    num_pages = (max_len + page_size - 1) // page_size
-    kv_indptr = torch.zeros(bs + 1, dtype=torch.int32, device=device)
-    kv_indptr[1:] = torch.randint(
-        1, num_pages + 1, (bs,), dtype=torch.int32, device=device, generator=g
-    ).cumsum(0)
-    kv_page_indices = torch.randint(
+    req_to_token = torch.randint(
         0,
-        100000,
-        (int(kv_indptr[-1].item()),),
+        1 << 20,
+        (max_batch, max_context),
         dtype=torch.int32,
         device=device,
         generator=g,
     )
-    kv_last_page_len = torch.randint(
-        1, page_size + 1, (bs,), dtype=torch.int32, device=device, generator=g
+    # torch_gcu randperm hangs on-device; generate on CPU then move.
+    req_pool_indices = (
+        torch.randperm(
+            max_batch, generator=torch.Generator(device="cpu").manual_seed(0)
+        )[:bs]
+        .to(torch.int32)
+        .to(device)
     )
-    yield kv_indptr, kv_page_indices, kv_last_page_len, {
-        "page_size": page_size
-    }
+    lens = torch.randint(
+        1, max_len + 1, (bs,), dtype=torch.int32, device=device, generator=g
+    )
+    kv_indptr = torch.zeros(bs + 1, dtype=torch.int32, device=device)
+    kv_indptr[1:] = torch.cumsum(lens, dim=0)
+    kv_start_idx = None
+    kv_indices = torch.zeros(
+        int(kv_indptr[-1]), dtype=torch.int32, device=device
+    )
+    yield (
+        req_to_token,
+        req_pool_indices,
+        lens,
+        kv_indptr,
+        kv_start_idx,
+        kv_indices,
+    )
 
 
 def _case_fn(shape, cur_dtype):

@@ -29,13 +29,20 @@ MORE_SHAPES = [(n,) for n in (4096,)]
 
 def _input_fn(shape, cur_dtype, device):
     (n,) = shape
-    max_q = 16
+    max_q = 8
     g = torch.Generator(device=device).manual_seed(0)
-    cu_seqlens_q = torch.zeros(n + 1, dtype=torch.int32, device=device)
-    cu_seqlens_q[1:] = torch.randint(
+    extend_seq_lens = torch.randint(
         1, max_q + 1, (n,), dtype=torch.int32, device=device, generator=g
-    ).cumsum(0)
-    yield (cu_seqlens_q,)
+    )
+    seq_lens = torch.randint(
+        1, 8192, (n,), dtype=torch.int32, device=device, generator=g
+    )
+    yield (
+        extend_seq_lens,
+        seq_lens,
+        int(extend_seq_lens.sum()),
+        int(extend_seq_lens.max()),
+    )
 
 
 def _case_fn(shape, cur_dtype):

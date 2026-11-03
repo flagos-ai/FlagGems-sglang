@@ -529,6 +529,31 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: ep_gather
+    description: |
+      Combine half of expert-parallel MoE: gathers each token's topk expert outputs and accumulates them in fp32.
+      A negative expert id marks a slot that was never dispatched, so its input_index must not be read.
+    for:
+      - ep_gather
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: ep_scatter
+    description: |
+      Dispatch half of expert-parallel MoE: copies each valid (token, slot) into its expert's block-padded slab.
+      The per-group quantization scale rides along, and each slab's padding tail is marked -1 in m_indices.
+    for:
+      - ep_scatter
+    labels:
+      - fused
+      - sglang
+      - MoE
+      - Quantization
   - id: ernie45_rope_fused
     description: |
       Fused multi-section Rotary Positional Embedding for the ERNIE 4.5 query and key layout.
@@ -740,6 +765,17 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_qk_gemma_rmsnorm_rope_gate
+    description: |
+      Qwen3.5 attention prologue in one launch: per-head GemmaRMSNorm, NeoX partial RoPE and gate deinterleaving.
+      The normalized value rounds to the output dtype before RoPE, matching the unfused two-kernel path.
+    for:
+      - fused_qk_gemma_rmsnorm_rope_gate
+    labels:
+      - fused
+      - sglang
+      - RoPE
+      - Normalization
   - id: fused_norm_rope_stacked
     description: |
       Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
@@ -755,6 +791,18 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_qk_inv_rms
+    description: |
+      Single-pass fused Q and K inverse RMS over a packed QKV tensor, replacing two independent scans.
+      The mean is taken over a token's whole (H, D) block rather than per head, and V is never read.
+    for:
+      - fused_qk_inv_rms
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - Reduction
   - id: fused_pack_qkv
     description: |
       Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
@@ -898,6 +946,16 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: gemma_fused_add_rmsnorm
+    description: |
+      Residual add fused with Gemma RMSNorm, returning both the normalized output and the pre-norm sum.
+      The sum is written once and normalized without a second read; the next decoder layer consumes it.
+    for:
+      - gemma_fused_add_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
   - id: get_mla_kv_buffer
     description: |
       Gather counterpart of set_mla_kv_buffer.
@@ -936,6 +994,20 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: hadamard_transform
+    description: |
+      Fast Walsh-Hadamard transform over the last dimension, scaled: out = x @ H_n.T * scale.
+      H_n is the unnormalized Sylvester Hadamard matrix, so its entries are plus or minus one.
+    for:
+      - hadamard_transform
+    labels:
+      - fused
+      - sglang
+      - Quantization
     kind:
       - NeuralNetwork
     stages:
@@ -996,6 +1068,12 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: layernorm_modulate
+    description: |
+      Affine-free LayerNorm followed by AdaLN modulation: LN(x) * (1 + scale) + shift.
+      One modulation vector per batch element, broadcast along the sequence dimension.
+    for:
+      - layernorm_modulate
   - id: l2norm
     description: |
       Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
@@ -1009,6 +1087,16 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: layernorm_scale_shift_gate_select01
+    description: |
+      LayerNorm plus AdaLN modulation where each token picks one of two parameter sets, the CFG branches.
+      The selected gate is materialized alongside the output, so the caller's residual add needs no gather.
+    for:
+      - layernorm_scale_shift_gate_select01
+    labels:
+      - fused
+      - sglang
+      - Normalization
   - id: linear_decode_forward
     description: |
       Lightning-attention decode step: one token per sequence, updating each slot's [D, D] linear attention state.
@@ -1192,6 +1280,34 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: one_pass_rms_norm
+    description: |
+      Blocked single-pass RMSNorm over the last dimension, using a 2D (seq-block, dim) tile.
+      Several sequence rows share one program, so occupancy against rows per program is the tuning knob.
+    for:
+      - one_pass_rms_norm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: pack_qkv_destination_major
+    description: |
+      Packs Q, K and V into the destination-major layout Ulysses all-to-all needs.
+      One contiguous block per destination rank, heads interleaved across the three tensors.
+    for:
+      - pack_qkv_destination_major
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: pack_topk_ids
     description: |
       Packs each (expert id, routing weight) pair into a single int32.
@@ -1277,6 +1393,31 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: qk_gemma_rmsnorm_rope
+    description: |
+      MiniMax-M3 Q/K prologue: per-head GemmaRMSNorm plus RoPE in one kernel.
+      Supports both NeoX half-split and interleaved adjacent-pair layouts, rounding before the rotation.
+    for:
+      - qk_gemma_rmsnorm_rope
+    labels:
+      - fused
+      - sglang
+      - RoPE
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: qk_head_layernorm
+    description: |
+      Per-head affine-free LayerNorm over Q and K in a single launch, the QK-norm of diffusion attention.
+      One grid axis selects the tensor, so the launch cost is paid once instead of twice.
+    for:
+      - qk_head_layernorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
   - id: post_reorder_deepgemm
     description: |
       DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
@@ -1361,6 +1502,40 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: rmsnorm_scale
+    description: |
+      BF16-native RMSNorm(x) * weight * scale, where one scale row can cover several rows of x.
+      The norm rounds to bf16 before the weight and scale multiplies.
+    for:
+      - rmsnorm_scale
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: rmsnorm_scale_shift
+    description: |
+      AdaLN modulation after RMSNorm: norm(x) * (1 + scale) + shift, one vector per batch element.
+      The norm rounds once at its end and the modulation that follows is bf16, which keeps it bit-exact.
+    for:
+      - rmsnorm_scale_shift
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: rmsnorm_tanh_residual
+    description: |
+      BF16-native gated RMSNorm residual fusion in one pass: residual + tanh(gate) * (RMSNorm(x) * weight).
+      The gate broadcasts over rows the same way rmsnorm_scale's scale does.
+    for:
+      - rmsnorm_tanh_residual
   - id: rmsnorm_hf
     description: |
       RMSNorm with HuggingFace LlamaRMSNorm semantics.
@@ -1385,6 +1560,34 @@ ops:
       - fused
       - sglang
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: scale_residual_rmsnorm_scale_shift
+    description: |
+      A whole DiT block boundary in one launch: gated residual add, then RMSNorm, then AdaLN modulation.
+      Returns the modulated activations and the new residual stream, rounding once inside the norm.
+    for:
+      - scale_residual_rmsnorm_scale_shift
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: scatter_to_padded
+    description: |
+      Scatters packed varlen attention output back into a padded [B, S, H, D] tensor, the inverse of unpad.
+      Rows whose inv_indices entry is -1 must be written as zero rather than left uninitialized.
+    for:
+      - scatter_to_padded
+    labels:
+      - fused
+      - sglang
+      - Attention
     kind:
       - NeuralNetwork
     stages:
