@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "create_chunked_prefix_cache_kv_indices",
+  "requires_triton_kernel": true,
+  "description": "CSR prefix-cache index gather with signature create_chunked_prefix_cache_kv_indices(req_to_token, req_pool_indices, chunk_start_idx, chunk_seq_lens, chunk_cu_seq_lens, chunk_kv_indices), which is also the explicit boundary for the native *args/**kwargs entry point: tensors are bound by these six names or as six positional tensors. For each request i, with beg=chunk_cu_seq_lens[i], n=chunk_seq_lens[i], start=chunk_start_idx[i] and pool=req_pool_indices[i], copy req_to_token[pool, start:start+n] into chunk_kv_indices[beg:beg+n]. The native wrapper writes chunk_kv_indices in place and, for contiguous inputs, returns that same tensor; non-contiguous chunk_kv_indices is first copied to contiguous storage and that copy is returned. Only the CSR windows are overwritten; other entries and all other inputs are unchanged. The reference returns an updated clone. The suite exercises int32 tables and lengths up to 2048.",
+  "parameters": [
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_start_idx",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_cu_seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_kv_indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "chunk_kv_indices"
+    ],
+    "returns_alias_of": {
+      "out": "chunk_kv_indices"
+    }
+  }
+}

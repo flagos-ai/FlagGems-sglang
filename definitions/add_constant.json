@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "add_constant",
+  "requires_triton_kernel": true,
+  "description": "Elementwise integer addition with signature add_constant(src, constant). For a flat, contiguous one-dimensional int32 tensor, return a newly allocated int32 tensor with out[i] = src[i] + constant. Arithmetic is exact integer arithmetic; no floating-point rounding or tolerance applies. The native implementation splits the launch into unmasked full blocks plus at most one masked tail and handles an empty input by returning an empty output. The suite exercises lengths 1, 1023, 2^20 and 2^20+5 with negative and positive constants. src is not modified.",
+  "parameters": [
+    {
+      "name": "src",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "constant",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

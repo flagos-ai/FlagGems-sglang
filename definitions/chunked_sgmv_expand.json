@@ -1,0 +1,50 @@
+{
+  "api_version": "v6.0",
+  "name": "chunked_sgmv_expand",
+  "requires_triton_kernel": true,
+  "description": "Chunked LoRA expand with signature chunked_sgmv_expand(x, weights, batch_info, slice_offsets, max_slice_size, base_output). x is [S, n_slices*r], weights is [num_loras, output_dim, r], slice_offsets is [n_slices+1], and base_output is [S, output_dim]. batch_info supplies seg_indptr, weight_indices, lora_ranks, scalings, permutation and optionally max_len. For each segment b with nonzero rank, for each slice i, add scaling[w] * (x[rows, i*r:(i+1)*r] @ weights[w, slice_offsets[i]:slice_offsets[i+1], :].T) into the corresponding base_output rows. Return a newly allocated output tensor, initialized as a clone of base_output, with the same shape and dtype; base_output and the other inputs are not modified. The suite exercises bfloat16 with one or three slices, scalings, and identity or shuffled permutations; max_slice_size is the launch tiling bound.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "slice_offsets",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "max_slice_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

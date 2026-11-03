@@ -1,0 +1,48 @@
+{
+  "api_version": "v6.0",
+  "name": "causal_conv1d_update",
+  "requires_triton_kernel": true,
+  "description": "Single-step or short-sequence causal conv state update with signature causal_conv1d_update(x, conv_state, weight, bias=None, activation='silu'). x is [batch, dim] when seqlen==1 or [batch, dim, seqlen] otherwise; conv_state is [batch, dim, state_len] and weight is [dim, width]. Concatenate the cached state and x along time, compute the width-wide causal convolution for each output position, optionally add bias and apply SiLU, and return (out, new_conv_state): out is newly allocated with x's shape, and new_conv_state is newly allocated with shape [batch, dim, state_len] holding the trailing state_len values. The native implementation does not modify conv_state or the other inputs. The reference builds and returns an updated clone. The suite exercises bfloat16 with width 3/4, state_len=width-1, seqlen 1 and 4.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "conv_state",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "activation",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "silu",
+      "type_hint": "str"
+    }
+  ],
+  "outputs": [
+    "out",
+    "new_conv_state"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

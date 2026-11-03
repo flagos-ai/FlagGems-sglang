@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "compute_position",
+  "requires_triton_kernel": true,
+  "description": "Packed extension-position construction with signature compute_position(extend_prefix_lens, extend_seq_lens, extend_seq_lens_sum). extend_seq_lens is [bs] int32 and extend_seq_lens_sum is the total number of packed positions. If extend_prefix_lens has length bs, it supplies the starting prefix per sequence; otherwise each prefix is treated as zero. Compute exclusive cumulative starts from extend_seq_lens, then fill positions[start_i:start_i+len_i] with arange(prefix_i, prefix_i+len_i, dtype=int64). Return newly allocated (positions, start), where positions is int64 [extend_seq_lens_sum] and start is int32 [bs]. Inputs are not modified. The suite exercises 1/16/64/129 sequences, including the empty-prefix case.",
+  "parameters": [
+    {
+      "name": "extend_prefix_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "extend_seq_lens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "extend_seq_lens_sum",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "positions",
+    "start"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

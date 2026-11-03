@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "compute_src2dst",
+  "requires_triton_kernel": true,
+  "description": "Routing inverse-permutation construction with signature compute_src2dst(reorder_ids, num_toks). reorder_ids is a flat length-num_toks permutation of 0..num_toks-1, accepted as int32 or int64; int64 values are read through their low 32-bit word. For each source position d, set out[reorder_ids[d]] = d. Return a newly allocated int32 tensor of length num_toks. Both inputs are read-only; reorder_ids values must be in range and form a permutation. The suite exercises sizes from 1 to 1,048,576.",
+  "parameters": [
+    {
+      "name": "reorder_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_toks",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "src2dst"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

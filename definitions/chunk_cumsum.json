@@ -1,0 +1,48 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_cumsum",
+  "requires_triton_kernel": true,
+  "description": "Chunked dt/A cumulative sum with signature chunk_cumsum(dt, A, chunk_size, dt_bias=None, dt_softplus=False). dt is [batch, seqlen, nheads], A is [nheads], and dt_bias is optional [nheads]. Add dt_bias if present, apply softplus only where the biased value is <= 20 when dt_softplus is true, clamp to >= 0, view seqlen into chunks of chunk_size, multiply by the per-head A, and cumulatively sum along each chunk. Return newly allocated float32 (dt_out, da_cumsum), each shaped [batch, nheads, nchunks, chunk_size] with nchunks = ceil(seqlen/chunk_size). Inputs are not modified. The Torch reference reshapes seqlen into nchunks*chunk_size, so only seqlen an exact multiple of chunk_size is representable and exercised; the suite uses bfloat16 dt with float32 A/bias, chunk sizes 8/16/32/256 and exact multiples. (For a hypothetical final partial chunk the native kernel would zero dt past seqlen while da_cumsum continues its running sum; that case is not covered.)",
+  "parameters": [
+    {
+      "name": "dt",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "dt_bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "dt_softplus",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "dt_out",
+    "da_cumsum"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

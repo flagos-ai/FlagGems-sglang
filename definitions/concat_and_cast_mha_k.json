@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "concat_and_cast_mha_k",
+  "requires_triton_kernel": true,
+  "description": "MLA KV concatenation/cast with signature concat_and_cast_mha_k(k, k_nope, k_rope). k is [t,h,nope_dim+rope_dim] and supplies the output shape, device and dtype; k_nope is [t,h,nope_dim]; k_rope is [t,1,rope_dim]. Return a newly allocated tensor of k.dtype and shape [t,h,nope_dim+rope_dim] whose first nope_dim columns are k_nope and whose remaining rope_dim columns are k_rope broadcast over all h heads. The values of k are not copied; it is used only as output metadata. No input is modified. The suite exercises bfloat16 with h 16/32/128 and rope_dim 64.",
+  "parameters": [
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k_nope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k_rope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

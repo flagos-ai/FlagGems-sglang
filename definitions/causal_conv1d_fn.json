@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "causal_conv1d_fn",
+  "requires_triton_kernel": true,
+  "description": "Causal depthwise convolution over packed sequences with signature causal_conv1d_fn(x, weight, bias, query_start_loc, seq_lens_cpu, activation='silu'). x is [dim, total_tokens], weight is [dim, width], bias is [dim] or None, query_start_loc is the length-(n_seqs+1) segment offset array, and seq_lens_cpu is the host-side sequence-length list. For each segment [start,end), channel d and relative token t, compute conv = sum_{k=0}^{width-1} weight[d,k] * x_pad[d,t+k] using width-1 left causal zeros, add bias[d] if present, and apply SiLU when activation is 'silu'/'swish'; accumulation is float32 and the result is cast back to x.dtype. Return a newly allocated tensor shaped like x. Only positions covered by the segments are written, so the packed input must cover the full token axis. Suites exercise bfloat16 with bias and default SiLU; bias is required positionally but may be passed as None.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "query_start_loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "seq_lens_cpu",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "activation",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "silu",
+      "type_hint": "str"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

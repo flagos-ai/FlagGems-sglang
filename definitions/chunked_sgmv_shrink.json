@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "chunked_sgmv_shrink",
+  "requires_triton_kernel": true,
+  "description": "Chunked LoRA shrink (A projection) with signature chunked_sgmv_shrink(x, weights, batch_info, num_slices=1). x is [S,k], weights is [num_loras, num_slices*r, k], and batch_info supplies seg_indptr, weight_indices and permutation. For each segment b, compute out[rows] = x[rows].float() @ weights[w].float().T and cast to x.dtype, where rows=permutation[seg_indptr[b]:seg_indptr[b+1]]. Return a newly allocated [S, num_slices*r] tensor of x.dtype; rows not covered by any segment remain zero. Inputs are not modified. The suite exercises bfloat16 x/weights with num_slices 1 and 3, k up to 4096, and identity or shuffled permutations.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_slices",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

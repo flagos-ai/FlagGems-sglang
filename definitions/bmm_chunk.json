@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "bmm_chunk",
+  "requires_triton_kernel": true,
+  "description": "Per-chunk batched Gram matrix with signature bmm_chunk(a, b, chunk_size, causal=False). a and b have shape [batch, seqlen, ngroups, k] with seqlen divisible by chunk_size. Split the token axis into chunks and compute, for every batch, chunk, group and row pair (i,j), out[batch, chunk, group, i, j] = sum_k a[batch, chunk*chunk_size+i, group, k] * b[batch, chunk*chunk_size+j, group, k], accumulated in float32 and stored in a.dtype. The output is newly allocated with shape [batch, seqlen//chunk_size, ngroups, chunk_size, chunk_size] and dtype a.dtype. causal=False schedules every tile and fills the whole matrix. causal=True uses an upper-triangular tile schedule (tile row index <= tile column index), guaranteeing the i <= j region. Full diagonal tiles can also write some i > j entries, while unscheduled lower tiles remain unspecified in the empty-allocated output; the lower triangle is not guaranteed to be zero. The causal correctness check compares only the i <= j region and ignores i > j. The exercised dtype is bfloat16 and inputs are not modified.",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "causal",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "build_trtllm_mha_page_table",
+  "requires_triton_kernel": true,
+  "description": "TRT-LLM MHA page-table construction with signature build_trtllm_mha_page_table(req_to_token, req_pool_indices, cache_seqlens, page_table, page_size). For each request row i, let pool = req_pool_indices[i] and n_pages = ceil(cache_seqlens[i]/page_size). For p < n_pages write page_table[i, p] = req_to_token[pool, p*page_size] // page_size, cast to page_table.dtype; entries p >= n_pages are left unchanged. The wrapper writes page_table in place and returns that same tensor, so page_table is mutated and aliased by the output. The reference returns an updated clone. The native path has a contiguous power-of-two fast path and a strided general path. Int32 inputs are exercised.",
+  "parameters": [
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_seqlens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "page_table",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "page_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "page_table"
+    ],
+    "returns_alias_of": {
+      "out": "page_table"
+    }
+  }
+}

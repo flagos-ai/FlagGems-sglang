@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "act_and_mul",
+  "requires_triton_kernel": true,
+  "description": "Fused gated activation with signature act_and_mul(gateup_output, activation='silu', swiglu_limit=None). For a 2-D input of shape [m, 2*d], split the last dimension into gate = gateup_output[:, :d] and up = gateup_output[:, d:], convert both halves to float32, optionally clamp gate to <= swiglu_limit and up to [-swiglu_limit, swiglu_limit], apply SiLU or tanh-approximated GELU to gate, cast both the activated gate and up back to the input dtype, multiply, and cast the product to the input dtype. Return a newly allocated [m, d] tensor without mutating or aliasing the input. The correctness and benchmark suites exercise bfloat16 inputs with SiLU/GELU and with or without swiglu_limit. No generic native act_and_mul implementation is present in this revision; this definition follows the explicit Torch reference and existing test/benchmark call contract, without claiming native candidate availability.",
+  "parameters": [
+    {
+      "name": "gateup_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "activation",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "silu",
+      "type_hint": "str"
+    },
+    {
+      "name": "swiglu_limit",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null,
+      "type_hint": "float"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

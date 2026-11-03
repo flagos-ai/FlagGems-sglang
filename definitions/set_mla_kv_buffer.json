@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "set_mla_kv_buffer",
+  "requires_triton_kernel": true,
+  "description": "Scatter selected rows into an MLA KV cache with signature set_mla_kv_buffer(kv_buffer, loc, cache_k_nope, cache_k_rope) -> torch.Tensor. kv_buffer has shape [num_slots, nope_dim + rope_dim]; loc is a 1-D integer tensor of n row indices; cache_k_nope has shape [n, nope_dim]; cache_k_rope has shape [n, rope_dim]. For each i, the concatenated row [cache_k_nope[i], cache_k_rope[i]] is written to kv_buffer[loc[i]], and all other rows are left unchanged. The buffer is mutated in place and the same tensor is returned; the Torch reference clones the buffer and returns a new tensor. An empty loc performs no writes and returns the buffer. When kv_buffer is 2-byte, row-contiguous, evenly aligned, and the noPE/rope dtypes and widths satisfy the packed conditions, aligned 2-element pairs are copied as uint32 words; otherwise a generic strided scatter stores values into the destination dtype. loc entries are expected to be valid row indices; duplicate indices and out-of-range indices are not exercised. The current tests exercise bfloat16 with num_slots=65536, nope_dim=512, rope_dim=64, and unique int64 loc values.",
+  "parameters": [
+    {
+      "name": "kv_buffer",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_k_nope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cache_k_rope",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [
+      "kv_buffer"
+    ],
+    "returns_alias_of": {
+      "out": "kv_buffer"
+    }
+  }
+}

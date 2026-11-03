@@ -1,0 +1,59 @@
+{
+  "api_version": "v6.0",
+  "name": "chain_speculative_sampling",
+  "requires_triton_kernel": true,
+  "description": "Chain speculative sampling with signature chain_speculative_sampling(candidates, retrive_index, uniform_samples, uniform_samples_for_final_sampling, target_probs, draft_probs, num_slots). Shapes are candidates/retrive_index [B,S], uniform_samples [B,S-1], final coins [B], target_probs [B,S,V] and draft_probs [B,S-1,V]. For each batch row, starting at slot retrive_index[b,0], accept draft token candidates[b,step] while coin*q < p using target/draft probabilities at the current row, update the accepted slot chain, and on rejection sample a final token from the normalized positive residual p-q (or from the target row if every draft was accepted). Return newly allocated (predicts, accept_index, accept_num): predicts has length num_slots and candidates.dtype, accept_index has shape [B,S] and retrive_index.dtype with untouched trailing entries set to -1, and accept_num is int32 [B]. No input tensor is mutated. The suite exercises float32 probabilities with V up to 32000 and exact tensor comparisons.",
+  "parameters": [
+    {
+      "name": "candidates",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "retrive_index",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "uniform_samples",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "uniform_samples_for_final_sampling",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "target_probs",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "draft_probs",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_slots",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    }
+  ],
+  "outputs": [
+    "predicts",
+    "accept_index",
+    "accept_num"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

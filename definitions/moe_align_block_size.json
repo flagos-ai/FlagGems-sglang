@@ -1,0 +1,65 @@
+{
+  "api_version": "v6.0",
+  "name": "moe_align_block_size",
+  "requires_triton_kernel": true,
+  "description": "Compute the MoE aligned-block token plan with signature moe_align_block_size(topk_ids, num_experts, block_size, sorted_token_ids, expert_ids, num_tokens_post_pad, cumsum_buffer, pad_sorted_token_ids) -> tuple[Tensor, Tensor, Tensor]. topk_ids is a 2-D int32 tensor [num_tokens, top_k]; num_experts includes a trailing filtered-expert slot, so only ids in [0, num_experts - 2] are routed. For each routed expert e, count its occurrences in flattened topk_ids, round the count up to a multiple of block_size, and pack experts consecutively. The returned sorted_token_ids has the same shape as the supplied template: up to the total padded length it contains flattened token indices grouped by expert, and padding positions and the tail contain the sentinel topk_ids.numel(). The returned num_tokens_post_pad is filled with the total padded length. The returned expert_ids contains e for every block wholly inside e's aligned range; entries after total_blocks preserve the supplied expert_ids template values. Token order within an expert is not deterministic in atomic paths, and tests compare per-expert block ranges as multisets. The candidate allocates and returns new tensors and does not mutate any input: sorted_token_ids and num_tokens_post_pad are shape/dtype templates, expert_ids supplies only tail values, cumsum_buffer is unused, and pad_sorted_token_ids is accepted but unused (padding is always written; only True is exercised). The current correctness and benchmark suites exercise int32 tensors with block_size 16, 64, and 128, and num_experts including the filtered slot.",
+  "parameters": [
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "block_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "sorted_token_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "expert_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "num_tokens_post_pad",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cumsum_buffer",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "pad_sorted_token_ids",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "sorted_token_ids",
+    "expert_ids",
+    "num_tokens_post_pad"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
