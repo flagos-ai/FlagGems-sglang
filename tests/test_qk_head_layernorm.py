@@ -61,14 +61,14 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 _EPS = 1e-6
 
 
-def _case(b, s, heads, head_dim, seed=0):
+def _case(b, s, heads, head_dim, seed=0, k_heads=None):
     g = torch.Generator(device=cfg.device).manual_seed(seed)
 
-    def _t():
+    def _t(h):
         return torch.randn(
             b,
             s,
-            heads,
+            h,
             head_dim,
             dtype=torch.float32,
             device=cfg.device,
@@ -76,7 +76,10 @@ def _case(b, s, heads, head_dim, seed=0):
         ).to(torch.bfloat16)
 
     return dict(
-        q=_t().contiguous(), k=_t().contiguous(), eps=_EPS, check=_check
+        q=_t(heads).contiguous(),
+        k=_t(heads if k_heads is None else k_heads).contiguous(),
+        eps=_EPS,
+        check=_check,
     )
 
 
@@ -92,6 +95,13 @@ _CASE_FACTORIES = [
 ] + [
     (lambda s: lambda: _case(1, s, 32, 128))(s)
     for s in (128, 1024, 4360, 16384)
+]
+# Q and K with different head counts (GQA), including a K row count that is
+# not a multiple of the rows a program takes, and K wider than Q.
+_CASE_FACTORIES += [
+    lambda: _case(1, 1024, 32, 128, k_heads=8),
+    lambda: _case(2, 77, 16, 72, k_heads=1),
+    lambda: _case(1, 128, 8, 64, k_heads=32),
 ]
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
