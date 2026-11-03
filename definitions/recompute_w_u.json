@@ -1,0 +1,52 @@
+{
+  "api_version": "v6.0",
+  "name": "recompute_w_u",
+  "requires_triton_kernel": true,
+  "description": "Recompute Mamba/GLA W and U blocks from K/V, beta and a cumulative gate. k is [B,T,Hg,K], v is [B,T,H,V], beta and g_cumsum are [B,T,H] float32, and A is [B,T,H,BT] with BT equal to the block length. For each block of BT rows and each head h, with hk = h // (H // Hg), compute vb = v * beta, kb = k[:,hk] * beta * exp(g_cumsum), w = A_block @ kb and u = A_block @ vb; the matmuls are accumulated in float32 and cast back to k/v dtype. Returns (w [B,T,H,K], u [B,T,H,V]) as newly allocated tensors. cu_seqlens is required to be None; the varlen path is not implemented. Suites exercise bfloat16 k/v/A and float32 beta/g_cumsum.",
+  "parameters": [
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "g_cumsum",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cu_seqlens",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor | None"
+    }
+  ],
+  "outputs": [
+    "w",
+    "u"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

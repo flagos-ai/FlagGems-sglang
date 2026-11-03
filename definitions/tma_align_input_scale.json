@@ -1,0 +1,23 @@
+{
+  "api_version": "v6.0",
+  "name": "tma_align_input_scale",
+  "requires_triton_kernel": true,
+  "description": "This definition covers the contiguous, row-major inputs exercised by the current test and benchmark suites; the declared return alias applies to that workload. DeepGEMM TMA scale-layout adapter for a two-dimensional fp32 activation-scale tensor [M, K]. Semantically this is a layout operation only: values are unchanged. Whenever the input is contiguous, including every suite case (a freshly built row-major torch.rand [M, K]), the native entry point returns the input tensor object itself, so the result aliases input_scale; the pure-torch reference `return input_scale` aliases in the same way. Only for a non-contiguous/strided input does the native path allocate a fresh buffer and write the width-transposed, padded layout into it (M padded to a multiple of 16/element_size, pad columns zeroed), returning a transposed view of that new buffer, which does not alias the input. Inputs are never mutated. The separate non-contiguous allocation path is outside this definition workload.",
+  "parameters": [
+    {
+      "name": "input_scale",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {
+      "output": "input_scale"
+    }
+  }
+}

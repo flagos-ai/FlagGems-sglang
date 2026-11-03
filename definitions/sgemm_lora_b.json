@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "sgemm_lora_b",
+  "requires_triton_kernel": true,
+  "description": "Segmented LoRA-B projection with a residual base. x is [S, r], weights is [num_lora, N, r], and base_output is [S, N]. For each segment b with adapter w = weight_indices[b], if lora_ranks[w] is nonzero, out[rows] = base_output[rows] + scalings[w] * (x[rows] @ weights[w].T), accumulated in float32 and cast to base_output.dtype; permutation, when present, selects the output rows. Empty segments and zero-rank adapters are skipped. Returns a newly allocated [S, N] tensor; base_output is read only. Suites exercise bfloat16 tensors and int32 batch metadata.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "weights",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "object"
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

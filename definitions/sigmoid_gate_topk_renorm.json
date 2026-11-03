@@ -1,0 +1,53 @@
+{
+  "api_version": "v6.0",
+  "name": "sigmoid_gate_topk_renorm",
+  "requires_triton_kernel": true,
+  "description": "Fused sigmoid gating, top-k routing and renormalization for MoE. logits is [M, N+S]; the first N columns are routed logits, the last S are shared-expert logits, and bias is [N]. Scores are sigmoid(routed_logits) + bias and the top K are selected in deterministic descending order (ties pick the smaller expert index). The selected routed logits and all shared logits are passed through sigmoid, normalized by their combined sum, and multiplied by route_scale * global_scale. route_scale/global_scale may be Python scalars, 0-d tensors or per-row tensors. Returns (routed_weights [M,K] in logits.dtype, indices [M,K] int32, shared_weights [M,S] in logits.dtype) as new tensors; inputs are read only. Suites exercise bfloat16 logits, float32 bias/scales and int32 indices.",
+  "parameters": [
+    {
+      "name": "logits",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "n_shared_experts",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "int"
+    },
+    {
+      "name": "route_scale",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float | torch.Tensor"
+    },
+    {
+      "name": "global_scale",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "float | torch.Tensor"
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "routed_weights",
+    "indices",
+    "shared_weights"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

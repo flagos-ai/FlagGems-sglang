@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "tiny_k_gemm",
+  "requires_triton_kernel": true,
+  "description": "Thin-K GEMM for decode projections: out = cast(x.float() @ w.float().T, out_dtype), where x is [M,K], w is [N,K], and out is [M,N]. The K loop is tiled and accumulated in float32. out_dtype is a torch.dtype and may be bfloat16 or float32. Returns a newly allocated output and does not mutate x or w. Suites exercise bfloat16 x/w with bfloat16 and float32 output dtypes.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "w",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "out_dtype",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.dtype"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

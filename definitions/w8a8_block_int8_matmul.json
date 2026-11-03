@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "w8a8_block_int8_matmul",
+  "requires_triton_kernel": true,
+  "description": "Blockwise W8A8 int8 GEMM with per-block scales. A is int8 [M,K], B is int8 [N,K], As is float32 [M, ceil(K/block_k)], Bs is float32 [ceil(N/block_n), ceil(K/block_k)], and block_size = (block_n, block_k). For each K block, accumulate the int32 dot A[:,k] @ B[:,k].T, convert to float32, multiply by the per-row As and per-N-block Bs scales, and sum across K blocks. The result is cast to output_dtype. Returns a newly allocated [M,N] tensor and does not mutate inputs. Suites exercise int8 operands, float32 scales, block_size=[128,128] and bfloat16 output.",
+  "parameters": [
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "As",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "Bs",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "block_size",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "list[int]"
+    },
+    {
+      "name": "output_dtype",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.dtype"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

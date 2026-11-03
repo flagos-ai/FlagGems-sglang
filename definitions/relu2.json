@@ -1,0 +1,21 @@
+{
+  "api_version": "v6.0",
+  "name": "relu2",
+  "requires_triton_kernel": true,
+  "description": "Fused square-ReLU activation: out = relu(input)^2, with the ReLU and multiplication performed in float32 and the result cast back to input.dtype. The input is treated as a two-dimensional [rows, dim] tensor, and the kernel uses its row/column strides for flat access. Returns a newly allocated tensor of the same shape and dtype, without mutating the input. The suites exercise two-dimensional bfloat16 inputs.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

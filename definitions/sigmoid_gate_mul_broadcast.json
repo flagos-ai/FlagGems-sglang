@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "sigmoid_gate_mul_broadcast",
+  "requires_triton_kernel": true,
+  "description": "Row-broadcast gated product: x is [num_tokens, hidden] and gate is [num_tokens, 1]. out[t,h] = cast(x[t,h].float() * sigmoid(gate[t,0].float()), x.dtype). Returns a newly allocated tensor of x's shape and dtype and does not mutate inputs. The suites exercise two-dimensional bfloat16 x with a per-row gate.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

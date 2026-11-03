@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "rotary_embedding",
+  "requires_triton_kernel": true,
+  "description": "Adjacent-pair rotary embedding. For x [tokens, heads, head_size] and cos/sin [tokens, head_size//2], interpret each head vector as pairs (x1,x2) and compute o1 = x1*cos - x2*sin, o2 = x1*sin + x2*cos in float32, then cast back to x.dtype. cos/sin are indexed only by the first head_size//2 frequencies. Returns a newly allocated [tokens, heads, head_size] tensor and does not mutate inputs. The public interleaved argument is accepted for API compatibility but is not inspected by the native kernel; the implemented layout is always the adjacent-pair form. Suites exercise bfloat16 x/cos/sin with interleaved=False.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "cos",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "sin",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "interleaved",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "bool"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

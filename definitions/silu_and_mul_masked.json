@@ -1,0 +1,27 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_and_mul_masked",
+  "requires_triton_kernel": true,
+  "description": "Masked gated SiLU for grouped experts. input is [E, T, H] with even H; for expert e and token t < masked_m[e], out[e,t,:] = cast(gate * sigmoid(gate) * up, input.dtype), where gate = input[e,t,:H/2] and up = input[e,t,H/2:]. Only rows t < masked_m[e] are part of the contract and are the only rows compared by the suites; the reference zero-initializes rows beyond the mask, while the native kernel does not write them. Returns a newly allocated [E, T, H/2] tensor and does not mutate input. masked_m is an int32 per-expert count. Suites exercise bfloat16 input and int32 masked_m, including zero-count experts.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    },
+    {
+      "name": "masked_m",
+      "kind": "positional_or_keyword",
+      "required": true,
+      "type_hint": "torch.Tensor"
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
