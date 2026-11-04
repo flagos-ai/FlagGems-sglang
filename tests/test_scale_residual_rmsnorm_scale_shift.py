@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -123,7 +124,9 @@ def test_scale_residual_rmsnorm_scale_shift(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import scale_residual_rmsnorm_scale_shift
+        candidate = get_candidate(
+            "scale_residual_rmsnorm_scale_shift", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "diffusion/scale_residual_rmsnorm_scale_shift ops module not found"
@@ -131,7 +134,7 @@ def test_scale_residual_rmsnorm_scale_shift(case_idx):
         return
 
     try:
-        actual = scale_residual_rmsnorm_scale_shift(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "diffusion/scale_residual_rmsnorm_scale_shift not yet implemented"

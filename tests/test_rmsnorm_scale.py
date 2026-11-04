@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -123,13 +124,13 @@ def test_rmsnorm_scale(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import rmsnorm_scale
+        candidate = get_candidate("rmsnorm_scale", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/rmsnorm_scale ops module not found")
         return
 
     try:
-        actual = rmsnorm_scale(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/rmsnorm_scale not yet implemented")
         return

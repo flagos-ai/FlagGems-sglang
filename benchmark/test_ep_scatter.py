@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(t, 8, 2048, 8) for t in (64, 512)]
@@ -73,16 +74,36 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, topk, hidden, num_experts) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (num_tokens, hidden),
+            "topk_ids": (num_tokens, topk),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "topk": topk,
+            "hidden": hidden,
+            "num_experts": num_experts,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.ep_scatter
 def test_perf_ep_scatter():
     bench = OpBenchmark(
         op_name="ep_scatter",
         torch_op=get_reference("ep_scatter"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.float8_e4m3fn],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, topk, hidden, num_experts",
     )
-    bench.set_gems(flaggems_sglang.ep_scatter)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

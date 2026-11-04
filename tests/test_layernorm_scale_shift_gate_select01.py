@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -133,7 +134,9 @@ def test_layernorm_scale_shift_gate_select01(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import layernorm_scale_shift_gate_select01
+        candidate = get_candidate(
+            "layernorm_scale_shift_gate_select01", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "diffusion/layernorm_scale_shift_gate_select01 ops module not found"
@@ -141,7 +144,7 @@ def test_layernorm_scale_shift_gate_select01(case_idx):
         return
 
     try:
-        actual = layernorm_scale_shift_gate_select01(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "diffusion/layernorm_scale_shift_gate_select01 not yet implemented"

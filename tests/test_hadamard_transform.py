@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -100,13 +101,13 @@ def test_hadamard_transform(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import hadamard_transform
+        candidate = get_candidate("hadamard_transform", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/hadamard_transform ops module not found")
         return
 
     try:
-        actual = hadamard_transform(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("quantization/hadamard_transform not yet implemented")
         return

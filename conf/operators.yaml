@@ -153,6 +153,20 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: chunk_gated_delta_rule_fwd
+    description: |
+      Chunked gated delta-rule forward (Qwen3-Next / vLLM-Ascend chunk.py).
+      Gated delta-rule recurrence scheduled over decay-horizon segments, with optional in-kernel q/k L2 norm.
+    for:
+      - chunk_gated_delta_rule_fwd
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: chunk_local_cumsum_scalar
     description: |
       Computes local cumulative sum over chunked sequences with optional scaling and reverse direction.
@@ -554,6 +568,10 @@ ops:
       - sglang
       - MoE
       - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: ernie45_rope_fused
     description: |
       Fused multi-section Rotary Positional Embedding for the ERNIE 4.5 query and key layout.
@@ -709,6 +727,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_moe
+    description: |
+      Fused MoE experts (unquantized path), SGLang fused_experts semantics.
+      Sorted grouped-GEMM gate/up projection with activation, down projection and top-k combine.
+    for:
+      - fused_moe
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_moe_dispatch_index
     description: |
       Builds the permuted grouped-GEMM destination indices for masked/DeepGEMM MoE in a single launch.
@@ -765,17 +797,6 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
-  - id: fused_qk_gemma_rmsnorm_rope_gate
-    description: |
-      Qwen3.5 attention prologue in one launch: per-head GemmaRMSNorm, NeoX partial RoPE and gate deinterleaving.
-      The normalized value rounds to the output dtype before RoPE, matching the unfused two-kernel path.
-    for:
-      - fused_qk_gemma_rmsnorm_rope_gate
-    labels:
-      - fused
-      - sglang
-      - RoPE
-      - Normalization
   - id: fused_norm_rope_stacked
     description: |
       Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
@@ -787,6 +808,35 @@ ops:
       - sglang
       - Normalization
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_pack_qkv
+    description: |
+      Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
+      One launch gathers all three tensors instead of three independent advanced-index gathers.
+    for:
+      - fused_pack_qkv
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_qk_gemma_rmsnorm_rope_gate
+    description: |
+      Qwen3.5 attention prologue in one launch: per-head GemmaRMSNorm, NeoX partial RoPE and gate deinterleaving.
+      The normalized value rounds to the output dtype before RoPE, matching the unfused two-kernel path.
+    for:
+      - fused_qk_gemma_rmsnorm_rope_gate
+    labels:
+      - fused
+      - sglang
+      - RoPE
+      - Normalization
     kind:
       - NeuralNetwork
     stages:
@@ -803,18 +853,6 @@ ops:
       - Normalization
     kind:
       - Reduction
-  - id: fused_pack_qkv
-    description: |
-      Packs padded [B, S, H, D] Q/K/V into varlen [total_valid, H, D] through a shared gather index.
-      One launch gathers all three tensors instead of three independent advanced-index gathers.
-    for:
-      - fused_pack_qkv
-    labels:
-      - fused
-      - sglang
-      - Attention
-    kind:
-      - NeuralNetwork
     stages:
       - stable: '1.0'
   - id: fused_qkvzba_split_reshape_cat
@@ -827,6 +865,34 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_recurrent_gated_delta_rule
+    description: |
+      Fused recurrent gated delta-rule (Qwen3-Next / FLA linear attention).
+      Sequential delta-rule recurrence with a per-step scalar gate and optional in-kernel q/k L2 norm.
+    for:
+      - fused_recurrent_gated_delta_rule
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_recurrent_gated_delta_rule_packed_decode
+    description: |
+      Packed single-token decode of the gated delta-rule straight from the packed QKV projection.
+      One recurrence step into the paged SSM state, indexed per request with padding-slot handling.
+    for:
+      - fused_recurrent_gated_delta_rule_packed_decode
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
     kind:
       - NeuralNetwork
     stages:
@@ -956,6 +1022,10 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: get_mla_kv_buffer
     description: |
       Gather counterpart of set_mla_kv_buffer.
@@ -1068,17 +1138,25 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: l2norm
+    description: |
+      Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
+    for:
+      - l2norm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: layernorm_modulate
     description: |
       Affine-free LayerNorm followed by AdaLN modulation: LN(x) * (1 + scale) + shift.
       One modulation vector per batch element, broadcast along the sequence dimension.
     for:
       - layernorm_modulate
-  - id: l2norm
-    description: |
-      Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
-    for:
-      - l2norm
     labels:
       - fused
       - sglang
@@ -1097,6 +1175,10 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: linear_decode_forward
     description: |
       Lightning-attention decode step: one token per sequence, updating each slot's [D, D] linear attention state.
@@ -1393,6 +1475,34 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: post_reorder_deepgemm
+    description: |
+      DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
+      Its validity gate is expert_id >= 0, not != num_local_experts, so the fused shared expert survives.
+    for:
+      - post_reorder_deepgemm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: pre_reorder_cutlass
+    description: |
+      CUTLASS-MoE input permutation with a fused per-tensor dequant scale.
+      Each token row is copied to its routed destinations, scaled by 1 / a1_scales on the way.
+    for:
+      - pre_reorder_cutlass
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: qk_gemma_rmsnorm_rope
     description: |
       MiniMax-M3 Q/K prologue: per-head GemmaRMSNorm plus RoPE in one kernel.
@@ -1418,30 +1528,6 @@ ops:
       - fused
       - sglang
       - Normalization
-  - id: post_reorder_deepgemm
-    description: |
-      DeepGEMM variant of the MoE epilogue, arithmetically identical to post_reorder_cutlass.
-      Its validity gate is expert_id >= 0, not != num_local_experts, so the fused shared expert survives.
-    for:
-      - post_reorder_deepgemm
-    labels:
-      - fused
-      - sglang
-      - MoE
-    kind:
-      - Reduction
-    stages:
-      - stable: '1.0'
-  - id: pre_reorder_cutlass
-    description: |
-      CUTLASS-MoE input permutation with a fused per-tensor dequant scale.
-      Each token row is copied to its routed destinations, scaled by 1 / a1_scales on the way.
-    for:
-      - pre_reorder_cutlass
-    labels:
-      - fused
-      - sglang
-      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -1502,6 +1588,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: rmsnorm_hf
+    description: |
+      RMSNorm with HuggingFace LlamaRMSNorm semantics.
+      The normalized activations cast back to the input dtype before the weight multiply, unlike fused_rmsnorm.
+    for:
+      - rmsnorm_hf
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: rmsnorm_scale
     description: |
       BF16-native RMSNorm(x) * weight * scale, where one scale row can cover several rows of x.
@@ -1536,12 +1636,6 @@ ops:
       The gate broadcasts over rows the same way rmsnorm_scale's scale does.
     for:
       - rmsnorm_tanh_residual
-  - id: rmsnorm_hf
-    description: |
-      RMSNorm with HuggingFace LlamaRMSNorm semantics.
-      The normalized activations cast back to the input dtype before the weight multiply, unlike fused_rmsnorm.
-    for:
-      - rmsnorm_hf
     labels:
       - fused
       - sglang
@@ -1672,6 +1766,20 @@ ops:
       - fused
       - sglang
       - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: sglang_fl_rotary_embedding
+    description: |
+      SGLang fused in-place RoPE over packed query/key tensors.
+      Position-indexed cos/sin cache applied in neox (half-split) or interleaved pair form; extra head lanes pass through.
+    for:
+      - sglang_fl_rotary_embedding
+    labels:
+      - fused
+      - sglang
+      - PositionEmbedding
     kind:
       - NeuralNetwork
     stages:
@@ -1889,6 +1997,20 @@ ops:
       - MoE
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: topk_softmax
+    description: |
+      SGLang MoE top-k gating: fp32 softmax over experts then the k largest per token.
+      Writes descending weights/ids into the preallocated buffers, with optional renormalization.
+    for:
+      - topk_softmax
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: unpad_draft_extend_output
