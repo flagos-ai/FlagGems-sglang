@@ -34,18 +34,18 @@ pytest benchmark/test_sglang_fl_gemma_fused_add_rmsnorm.py --dummy-candidate sgl
 
 ## Reuse published performance measurements
 
-Use the paired ops-baseline artifacts with public operator keys:
-`op_sglang_native_h800_perf_baseline.json` (28 cases) and
-`op_sglang_mrotary_h800_perf_baseline.json` (6 cases). Their eight top-level
+Use the unified ops-baseline artifact `op_sglang_perf_baseline.json`, which
+contains the 28 native cases and six mRoPE cases alongside the legacy operators.
+The eight documented top-level
 operator keys match the `sglang_fl_` Test / Definition names above. Benchmarks
 look up their own operator name directly. Existing measurements, exact workload
 keys and timing metadata are preserved. A missing exact key remains a miss.
-Update these JSON files together with this checkout and the KGS baseline selector.
+Update this JSON file together with this checkout and the KGS baseline selector.
 
 ```sh
 pytest benchmark/test_sglang_fl_gemma_fused_add_rmsnorm.py --ref-as-candidate \
   --level core --metrics latency \
-  --base-data /path/to/ops-baseline/op_sglang_native_h800_perf_baseline.json
+  --base-data /path/to/ops-baseline/op_sglang_perf_baseline.json
 ```
 
 Native collectors publish the same `sglang_fl_` keys while calling the original

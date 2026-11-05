@@ -161,9 +161,9 @@ correctness or exact baseline-case matching.
 Cases are identified by dimensions, head counts, state-pool capacity, layout and
 operator options. The eight documented public operator names, Definitions, test functions and
 markers use the `sglang_fl_` prefix. `silu_and_mul` and master's ordinary operator names are
-unchanged. Internal native implementation names and stored-data IDs are
-explicitly mapped, not renamed.
-The paired ops-baseline cleanup provides `op_sglang_native_h800_perf_baseline.json`
+unchanged. Baseline keys equal the public operator names. Native implementation names and
+historical tensor dataset IDs retain their original identities.
+The paired ops-baseline cleanup provides the unified `op_sglang_perf_baseline.json`
 and `--repo sglang_native`. Only the key prefix and descriptive parameters were
 normalized; the geometry/ABI digest and all collected measurements are identical.
 Use the paired artifact with this checkout; older artifacts intentionally have
