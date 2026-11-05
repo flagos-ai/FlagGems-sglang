@@ -40,9 +40,10 @@ def _tile(
 
 
 @triton.jit(do_not_specialize=["X", "W", "Y"])
-def _lean(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
+def _lean(
+    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr
+):
     Y = tl.multiple_of(Y, 16)
-    B: tl.constexpr = triton.next_power_of_2(D)
     R: tl.constexpr = 1 if (D > 2048 or M < 1024) or M >= 8192 else 2
     if M >= 4096:
         _late_weight(X, W, Y, M, D, E, R, B)
@@ -52,9 +53,8 @@ def _lean(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
 
 @triton.jit(do_not_specialize=["X", "W", "Y"])
 def _lean_unaligned(
-    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr
+    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr
 ):
-    B: tl.constexpr = triton.next_power_of_2(D)
     R: tl.constexpr = 1 if (D > 2048 or M < 1024) or M >= 8192 else 2
     if M >= 4096:
         _late_weight(X, W, Y, M, D, E, R, B)
@@ -68,6 +68,7 @@ def one_pass_rms_norm(x, w, eps):
     out = torch.empty_like(values)
     D = values.shape[-1]
     M = values.numel() // D
+    B = triton.next_power_of_2(D)
     R = 1 if D > 2048 or M < 1024 or M >= 8192 else 2
     warps = 16 if D > 2048 else 8 if M >= 4096 else 4
     kernel = _lean_unaligned if M < 4096 else _lean
@@ -78,6 +79,7 @@ def one_pass_rms_norm(x, w, eps):
         M,
         D,
         eps,
+        B,
         grid=(triton.cdiv(M, R),),
         warmup=False,
         num_warps=warps,

@@ -40,8 +40,9 @@ def _tile(
 
 
 @triton.jit
-def _lean(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
-    B: tl.constexpr = triton.next_power_of_2(D)
+def _lean(
+    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr
+):
     R: tl.constexpr = min(
         (
             16
@@ -62,9 +63,8 @@ def _lean(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
 
 @triton.jit(do_not_specialize=["X", "W", "Y"])
 def _lean_unaligned(
-    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr
+    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr
 ):
-    B: tl.constexpr = triton.next_power_of_2(D)
     R: tl.constexpr = min(
         (
             16
@@ -111,6 +111,7 @@ def one_pass_rms_norm(x, w, eps):
         M,
         D,
         eps,
+        B,
         grid=(triton.cdiv(M, R),),
         warmup=False,
         num_warps=warps,
