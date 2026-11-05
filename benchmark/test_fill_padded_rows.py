@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(rows, 8, rows // 2) for rows in (8, 64, 512, 4096)]
@@ -32,7 +33,25 @@ def _input_fn(shape, cur_dtype, device):
     x = torch.randn(
         rows, cols, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
-    yield (x, mask_len)
+    num_token_non_padded = torch.tensor(
+        [mask_len], dtype=torch.int32, device=device
+    )
+    yield (x, num_token_non_padded, -1.0)
+
+
+def _case_fn(shape, cur_dtype):
+    (rows, cols, mask_len) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (rows, cols)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "rows": rows,
+            "cols": cols,
+            "mask_len": mask_len,
+        },
+        builder_args=(shape,),
+    )
 
 
 @pytest.mark.fill_padded_rows
@@ -40,11 +59,12 @@ def test_perf_fill_padded_rows():
     bench = OpBenchmark(
         op_name="fill_padded_rows",
         torch_op=get_reference("fill_padded_rows"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="rows, cols, mask_len",
     )
-    bench.set_gems(flaggems_sglang.fill_padded_rows)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

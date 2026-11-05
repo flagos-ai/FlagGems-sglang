@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/elementwise/
@@ -42,16 +43,31 @@ def _input_fn(shape, cur_dtype, device):
     yield _rand(num_tokens, hidden, seed=0), _rand(num_tokens, 1, seed=1)
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={"gate": (num_tokens, hidden), "up": (num_tokens, 1)},
+        params={
+            "configuration": shape,
+            "seeds": [0, 1],
+            "num_tokens": num_tokens,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.sigmoid_gate_mul_broadcast
 def test_perf_sigmoid_gate_mul_broadcast():
     bench = OpBenchmark(
         op_name="sigmoid_gate_mul_broadcast",
         torch_op=get_reference("sigmoid_gate_mul_broadcast"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
-    bench.set_gems(flaggems_sglang.sigmoid_gate_mul_broadcast)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

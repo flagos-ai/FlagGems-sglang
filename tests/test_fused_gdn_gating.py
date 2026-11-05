@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -130,13 +131,13 @@ def test_fused_gdn_gating(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_gdn_gating
+        candidate = get_candidate("fused_gdn_gating", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/fused_gdn_gating ops module not found")
         return
 
     try:
-        actual = fused_gdn_gating(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("fla/fused_gdn_gating not yet implemented")
         return

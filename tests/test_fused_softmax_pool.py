@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -112,13 +113,13 @@ def test_fused_softmax_pool(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_softmax_pool
+        candidate = get_candidate("fused_softmax_pool", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/fused_softmax_pool ops module not found")
         return
 
     try:
-        actual = fused_softmax_pool(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/fused_softmax_pool not yet implemented")
         return

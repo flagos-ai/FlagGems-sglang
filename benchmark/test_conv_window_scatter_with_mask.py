@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/conv_window_scatter_with_mask.
@@ -66,16 +67,40 @@ def _input_fn(shape, cur_dtype, device):
     yield dst.contiguous(), src, dst_idx, step
 
 
+def _case_fn(shape, cur_dtype):
+    (layers, cache, requests, draft, dim, k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "dst": (layers, cache, dim, k - 1),
+            "src": (layers, requests, draft, dim, k - 1),
+            "dst_idx": (requests,),
+            "step": (requests,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "layers": layers,
+            "cache": cache,
+            "requests": requests,
+            "draft": draft,
+            "dim": dim,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.conv_window_scatter_with_mask
 def test_perf_conv_window_scatter_with_mask():
     bench = OpBenchmark(
         op_name="conv_window_scatter_with_mask",
         torch_op=get_reference("conv_window_scatter_with_mask"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.float32],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="layers, cache, requests, draft, dim, k",
     )
-    bench.set_gems(flaggems_sglang.conv_window_scatter_with_mask)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -123,13 +124,13 @@ def test_zero_experts_identity(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import zero_experts_identity
+        candidate = get_candidate("zero_experts_identity", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/zero_experts_identity ops module not found")
         return
 
     try:
-        actual = zero_experts_identity(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/zero_experts_identity not yet implemented")
         return

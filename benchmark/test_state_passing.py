@@ -23,6 +23,7 @@ from flaggems_sglang.reference.chunk_cumsum import (
     reference as chunk_cumsum_reference,
 )
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/state_passing. The last
@@ -73,16 +74,39 @@ def _input_fn(shape, cur_dtype, device):
     yield states, dA_cumsum, initial_states
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, nchunks, chunk_size, nheads, dim, has_init) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "states": (batch, nchunks, nheads, dim),
+            "dA_cumsum": (batch, nheads, nchunks, chunk_size),
+            "initial_states": (batch, nheads, dim) if has_init else None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "nheads": nheads,
+            "dim": dim,
+            "has_init": has_init,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.state_passing
 def test_perf_state_passing():
     bench = OpBenchmark(
         op_name="state_passing",
         torch_op=get_reference("state_passing"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, nheads, dim, has_init",
     )
-    bench.set_gems(flaggems_sglang.state_passing)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

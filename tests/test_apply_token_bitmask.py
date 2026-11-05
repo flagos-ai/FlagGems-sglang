@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -121,7 +122,7 @@ def test_apply_token_bitmask(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import apply_token_bitmask
+        candidate = get_candidate("apply_token_bitmask", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "sampling_grammar/apply_token_bitmask ops module not found"
@@ -129,7 +130,7 @@ def test_apply_token_bitmask(case_idx):
         return
 
     try:
-        actual = apply_token_bitmask(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("sampling_grammar/apply_token_bitmask not yet implemented")
         return

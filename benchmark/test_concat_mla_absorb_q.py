@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/concat_mla_absorb_q.
@@ -39,16 +40,36 @@ def _input_fn(shape, cur_dtype, device):
     yield a, b
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, num_heads, a_last, b_last) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "a": (num_tokens, num_heads, a_last),
+            "b": (num_tokens, num_heads, b_last),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "num_heads": num_heads,
+            "a_last": a_last,
+            "b_last": b_last,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.concat_mla_absorb_q
 def test_perf_concat_mla_absorb_q():
     bench = OpBenchmark(
         op_name="concat_mla_absorb_q",
         torch_op=get_reference("concat_mla_absorb_q"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, num_heads, a_last, b_last",
     )
-    bench.set_gems(flaggems_sglang.concat_mla_absorb_q)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

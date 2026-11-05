@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/tma_align_input_scale.
@@ -37,16 +38,31 @@ def _input_fn(shape, cur_dtype, device):
     yield (input_scale,)
 
 
+def _case_fn(shape, cur_dtype):
+    (m, k_div_block) = shape
+    yield BenchmarkCasePlan(
+        shape={"input_scale": (m, k_div_block)},
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "m": m,
+            "k_div_block": k_div_block,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.tma_align_input_scale
 def test_perf_tma_align_input_scale():
     bench = OpBenchmark(
         op_name="tma_align_input_scale",
         torch_op=get_reference("tma_align_input_scale"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, k_div_block",
     )
-    bench.set_gems(flaggems_sglang.tma_align_input_scale)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

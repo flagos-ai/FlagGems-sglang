@@ -42,98 +42,127 @@ def _full(
     tl.store(out + row, value)
 
 
-@tle.raw.dialect(
-    "xpu3",
-    source=(
-        "\n"
-        "typedef long long I64;\n"
-        "typedef I64 __attribute__((address_space(1))) GI64;\n"
-        'extern "C" __attribute__((device)) void raw_gather(const GI64 *src,\n'
-        "                                                   const GI64 *lens,\n"
-        "                                                   GI64 *out,\n"
-        "                                                   int n, int stride, int base, int block) {\n"
-        "    I64 lengths[4];\n"
-        "    I64 tokens[512];\n"
-        "    I64 result[4];\n"
-        "    int limit = base + block < n ? base + block : n;\n"
-        "    int core = __builtin_xpu_core_id();\n"
-        "    for (int row = base + core * 4; row < limit; row += 64 * 4) {\n"
-        "        int count = limit - row < 4 ? limit - row : 4;\n"
-        "        __builtin_xpu_gm2lm_v3(lengths, lens + row, 0, count * 8);\n"
-        "        __builtin_xpu_gm2lm_v3(tokens, src + (I64)row * stride, 0, count * stride * 8);\n"
-        "        __builtin_xpu2_mfence(5);\n"
-        "        for (int i = 0; i < count; ++i) {\n"
-        "            result[i] = tokens[i * stride + lengths[i] - 1];\n"
-        "        }\n"
-        "        __builtin_xpu_lm2gm_v3(out + row, result, 0, count * 8);\n"
-        "        __builtin_xpu2_mfence(5);\n"
-        "    }\n"
-        "}\n"
-    ),
+# The "xpu3" raw dialect lowers these handwritten XPU kernels through TLE. It
+# is only usable on builds whose Triton ships native tle.raw support and has
+# registered the "xpu3" backend; elsewhere tle.raw is absent or its registry
+# lacks "xpu3". Binding an unavailable dialect must not crash module import, so
+# we bind each kernel defensively and fall back to the pure-Triton kernels when
+# any binding fails.
+def _bind_xpu3(source, fn):
+    """Bind ``fn`` to the xpu3 raw dialect, or return None if unavailable.
+
+    ``dialect`` takes a keyword-only ``name``; depending on the build the
+    unavailable-dialect error surfaces either from ``dialect()`` itself or only
+    when the returned decorator is applied, so both run here and any failure
+    means the dialect is not usable.
+    """
+    if getattr(tle, "raw", None) is None:
+        return None
+    try:
+        return tle.raw.dialect(name="xpu3", source=source)(fn)
+    except Exception:
+        return None
+
+
+_RAW_GATHER_SOURCE = (
+    "\n"
+    "typedef long long I64;\n"
+    "typedef I64 __attribute__((address_space(1))) GI64;\n"
+    'extern "C" __attribute__((device)) void raw_gather(const GI64 *src,\n'
+    "                                                   const GI64 *lens,\n"
+    "                                                   GI64 *out,\n"
+    "                                                   int n, int stride, int base, int block) {\n"
+    "    I64 lengths[4];\n"
+    "    I64 tokens[512];\n"
+    "    I64 result[4];\n"
+    "    int limit = base + block < n ? base + block : n;\n"
+    "    int core = __builtin_xpu_core_id();\n"
+    "    for (int row = base + core * 4; row < limit; row += 64 * 4) {\n"
+    "        int count = limit - row < 4 ? limit - row : 4;\n"
+    "        __builtin_xpu_gm2lm_v3(lengths, lens + row, 0, count * 8);\n"
+    "        __builtin_xpu_gm2lm_v3(tokens, src + (I64)row * stride, 0, count * stride * 8);\n"
+    "        __builtin_xpu2_mfence(5);\n"
+    "        for (int i = 0; i < count; ++i) {\n"
+    "            result[i] = tokens[i * stride + lengths[i] - 1];\n"
+    "        }\n"
+    "        __builtin_xpu_lm2gm_v3(out + row, result, 0, count * 8);\n"
+    "        __builtin_xpu2_mfence(5);\n"
+    "    }\n"
+    "}\n"
 )
-def raw_gather(src, lens, out, n, stride, base, block):
+
+_RAW_GATHER8_SOURCE = (
+    "\n"
+    "typedef long long I64;\n"
+    "typedef I64 __attribute__((address_space(1))) GI64;\n"
+    'extern "C" __attribute__((device)) void raw_gather8(const GI64 *src, const GI64 *lens,\n'
+    "GI64 *out, int n, int stride, int base, int block) {\n"
+    "    I64 lengths[8];\n"
+    "    I64 tokens[256];\n"
+    "    I64 result[8];\n"
+    "    int limit = base + block < n ? base + block : n;\n"
+    "    int core = __builtin_xpu_core_id();\n"
+    "    for (int row = base + core * 8; row < limit; row += 64 * 8) {\n"
+    "        int count = limit - row < 8 ? limit - row : 8;\n"
+    "        __builtin_xpu_gm2lm_v3(lengths, lens + row, 0, count * 8);\n"
+    "        __builtin_xpu_gm2lm_v3(tokens, src + (I64)row * stride, 0, count * stride * 8);\n"
+    "        __builtin_xpu2_mfence(5);\n"
+    "        for (int i = 0; i < count; ++i) result[i] = tokens[i * stride + lengths[i] - 1];\n"
+    "        __builtin_xpu_lm2gm_v3(out + row, result, 0, count * 8);\n"
+    "        __builtin_xpu2_mfence(5);\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def _raw_gather(src, lens, out, n, stride, base, block):
     pass
 
 
-@triton.jit
-def _raw(src, lens, out, N: tl.constexpr, S: tl.constexpr, B: tl.constexpr):
-    tle.raw.call(
-        raw_gather,
-        (
-            src,
-            lens,
-            out,
-            tl.full((), N, tl.int32),
-            tl.full((), S, tl.int32),
-            tl.program_id(0) * B,
-            tl.full((), B, tl.int32),
-        ),
-    )
-
-
-@tle.raw.dialect(
-    "xpu3",
-    source=(
-        "\n"
-        "typedef long long I64;\n"
-        "typedef I64 __attribute__((address_space(1))) GI64;\n"
-        'extern "C" __attribute__((device)) void raw_gather8(const GI64 *src, const GI64 *lens,\n'
-        "GI64 *out, int n, int stride, int base, int block) {\n"
-        "    I64 lengths[8];\n"
-        "    I64 tokens[256];\n"
-        "    I64 result[8];\n"
-        "    int limit = base + block < n ? base + block : n;\n"
-        "    int core = __builtin_xpu_core_id();\n"
-        "    for (int row = base + core * 8; row < limit; row += 64 * 8) {\n"
-        "        int count = limit - row < 8 ? limit - row : 8;\n"
-        "        __builtin_xpu_gm2lm_v3(lengths, lens + row, 0, count * 8);\n"
-        "        __builtin_xpu_gm2lm_v3(tokens, src + (I64)row * stride, 0, count * stride * 8);\n"
-        "        __builtin_xpu2_mfence(5);\n"
-        "        for (int i = 0; i < count; ++i) result[i] = tokens[i * stride + lengths[i] - 1];\n"
-        "        __builtin_xpu_lm2gm_v3(out + row, result, 0, count * 8);\n"
-        "        __builtin_xpu2_mfence(5);\n"
-        "    }\n"
-        "}\n"
-    ),
-)
-def raw_gather8(src, lens, out, n, stride, base, block):
+def _raw_gather8(src, lens, out, n, stride, base, block):
     pass
 
 
-@triton.jit
-def _raw8(src, lens, out, N: tl.constexpr, S: tl.constexpr, B: tl.constexpr):
-    tle.raw.call(
-        raw_gather8,
-        (
-            src,
-            lens,
-            out,
-            tl.full((), N, tl.int32),
-            tl.full((), S, tl.int32),
-            tl.program_id(0) * B,
-            tl.full((), B, tl.int32),
-        ),
-    )
+raw_gather = _bind_xpu3(_RAW_GATHER_SOURCE, _raw_gather)
+raw_gather8 = _bind_xpu3(_RAW_GATHER8_SOURCE, _raw_gather8)
+HAS_RAW = raw_gather is not None and raw_gather8 is not None
+
+
+if HAS_RAW:
+
+    @triton.jit
+    def _raw(
+        src, lens, out, N: tl.constexpr, S: tl.constexpr, B: tl.constexpr
+    ):
+        tle.raw.call(
+            raw_gather,
+            (
+                src,
+                lens,
+                out,
+                tl.full((), N, tl.int32),
+                tl.full((), S, tl.int32),
+                tl.program_id(0) * B,
+                tl.full((), B, tl.int32),
+            ),
+        )
+
+    @triton.jit
+    def _raw8(
+        src, lens, out, N: tl.constexpr, S: tl.constexpr, B: tl.constexpr
+    ):
+        tle.raw.call(
+            raw_gather8,
+            (
+                src,
+                lens,
+                out,
+                tl.full((), N, tl.int32),
+                tl.full((), S, tl.int32),
+                tl.program_id(0) * B,
+                tl.full((), B, tl.int32),
+            ),
+        )
 
 
 def fill_bonus_tokens(accept_tokens, accept_lens, bonus_tokens, accept_stride):
@@ -153,7 +182,8 @@ def fill_bonus_tokens(accept_tokens, accept_lens, bonus_tokens, accept_stride):
     block = 32 if n <= 32 else 128 if n <= 256 else 256 if n <= 2048 else 512
     full = n >= 256 and n % block == 0 and n * stride < 2147483648
     use_raw = (
-        src.dtype == torch.int64
+        HAS_RAW
+        and src.dtype == torch.int64
         and lens.dtype == torch.int64
         and out.dtype == torch.int64
         and 0 < stride <= 128

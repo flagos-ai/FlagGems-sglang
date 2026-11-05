@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(bs, 64, 16384) for bs in (1, 8, 32)]
@@ -27,21 +28,49 @@ MORE_SHAPES = [(bs, 64, 16384) for bs in (128,)]
 
 
 def _input_fn(shape, cur_dtype, device):
-    bs, block_size, max_len = shape
+    bs, page_size, max_len = shape
+    max_batch, max_context = 256, 131072
     g = torch.Generator(device=device).manual_seed(0)
-    num_blocks_per_seq = (max_len + block_size - 1) // block_size
-    seq_lens = torch.randint(
-        1, max_len + 1, (bs,), dtype=torch.int32, device=device, generator=g
-    )
-    block_tables = torch.randint(
+    req_to_token = torch.randint(
         0,
-        10000,
-        (bs, num_blocks_per_seq),
+        1 << 22,
+        (max_batch, max_context),
         dtype=torch.int32,
         device=device,
         generator=g,
     )
-    yield seq_lens, block_tables, {"block_size": block_size}
+    # torch_gcu randperm hangs on-device; generate on CPU then move.
+    req_pool_indices = (
+        torch.randperm(
+            max_batch, generator=torch.Generator(device="cpu").manual_seed(0)
+        )[:bs]
+        .to(torch.int32)
+        .to(device)
+    )
+    cache_seqlens = torch.randint(
+        1, max_len + 1, (bs,), dtype=torch.int32, device=device, generator=g
+    )
+    width = (max_len + page_size - 1) // page_size
+    page_table = torch.zeros(bs, width, dtype=torch.int32, device=device)
+    yield req_to_token, req_pool_indices, cache_seqlens, page_table, page_size
+
+
+def _case_fn(shape, cur_dtype):
+    (bs, block_size, max_len) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "seq_lens": (bs,),
+            "block_tables": (bs, (max_len + block_size - 1) // block_size),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "bs": bs,
+            "block_size": block_size,
+            "max_len": max_len,
+        },
+        builder_args=(shape,),
+    )
 
 
 @pytest.mark.build_trtllm_mha_page_table
@@ -49,11 +78,12 @@ def test_perf_build_trtllm_mha_page_table():
     bench = OpBenchmark(
         op_name="build_trtllm_mha_page_table",
         torch_op=get_reference("build_trtllm_mha_page_table"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
-        shape_desc="bs, block_size, max_len",
+        shape_desc="bs, page_size, max_len",
     )
-    bench.set_gems(flaggems_sglang.build_trtllm_mha_page_table)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

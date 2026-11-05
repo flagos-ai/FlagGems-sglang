@@ -224,6 +224,17 @@ class DynamicOpOverride:
         """Return list of currently overridden operator names."""
         return list(self._overrides.keys())
 
+    def get_override(
+        self, op_name: str, module_name: str = DEFAULT_MODULE
+    ) -> Optional[Callable]:
+        """Return the active candidate, including its call-tracking wrapper.
+
+        Runners resolve at invocation time so an operator does not need an
+        existing public export and later replacements take effect immediately.
+        Restored and unknown operators return ``None``.
+        """
+        return self._overrides.get(f"{module_name}.{op_name}")
+
     def load_impl_from_file(
         self, filepath: str, func_name: str
     ) -> Optional[Callable]:

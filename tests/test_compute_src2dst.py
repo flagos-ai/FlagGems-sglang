@@ -17,6 +17,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -99,13 +100,13 @@ def test_compute_src2dst(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import compute_src2dst
+        candidate = get_candidate("compute_src2dst", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/compute_src2dst ops module not found")
         return
 
     try:
-        actual = compute_src2dst(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/compute_src2dst not yet implemented")
         return

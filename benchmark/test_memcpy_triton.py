@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/memcpy_triton.
@@ -38,16 +39,36 @@ def _input_fn(shape, cur_dtype, device):
     yield dst, src, 0, offset, sz, True
 
 
+def _case_fn(shape, cur_dtype):
+    (rows, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "dst": (rows, hidden),
+            "src": (rows, hidden),
+            "offset": (1,),
+            "sz": (1,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "rows": rows,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.memcpy_triton
 def test_perf_memcpy_triton():
     bench = OpBenchmark(
         op_name="memcpy_triton",
         torch_op=get_reference("memcpy_triton"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="rows, hidden",
     )
-    bench.set_gems(flaggems_sglang.memcpy_triton)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

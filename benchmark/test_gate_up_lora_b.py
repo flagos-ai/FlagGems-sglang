@@ -21,7 +21,8 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
-from .op_benchmark import OpBenchmark
+from .cases import BenchmarkCasePlan, single_input_builder
+from .op_benchmark import OpBenchmark, is_case_listing
 
 # Shapes match kernel-comp-baseline/problems/lora/gate_up_lora_b. The first
 # entry is the per-segment token count.
@@ -71,16 +72,51 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (seg_lens, num_lora, r, output_dim, permutation) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (sum(seg_lens), 2 * r),
+            "weights": (num_lora, 2 * output_dim, r),
+            "base_output": (sum(seg_lens), 2 * output_dim),
+            "batch_info.seg_indptr": (len(seg_lens) + 1,),
+            "batch_info.seg_lens": (len(seg_lens),),
+            "batch_info.weight_indices": (len(seg_lens),),
+            "batch_info.lora_ranks": (num_lora,),
+            "batch_info.scalings": (num_lora,),
+            "batch_info.permutation": (
+                (sum(seg_lens),) if permutation != "none" else None
+            ),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "permutation_rng": (
+                "global_torch_rng" if permutation == "shuffled" else None
+            ),
+            "seg_lens": seg_lens,
+            "num_lora": num_lora,
+            "r": r,
+            "output_dim": output_dim,
+            "permutation": permutation,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.gate_up_lora_b
 def test_perf_gate_up_lora_b():
     # This op has a reference but no Triton implementation yet.
-    gems_op = flaggems_sglang.get_op("gate_up_lora_b")
-    if gems_op is None:
-        pytest.skip("lora/gate_up_lora_b not implemented yet")
+    gems_op = None
+    if not is_case_listing():
+        gems_op = flaggems_sglang.get_op("gate_up_lora_b")
+        if gems_op is None:
+            pytest.skip("lora/gate_up_lora_b not implemented yet")
     bench = OpBenchmark(
         op_name="gate_up_lora_b",
         torch_op=get_reference("gate_up_lora_b"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/kvcache/store_cache_4d.
@@ -57,16 +58,40 @@ def _input_fn(shape, cur_dtype, device):
     yield k_view, v_view, cache_k, cache_v, loc, _PAGE_SIZE
 
 
+def _case_fn(shape, cur_dtype):
+    (n, head_num, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "k_view": (_NUM_PAGES, _PAGE_SIZE, head_num, head_dim),
+            "v_view": (_NUM_PAGES, _PAGE_SIZE, head_num, head_dim),
+            "cache_k": (n, head_num, head_dim),
+            "cache_v": (n, head_num, head_dim),
+            "loc": (n,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_NUM_PAGES": _NUM_PAGES,
+            "_PAGE_SIZE": _PAGE_SIZE,
+            "n": n,
+            "head_num": head_num,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.store_cache_4d
 def test_perf_store_cache_4d():
     bench = OpBenchmark(
         op_name="store_cache_4d",
         torch_op=get_reference("store_cache_4d"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="n, head_num, head_dim",
     )
-    bench.set_gems(flaggems_sglang.store_cache_4d)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

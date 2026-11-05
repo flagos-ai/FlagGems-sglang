@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -124,13 +125,13 @@ def test_fixup_zero_kv(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fixup_zero_kv
+        candidate = get_candidate("fixup_zero_kv", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/fixup_zero_kv ops module not found")
         return
 
     try:
-        actual = fixup_zero_kv(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/fixup_zero_kv not yet implemented")
         return

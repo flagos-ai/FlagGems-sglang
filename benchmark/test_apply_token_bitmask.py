@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match
@@ -44,17 +45,27 @@ def _input_fn(shape, cur_dtype, device):
     yield logits, bitmask
 
 
+def _case_fn(shape, cur_dtype):
+    (B, V) = shape
+    yield BenchmarkCasePlan(
+        shape={"logits": (B, V), "bitmask": (B, (V + 31) // 32)},
+        params={"configuration": shape, "seed": 0, "B": B, "V": V},
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.apply_token_bitmask
 def test_perf_apply_token_bitmask():
     bench = OpBenchmark(
         op_name="apply_token_bitmask",
         torch_op=get_reference("apply_token_bitmask"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         # The op masks logits in place of a softmax, so it runs in fp32.
         dtypes=[torch.float32],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="B, V",
     )
-    bench.set_gems(flaggems_sglang.apply_token_bitmask)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -133,13 +134,13 @@ def test_mamba_layernorm_gated(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import mamba_layernorm_gated
+        candidate = get_candidate("mamba_layernorm_gated", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/layernorm_gated ops module not found")
         return
 
     try:
-        actual = mamba_layernorm_gated(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/layernorm_gated not yet implemented")
         return

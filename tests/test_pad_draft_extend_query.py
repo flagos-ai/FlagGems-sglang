@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -124,13 +125,15 @@ def test_pad_draft_extend_query(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import pad_draft_extend_query
+        candidate = get_candidate(
+            "pad_draft_extend_query", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/pad_draft_extend_query ops module not found")
         return
 
     try:
-        actual = pad_draft_extend_query(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/pad_draft_extend_query not yet implemented")
         return

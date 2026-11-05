@@ -17,6 +17,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -122,13 +123,13 @@ def test_deepep_permute(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import deepep_permute
+        candidate = get_candidate("deepep_permute", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/deepep_permute ops module not found")
         return
 
     try:
-        actual = deepep_permute(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/deepep_permute not yet implemented")
         return

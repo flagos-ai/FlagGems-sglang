@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -131,13 +132,13 @@ def test_get_target_cache_loc(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import get_target_cache_loc
+        candidate = get_candidate("get_target_cache_loc", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/get_target_cache_loc ops module not found")
         return
 
     try:
-        actual = get_target_cache_loc(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/get_target_cache_loc not yet implemented")
         return

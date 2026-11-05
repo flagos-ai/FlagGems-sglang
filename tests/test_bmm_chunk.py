@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -154,13 +155,13 @@ def test_bmm_chunk(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import bmm_chunk
+        candidate = get_candidate("bmm_chunk", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/bmm_chunk ops module not found")
         return
 
     try:
-        actual = bmm_chunk(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/bmm_chunk not yet implemented")
         return

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/moe_align_block_size.
@@ -68,16 +69,47 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, top_k, num_experts, block_size) = shape
+    numel = num_tokens * top_k
+    max_padded = (
+        numel * block_size
+        if numel < num_experts + 2
+        else numel + (num_experts + 2) * (block_size - 1)
+    )
+    yield BenchmarkCasePlan(
+        shape={
+            "topk_ids": (num_tokens, top_k),
+            "sorted_token_ids": (max_padded,),
+            "expert_ids": ((max_padded + block_size - 1) // block_size,),
+            "num_tokens_post_pad": (1,),
+            "cumsum_buffer": (num_experts + 2,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "top_k": top_k,
+            "num_experts": num_experts,
+            "block_size": block_size,
+            "numel": numel,
+            "max_padded": max_padded,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.moe_align_block_size
 def test_perf_moe_align_block_size():
     bench = OpBenchmark(
         op_name="moe_align_block_size",
         torch_op=get_reference("moe_align_block_size"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, top_k, num_experts, block_size",
     )
-    bench.set_gems(flaggems_sglang.moe_align_block_size)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

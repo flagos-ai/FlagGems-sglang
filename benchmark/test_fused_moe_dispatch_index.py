@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(t, 8, 32, 8192) for t in (1, 8, 64, 512)]
@@ -27,20 +28,36 @@ MORE_SHAPES = [(t, 8, 32, 8192) for t in (4096,)]
 
 
 def _input_fn(shape, cur_dtype, device):
-    total_tokens, topk, num_experts, hidden = shape
+    total_tokens, topk, num_local_experts, m_max = shape
     g = torch.Generator(device=device).manual_seed(0)
-    expert_ids = torch.randint(
+    topk_ids = torch.randint(
         0,
-        num_experts,
+        num_local_experts,
         (total_tokens, topk),
-        dtype=torch.int64,
+        dtype=torch.int32,
         device=device,
         generator=g,
     )
-    num_tokens_post_pad = torch.full(
-        (num_experts,), total_tokens, dtype=torch.int64, device=device
+    yield topk_ids, num_local_experts, m_max
+
+
+def _case_fn(shape, cur_dtype):
+    (total_tokens, topk, num_experts, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "expert_ids": (total_tokens, topk),
+            "num_tokens_post_pad": (num_experts,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "total_tokens": total_tokens,
+            "topk": topk,
+            "num_experts": num_experts,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
     )
-    yield expert_ids, num_tokens_post_pad
 
 
 @pytest.mark.fused_moe_dispatch_index
@@ -48,11 +65,12 @@ def test_perf_fused_moe_dispatch_index():
     bench = OpBenchmark(
         op_name="fused_moe_dispatch_index",
         torch_op=get_reference("fused_moe_dispatch_index"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
-        shape_desc="total_tokens, topk, num_experts, hidden",
+        shape_desc="total_tokens, topk, num_local_experts, m_max",
     )
-    bench.set_gems(flaggems_sglang.fused_moe_dispatch_index)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

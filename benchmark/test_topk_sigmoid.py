@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/topk_sigmoid.
@@ -44,16 +45,36 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, num_experts, k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "topk_weights": (num_tokens, k),
+            "topk_ids": (num_tokens, k),
+            "gating": (num_tokens, num_experts),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "num_experts": num_experts,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.topk_sigmoid
 def test_perf_topk_sigmoid():
     bench = OpBenchmark(
         op_name="topk_sigmoid",
         torch_op=get_reference("topk_sigmoid"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, num_experts, k",
     )
-    bench.set_gems(flaggems_sglang.topk_sigmoid)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

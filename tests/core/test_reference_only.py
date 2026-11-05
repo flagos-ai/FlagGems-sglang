@@ -428,8 +428,10 @@ def test_reference_only_defaults_to_core_without_changing_normal_defaults(
     if level is not None:
         argv.extend(["--level", level])
     options = parser.parse(argv)
+    cleanups = []
     config = SimpleNamespace(
         option=options,
+        add_cleanup=cleanups.append,
         addinivalue_line=lambda *a: None,
         getini=lambda _: [],
         getoption=lambda key: getattr(
@@ -443,3 +445,5 @@ def test_reference_only_defaults_to_core_without_changing_normal_defaults(
     assert conftest.Config.bench_level.value == (
         level or ("core" if reference_only else "comprehensive")
     )
+    for cleanup in reversed(cleanups):
+        cleanup()

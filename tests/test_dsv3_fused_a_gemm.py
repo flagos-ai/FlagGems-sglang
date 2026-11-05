@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -105,13 +106,13 @@ def test_dsv3_fused_a_gemm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import dsv3_fused_a_gemm
+        candidate = get_candidate("dsv3_fused_a_gemm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("gemm/dsv3_fused_a_gemm ops module not found")
         return
 
     try:
-        actual = dsv3_fused_a_gemm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("gemm/dsv3_fused_a_gemm not yet implemented")
         return

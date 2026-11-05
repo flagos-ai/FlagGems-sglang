@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -115,13 +116,13 @@ def test_fused_eh_norm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_eh_norm
+        candidate = get_candidate("fused_eh_norm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/fused_eh_norm ops module not found")
         return
 
     try:
-        actual = fused_eh_norm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/fused_eh_norm not yet implemented")
         return

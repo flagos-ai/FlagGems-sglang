@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -150,13 +151,13 @@ def test_draft_topk1(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import draft_topk1
+        candidate = get_candidate("draft_topk1", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/draft_topk1 ops module not found")
         return
 
     try:
-        actual = draft_topk1(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/draft_topk1 not yet implemented")
         return

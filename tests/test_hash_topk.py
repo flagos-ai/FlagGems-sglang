@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -136,13 +137,13 @@ def test_hash_topk(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import hash_topk
+        candidate = get_candidate("hash_topk", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/hash_topk ops module not found")
         return
 
     try:
-        actual = hash_topk(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/hash_topk not yet implemented")
         return

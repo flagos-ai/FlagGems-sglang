@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [(n,) for n in (1, 8, 64, 512)]
@@ -28,13 +29,29 @@ MORE_SHAPES = [(n,) for n in (4096,)]
 
 def _input_fn(shape, cur_dtype, device):
     (n,) = shape
-    max_q = 16
+    max_q = 8
     g = torch.Generator(device=device).manual_seed(0)
-    cu_seqlens_q = torch.zeros(n + 1, dtype=torch.int32, device=device)
-    cu_seqlens_q[1:] = torch.randint(
+    extend_seq_lens = torch.randint(
         1, max_q + 1, (n,), dtype=torch.int32, device=device, generator=g
-    ).cumsum(0)
-    yield (cu_seqlens_q,)
+    )
+    seq_lens = torch.randint(
+        1, 8192, (n,), dtype=torch.int32, device=device, generator=g
+    )
+    yield (
+        extend_seq_lens,
+        seq_lens,
+        int(extend_seq_lens.sum()),
+        int(extend_seq_lens.max()),
+    )
+
+
+def _case_fn(shape, cur_dtype):
+    (n,) = shape
+    yield BenchmarkCasePlan(
+        shape={"cu_seqlens_q": (n + 1,)},
+        params={"configuration": shape, "seed": 0, "n": n},
+        builder_args=(shape,),
+    )
 
 
 @pytest.mark.seqlens_expand
@@ -42,11 +59,12 @@ def test_perf_seqlens_expand():
     bench = OpBenchmark(
         op_name="seqlens_expand",
         torch_op=get_reference("seqlens_expand"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="n",
     )
-    bench.set_gems(flaggems_sglang.seqlens_expand)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

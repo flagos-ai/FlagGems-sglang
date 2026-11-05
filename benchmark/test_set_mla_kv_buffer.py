@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/kvcache/set_mla_kv_buffer.
@@ -52,16 +53,38 @@ def _input_fn(shape, cur_dtype, device):
     yield kv_buffer, loc, nope, rope
 
 
+def _case_fn(shape, cur_dtype):
+    (n_loc, nope_dim, rope_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "kv_buffer": (_NUM_SLOTS, nope_dim + rope_dim),
+            "loc": (n_loc,),
+            "nope": (n_loc, nope_dim),
+            "rope": (n_loc, rope_dim),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_NUM_SLOTS": _NUM_SLOTS,
+            "n_loc": n_loc,
+            "nope_dim": nope_dim,
+            "rope_dim": rope_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.set_mla_kv_buffer
 def test_perf_set_mla_kv_buffer():
     bench = OpBenchmark(
         op_name="set_mla_kv_buffer",
         torch_op=get_reference("set_mla_kv_buffer"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="n_loc, nope_dim, rope_dim",
     )
-    bench.set_gems(flaggems_sglang.set_mla_kv_buffer)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

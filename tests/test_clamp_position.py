@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -106,13 +107,13 @@ def test_clamp_position(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import clamp_position
+        candidate = get_candidate("clamp_position", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/clamp_position ops module not found")
         return
 
     try:
-        actual = clamp_position(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/clamp_position not yet implemented")
         return

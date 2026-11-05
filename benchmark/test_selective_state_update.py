@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/selective_state_update.
@@ -106,12 +107,54 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (
+        batch,
+        nheads,
+        dim,
+        dstate,
+        ngroups,
+        has_z,
+        has_d,
+        has_dt_bias,
+        dt_softplus,
+    ) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "state": (batch, nheads, dim, dstate),
+            "x": (batch, nheads, dim),
+            "dt": (batch, nheads, dim),
+            "a": (nheads, dim, dstate),
+            "b": (batch, ngroups, dstate),
+            "c": (batch, ngroups, dstate),
+            "D": (nheads, dim) if has_d else None,
+            "z": (batch, nheads, dim) if has_z else None,
+            "dt_bias": (nheads, dim) if has_dt_bias else None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "nheads": nheads,
+            "dim": dim,
+            "dstate": dstate,
+            "ngroups": ngroups,
+            "has_z": has_z,
+            "has_d": has_d,
+            "has_dt_bias": has_dt_bias,
+            "dt_softplus": dt_softplus,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.selective_state_update
 def test_perf_selective_state_update():
     bench = OpBenchmark(
         op_name="selective_state_update",
         torch_op=get_reference("selective_state_update"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
@@ -120,5 +163,5 @@ def test_perf_selective_state_update():
             "has_z, has_d, has_dt_bias, dt_softplus"
         ),
     )
-    bench.set_gems(flaggems_sglang.selective_state_update)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

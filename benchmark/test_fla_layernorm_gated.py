@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/layernorm_gated.
@@ -59,16 +60,40 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (t, d, activation, is_rms_norm, has_bias) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (t, d),
+            "gate": (t, d),
+            "weight": (d,),
+            "bias": (d,) if has_bias else None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "_EPS": _EPS,
+            "t": t,
+            "d": d,
+            "activation": activation,
+            "is_rms_norm": is_rms_norm,
+            "has_bias": has_bias,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fla_layernorm_gated
 def test_perf_fla_layernorm_gated():
     bench = OpBenchmark(
         op_name="fla_layernorm_gated",
         torch_op=get_reference("fla_layernorm_gated"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="t, d, activation, is_rms_norm, has_bias",
     )
-    bench.set_gems(flaggems_sglang.fla_layernorm_gated)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

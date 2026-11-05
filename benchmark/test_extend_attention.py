@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/extend_attention.
@@ -119,16 +120,43 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (B, n_ctx, H_Q, H_KV, D) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q_extend": ("sum(b_seq_len_extend)", H_Q, D),
+            "k_extend": ("sum(b_seq_len_extend)", H_KV, D),
+            "v_extend": ("sum(b_seq_len_extend)", H_KV, D),
+            "k_buffer": ("sum(b_seq_len_prefix + b_seq_len_extend)", H_KV, D),
+            "v_buffer": ("sum(b_seq_len_prefix + b_seq_len_extend)", H_KV, D),
+            "qo_indptr": (B + 1,),
+            "kv_indptr": (B + 1,),
+            "kv_indices": ("sum(b_seq_len_prefix)",),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "B": B,
+            "n_ctx": n_ctx,
+            "H_Q": H_Q,
+            "H_KV": H_KV,
+            "D": D,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.extend_attention
 def test_perf_extend_attention():
     bench = OpBenchmark(
         op_name="extend_attention",
         torch_op=get_reference("extend_attention"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="B, n_ctx, H_Q, H_KV, D",
     )
-    bench.set_gems(flaggems_sglang.extend_attention)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

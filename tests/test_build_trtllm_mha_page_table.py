@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -135,13 +136,15 @@ def test_build_trtllm_mha_page_table(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import build_trtllm_mha_page_table
+        candidate = get_candidate(
+            "build_trtllm_mha_page_table", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("kvcache/build_trtllm_mha_page_table ops module not found")
         return
 
     try:
-        actual = build_trtllm_mha_page_table(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("kvcache/build_trtllm_mha_page_table not yet implemented")
         return

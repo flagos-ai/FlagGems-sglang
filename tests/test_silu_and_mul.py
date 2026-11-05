@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -105,23 +106,20 @@ def test_silu_and_mul(case_idx):
     )
     kwargs = case if isinstance(case, dict) else {}
 
-    # Reference
     expected = reference(**kwargs)
 
-    # Operator under test
     try:
-        from flaggems_sglang import silu_and_mul
+        candidate = get_candidate("silu_and_mul", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/silu_and_mul ops module not found")
         return
 
     try:
-        actual = silu_and_mul(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/silu_and_mul not yet implemented")
         return
 
-    # Compare
     if check is not None:
         check(actual, expected)
     elif isinstance(expected, torch.Tensor):
@@ -130,6 +128,5 @@ def test_silu_and_mul(case_idx):
         for a, e in zip(actual, expected):
             if isinstance(e, torch.Tensor):
                 assert_close(a, e)
-    # Restore check for reuse
     if check is not None:
         case["check"] = check

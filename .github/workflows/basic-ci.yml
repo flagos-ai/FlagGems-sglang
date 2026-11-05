@@ -16,9 +16,9 @@ name: basic ci
 
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "kernelgen-dev"]
   pull_request:
-    branches: ["master"]
+    branches: ["master", "kernelgen-dev"]
   workflow_dispatch:
 
 jobs:
@@ -58,6 +58,10 @@ jobs:
         shell: bash
         run: python -m pip install pre-commit pre-commit-hooks==4.6.0 black==24.8.0 flake8==7.1.0 isort==5.12.0
 
+      - name: test branch sync automation
+        shell: bash
+        run: python -m unittest discover -s tools/tests -p 'test_sync_kernelgen_dev.py' -v
+
       - name: run pre-commit
         shell: bash
         run: pre-commit run --all-files --show-diff-on-failure
@@ -83,7 +87,9 @@ jobs:
   select-targets:
     name: select ci targets
     needs: code-style
-    runs-on: h20
+    # Selection only reads Git metadata and uses Python's standard library.
+    # Reserve the H20 runner for the actual device tests below.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
       mode: ${{ steps.select.outputs.mode }}

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -108,7 +109,9 @@ def test_fused_gate_sigmoid_mul_add(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_gate_sigmoid_mul_add
+        candidate = get_candidate(
+            "fused_gate_sigmoid_mul_add", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "activation_norm/fused_gate_sigmoid_mul_add ops module not found"
@@ -116,7 +119,7 @@ def test_fused_gate_sigmoid_mul_add(case_idx):
         return
 
     try:
-        actual = fused_gate_sigmoid_mul_add(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "activation_norm/fused_gate_sigmoid_mul_add not yet implemented"

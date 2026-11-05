@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -121,7 +122,9 @@ def test_fill_accept_out_cache_loc(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fill_accept_out_cache_loc
+        candidate = get_candidate(
+            "fill_accept_out_cache_loc", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "speculative/fill_accept_out_cache_loc ops module not found"
@@ -129,7 +132,7 @@ def test_fill_accept_out_cache_loc(case_idx):
         return
 
     try:
-        actual = fill_accept_out_cache_loc(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "speculative/fill_accept_out_cache_loc not yet implemented"

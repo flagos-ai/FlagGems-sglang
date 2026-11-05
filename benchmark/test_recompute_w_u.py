@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/recompute_w_u.
@@ -44,16 +45,43 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (b, t, h, hg, k_dim, v_dim, bt) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "k": (b, t, hg, k_dim),
+            "v": (b, t, h, v_dim),
+            "beta": (b, t, h),
+            "g": (b, t, h),
+            "A": (b, t, h, bt),
+            "cu_seqlens": None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "b": b,
+            "t": t,
+            "h": h,
+            "hg": hg,
+            "k_dim": k_dim,
+            "v_dim": v_dim,
+            "bt": bt,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.recompute_w_u
 def test_perf_recompute_w_u():
     bench = OpBenchmark(
         op_name="recompute_w_u",
         torch_op=get_reference("recompute_w_u"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="b, t, h, hg, k_dim, v_dim, bt",
     )
-    bench.set_gems(flaggems_sglang.recompute_w_u)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

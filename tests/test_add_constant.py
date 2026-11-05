@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -107,13 +108,13 @@ def test_add_constant(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import add_constant
+        candidate = get_candidate("add_constant", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("elementwise/add_constant ops module not found")
         return
 
     try:
-        actual = add_constant(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("elementwise/add_constant not yet implemented")
         return

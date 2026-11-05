@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/assign_draft_cache_locs_contiguous.
@@ -61,16 +62,39 @@ def _input_fn(shape, cur_dtype, device):
     yield req_pool_indices, req_to_token, seq_lens, out_cache_loc, topk, steps
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, topk, steps) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "req_pool_indices": (min(bs, _MAX_BATCH),),
+            "req_to_token": (_MAX_BATCH, _POOL_LEN),
+            "seq_lens": (bs,),
+            "out_cache_loc": (bs * topk * steps,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_MAX_BATCH": _MAX_BATCH,
+            "_POOL_LEN": _POOL_LEN,
+            "bs": bs,
+            "topk": topk,
+            "steps": steps,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.assign_draft_cache_locs_contiguous
 def test_perf_assign_draft_cache_locs_contiguous():
     bench = OpBenchmark(
         op_name="assign_draft_cache_locs_contiguous",
         torch_op=get_reference("assign_draft_cache_locs_contiguous"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, topk, steps",
     )
-    bench.set_gems(flaggems_sglang.assign_draft_cache_locs_contiguous)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

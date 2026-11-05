@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/causal_conv1d_fn.
@@ -55,16 +56,38 @@ def _input_fn(shape, cur_dtype, device):
     yield x, weight, bias, query_start_loc, seq_lens
 
 
+def _case_fn(shape, cur_dtype):
+    (num_seqs, seq_len, dim, width) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (dim, num_seqs * seq_len),
+            "weight": (dim, width),
+            "bias": (dim,),
+            "query_start_loc": (num_seqs + 1,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "num_seqs": num_seqs,
+            "seq_len": seq_len,
+            "dim": dim,
+            "width": width,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.causal_conv1d_fn
 def test_perf_causal_conv1d_fn():
     bench = OpBenchmark(
         op_name="causal_conv1d_fn",
         torch_op=get_reference("causal_conv1d_fn"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_seqs, seq_len, dim, width",
     )
-    bench.set_gems(flaggems_sglang.causal_conv1d_fn)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

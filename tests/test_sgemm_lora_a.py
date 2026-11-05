@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -128,13 +129,13 @@ def test_sgemm_lora_a(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import sgemm_lora_a
+        candidate = get_candidate("sgemm_lora_a", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/sgemm_lora_a ops module not found")
         return
 
     try:
-        actual = sgemm_lora_a(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("lora/sgemm_lora_a not yet implemented")
         return

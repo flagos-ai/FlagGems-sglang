@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -118,13 +119,15 @@ def test_chunk_local_cumsum_scalar(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import chunk_local_cumsum_scalar
+        candidate = get_candidate(
+            "chunk_local_cumsum_scalar", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/chunk_local_cumsum_scalar ops module not found")
         return
 
     try:
-        actual = chunk_local_cumsum_scalar(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("fla/chunk_local_cumsum_scalar not yet implemented")
         return

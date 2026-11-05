@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/merge_state.
@@ -56,16 +57,37 @@ def _input_fn(shape, cur_dtype, device):
     yield prefix_output, prefix_lse, suffix_output, suffix_lse
 
 
+def _case_fn(shape, cur_dtype):
+    (n_tokens, num_heads, head_size) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "prefix_output": (n_tokens, num_heads, head_size),
+            "prefix_lse": (n_tokens, num_heads),
+            "suffix_output": (n_tokens, num_heads, head_size),
+            "suffix_lse": (n_tokens, num_heads),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "n_tokens": n_tokens,
+            "num_heads": num_heads,
+            "head_size": head_size,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.merge_state
 def test_perf_merge_state():
     bench = OpBenchmark(
         op_name="merge_state",
         torch_op=get_reference("merge_state"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="n_tokens, num_heads, head_size",
     )
-    bench.set_gems(flaggems_sglang.merge_state)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

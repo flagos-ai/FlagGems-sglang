@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/lora/chunked_embedding_lora_a.
@@ -68,16 +69,45 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (seg_len, num_segs, num_lora, r, vocab_size) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "input_ids": (seg_len * num_segs,),
+            "weights": (num_lora, r, vocab_size),
+            "batch_info.seg_indptr": (num_segs + 1,),
+            "batch_info.seg_lens": (num_segs,),
+            "batch_info.weight_indices": (num_segs,),
+            "batch_info.lora_ranks": (num_lora,),
+            "batch_info.scalings": (num_lora,),
+            "batch_info.permutation": (
+                (seg_len * num_segs,) if "identity" != "none" else None
+            ),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "seg_len": seg_len,
+            "num_segs": num_segs,
+            "num_lora": num_lora,
+            "r": r,
+            "vocab_size": vocab_size,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunked_embedding_lora_a
 def test_perf_chunked_embedding_lora_a():
     bench = OpBenchmark(
         op_name="chunked_embedding_lora_a",
         torch_op=get_reference("chunked_embedding_lora_a"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="seg_len, num_segs, num_lora, r, vocab_size",
     )
-    bench.set_gems(flaggems_sglang.chunked_embedding_lora_a)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/log_scaling_tau.
@@ -43,16 +44,30 @@ def _input_fn(shape, cur_dtype, device):
     yield x, tau
 
 
+def _case_fn(shape, cur_dtype):
+    yield BenchmarkCasePlan(
+        shape={
+            "x": tuple(
+                d for i, d in enumerate(shape) if not (i == 1 and d == 1)
+            ),
+            "tau": (shape[0],),
+        },
+        params={"configuration": shape, "seed": 0},
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.log_scaling_tau
 def test_perf_log_scaling_tau():
     bench = OpBenchmark(
         op_name="log_scaling_tau",
         torch_op=get_reference("log_scaling_tau"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.float16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="t, heads, d",
     )
-    bench.set_gems(flaggems_sglang.log_scaling_tau)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -137,13 +138,15 @@ def test_vocab_parallel_embedding(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import vocab_parallel_embedding
+        candidate = get_candidate(
+            "vocab_parallel_embedding", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("utility/vocab_parallel_embedding ops module not found")
         return
 
     try:
-        actual = vocab_parallel_embedding(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("utility/vocab_parallel_embedding not yet implemented")
         return

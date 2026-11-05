@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/linear_decode_forward.
@@ -54,16 +55,40 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (b, h, d) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (b, h, 1, d),
+            "k": (b, h, 1, d),
+            "v": (b, h, 1, d),
+            "state": (b + 2, h, d, d),
+            "slope": (h,),
+            "slot_idx": (b,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_BLOCK_SIZE": _BLOCK_SIZE,
+            "b": b,
+            "h": h,
+            "d": d,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.linear_decode_forward
 def test_perf_linear_decode_forward():
     bench = OpBenchmark(
         op_name="linear_decode_forward",
         torch_op=get_reference("linear_decode_forward"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.float32],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="b, h, d",
     )
-    bench.set_gems(flaggems_sglang.linear_decode_forward)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

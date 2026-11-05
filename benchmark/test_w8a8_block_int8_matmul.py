@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match
@@ -69,16 +70,38 @@ def _input_fn(shape, cur_dtype, device):
     yield A, B, As, Bs, _BLOCK, cur_dtype
 
 
+def _case_fn(shape, cur_dtype):
+    (m, n, k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "A": (m, k),
+            "B": (n, k),
+            "As": (m, k // _BLOCK[1]),
+            "Bs": (n // _BLOCK[0], k // _BLOCK[1]),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "_BLOCK": _BLOCK,
+            "m": m,
+            "n": n,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.w8a8_block_int8_matmul
 def test_perf_w8a8_block_int8_matmul():
     bench = OpBenchmark(
         op_name="w8a8_block_int8_matmul",
         torch_op=get_reference("w8a8_block_int8_matmul"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, n, k",
     )
-    bench.set_gems(flaggems_sglang.w8a8_block_int8_matmul)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

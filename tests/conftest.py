@@ -27,7 +27,8 @@ import yaml
 import flaggems_sglang
 from flaggems_sglang.cli_override import (
     add_override_arguments,
-    apply_overrides_from_args,
+    cleanup_overrides,
+    configure_overrides,
 )
 
 BUILTIN_MARKS = {
@@ -142,13 +143,12 @@ def pytest_configure(config):
         )
 
     # Apply dynamic operator overrides
-    config._override_registry = apply_overrides_from_args(config.option)
+    configure_overrides(config)
 
 
 def pytest_unconfigure(config):
     """Cleanup: restore all overridden operators."""
-    if hasattr(config, "_override_registry"):
-        config._override_registry.restore_all()
+    cleanup_overrides(config)
 
 
 def pytest_runtest_teardown(item, nextitem):
@@ -214,6 +214,8 @@ def pytest_runtest_logreport(report):
     result = TEST_RESULTS.setdefault(
         report.nodeid, {"params": None, "result": None, "opname": None}
     )
+    if hasattr(report, "reference_candidate"):
+        result.update(report.reference_candidate)
     if report.when == "setup":
         if report.outcome == "skipped":
             reason = get_reason(report)
@@ -229,6 +231,8 @@ def pytest_runtest_logreport(report):
 
 
 def pytest_terminal_summary(terminalreporter):
+    if getattr(terminalreporter.config, "_dummy_probe", None) is not None:
+        return
     data = TEST_RESULTS
     with open(REPORT_FILE, "a+") as json_file:
         fcntl.flock(json_file, fcntl.LOCK_EX)

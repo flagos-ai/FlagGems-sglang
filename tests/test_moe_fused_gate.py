@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -171,13 +172,13 @@ def test_moe_fused_gate(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import moe_fused_gate
+        candidate = get_candidate("moe_fused_gate", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_fused_gate ops module not found")
         return
 
     try:
-        actual = moe_fused_gate(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/moe_fused_gate not yet implemented")
         return

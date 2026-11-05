@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -112,7 +113,9 @@ def test_softcap_inplace_logits(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import softcap_inplace_logits
+        candidate = get_candidate(
+            "softcap_inplace_logits", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "activation_norm/softcap_inplace_logits ops module not found"
@@ -124,7 +127,7 @@ def test_softcap_inplace_logits(case_idx):
     kwargs = dict(kwargs, full_logits=kwargs["full_logits"].clone())
 
     try:
-        actual = softcap_inplace_logits(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "activation_norm/softcap_inplace_logits not yet implemented"

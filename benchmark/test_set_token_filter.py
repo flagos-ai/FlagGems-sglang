@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/set_token_filter.
@@ -46,16 +47,32 @@ def _input_fn(shape, cur_dtype, device):
     yield vocab_mask, token_ids, batch // 2, True, True
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, vocab, num_tokens) = shape
+    yield BenchmarkCasePlan(
+        shape={"vocab_mask": (batch, (vocab + 31) // 32)},
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "vocab": vocab,
+            "num_tokens": num_tokens,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.set_token_filter
 def test_perf_set_token_filter():
     bench = OpBenchmark(
         op_name="set_token_filter",
         torch_op=get_reference("set_token_filter"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, vocab, num_tokens",
     )
-    bench.set_gems(flaggems_sglang.set_token_filter)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

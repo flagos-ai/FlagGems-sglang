@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -129,13 +130,13 @@ def test_pre_reorder_cutlass(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import pre_reorder_cutlass
+        candidate = get_candidate("pre_reorder_cutlass", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/pre_reorder_cutlass ops module not found")
         return
 
     try:
-        actual = pre_reorder_cutlass(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/pre_reorder_cutlass not yet implemented")
         return

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -128,7 +129,9 @@ def test_assign_draft_cache_locs_contiguous(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import assign_draft_cache_locs_contiguous
+        candidate = get_candidate(
+            "assign_draft_cache_locs_contiguous", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "speculative/assign_draft_cache_locs_contiguous ops module not found"
@@ -136,7 +139,7 @@ def test_assign_draft_cache_locs_contiguous(case_idx):
         return
 
     try:
-        actual = assign_draft_cache_locs_contiguous(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "speculative/assign_draft_cache_locs_contiguous not yet implemented"

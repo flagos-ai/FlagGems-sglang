@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -175,13 +176,13 @@ def test_moe_align_block_size(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import moe_align_block_size
+        candidate = get_candidate("moe_align_block_size", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_align_block_size ops module not found")
         return
 
     try:
-        actual = moe_align_block_size(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/moe_align_block_size not yet implemented")
         return

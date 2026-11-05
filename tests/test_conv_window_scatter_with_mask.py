@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -168,13 +169,15 @@ def test_conv_window_scatter_with_mask(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import conv_window_scatter_with_mask
+        candidate = get_candidate(
+            "conv_window_scatter_with_mask", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/conv_window_scatter_with_mask ops module not found")
         return
 
     try:
-        actual = conv_window_scatter_with_mask(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/conv_window_scatter_with_mask not yet implemented")
         return

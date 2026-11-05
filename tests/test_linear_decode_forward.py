@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -141,13 +142,13 @@ def test_linear_decode_forward(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import linear_decode_forward
+        candidate = get_candidate("linear_decode_forward", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/linear_decode_forward ops module not found")
         return
 
     try:
-        actual = linear_decode_forward(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/linear_decode_forward not yet implemented")
         return

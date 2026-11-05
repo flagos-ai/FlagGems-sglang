@@ -20,7 +20,8 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-from .op_benchmark import OpBenchmark
+from .cases import BenchmarkCasePlan, single_input_builder
+from .op_benchmark import OpBenchmark, is_case_listing
 
 
 def _shape(
@@ -113,16 +114,53 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (
+        num_tokens,
+        top_k,
+        size,
+        is_ep,
+        use_expert_map,
+        num_experts,
+        routed_scaling_factor,
+    ) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "inputs": (num_tokens, top_k, size),
+            "topk_weights": (num_tokens, top_k),
+            "topk_ids": (
+                (num_tokens, top_k) if use_expert_map or is_ep else None
+            ),
+            "expert_map": (num_experts,) if use_expert_map else None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "num_tokens": num_tokens,
+            "top_k": top_k,
+            "size": size,
+            "is_ep": is_ep,
+            "use_expert_map": use_expert_map,
+            "num_experts": num_experts,
+            "routed_scaling_factor": routed_scaling_factor,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.moe_fused_mul_sum
 def test_perf_moe_fused_mul_sum():
     # This op has a reference but no Triton implementation yet.
-    gems_op = flaggems_sglang.get_op("moe_fused_mul_sum")
-    if gems_op is None:
-        pytest.skip("moe/moe_fused_mul_sum not implemented yet")
+    gems_op = None
+    if not is_case_listing():
+        gems_op = flaggems_sglang.get_op("moe_fused_mul_sum")
+        if gems_op is None:
+            pytest.skip("moe/moe_fused_mul_sum not implemented yet")
     bench = OpBenchmark(
         op_name="moe_fused_mul_sum",
         torch_op=get_reference("moe_fused_mul_sum"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,

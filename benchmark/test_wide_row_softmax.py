@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/wide_row_softmax.
@@ -38,16 +39,26 @@ def _input_fn(shape, cur_dtype, device):
     yield logits.contiguous(), None, out
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, vocab) = shape
+    yield BenchmarkCasePlan(
+        shape={"logits": (bs, vocab), "out": (bs, vocab)},
+        params={"configuration": shape, "seed": 9, "bs": bs, "vocab": vocab},
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.wide_row_softmax
 def test_perf_wide_row_softmax():
     bench = OpBenchmark(
         op_name="wide_row_softmax",
         torch_op=get_reference("wide_row_softmax"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.float32],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, vocab",
     )
-    bench.set_gems(flaggems_sglang.wide_row_softmax)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

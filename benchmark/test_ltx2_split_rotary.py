@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/diffusion/ltx2_split_rotary.
@@ -44,16 +45,37 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, seq_len, num_heads, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (batch, seq_len, num_heads * head_dim),
+            "cos": (batch, num_heads, seq_len, head_dim // 2),
+            "sin": (batch, num_heads, seq_len, head_dim // 2),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "seq_len": seq_len,
+            "num_heads": num_heads,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.ltx2_split_rotary
 def test_perf_ltx2_split_rotary():
     bench = OpBenchmark(
         op_name="ltx2_split_rotary",
         torch_op=get_reference("ltx2_split_rotary"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, seq_len, num_heads, head_dim",
     )
-    bench.set_gems(flaggems_sglang.ltx2_split_rotary)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

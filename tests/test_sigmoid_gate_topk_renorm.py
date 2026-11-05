@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -135,13 +136,15 @@ def test_sigmoid_gate_topk_renorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import sigmoid_gate_topk_renorm
+        candidate = get_candidate(
+            "sigmoid_gate_topk_renorm", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/sigmoid_gate_topk_renorm ops module not found")
         return
 
     try:
-        actual = sigmoid_gate_topk_renorm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/sigmoid_gate_topk_renorm not yet implemented")
         return

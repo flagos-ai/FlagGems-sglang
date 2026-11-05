@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/fused_softmax_pool.
@@ -37,16 +38,32 @@ def _input_fn(shape, cur_dtype, device):
     yield kv_score.contiguous(), head_dim
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, k, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={"kv_score": (bs, k, 2 * head_dim)},
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "bs": bs,
+            "k": k,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_softmax_pool
 def test_perf_fused_softmax_pool():
     bench = OpBenchmark(
         op_name="fused_softmax_pool",
         torch_op=get_reference("fused_softmax_pool"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, k, head_dim",
     )
-    bench.set_gems(flaggems_sglang.fused_softmax_pool)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

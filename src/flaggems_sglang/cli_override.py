@@ -211,6 +211,11 @@ def add_override_arguments(parser) -> None:
             this only targets pytest's parser rather than being a generic
             argparse helper.
     """
+    # Both correctness and benchmark conftests may be loaded by one pytest
+    # session. Register on their shared parser exactly once.
+    if getattr(parser, "_flaggems_sglang_override_arguments", False):
+        return
+
     group = parser.getgroup(
         "operator override", "dynamic operator override options"
     )
@@ -241,3 +246,68 @@ def add_override_arguments(parser) -> None:
         action="store_true",
         help="List all active operator overrides and exit",
     )
+    group.addoption(
+        "--dummy-candidate",
+        metavar="OP",
+        help=(
+            "Check per-case invocation of a built-in dummy candidate "
+            "(no numeric or timing result)."
+        ),
+    )
+    group.addoption(
+        "--dummy-report",
+        metavar="PATH",
+        help=(
+            "Dummy invocation JSON report "
+            "(default: dummy-candidate-report.json)."
+        ),
+    )
+    group.addoption(
+        "--ref-as-candidate",
+        action="store_true",
+        help="Execute an explicitly declared reference as the candidate.",
+    )
+    parser._flaggems_sglang_override_arguments = True
+
+
+def configure_overrides(config) -> DynamicOpOverride:
+    """Apply correctness/benchmark overrides once per pytest configuration."""
+    registry = getattr(config, "_override_registry", None)
+    if registry is not None:
+        return registry
+
+    registry = DynamicOpOverride()
+    config._override_registry = registry
+    # Pytest runs cleanups even if a later configure hook fails. The regular
+    # unconfigure hooks also use cleanup_overrides, which is idempotent.
+    config.add_cleanup(lambda: cleanup_overrides(config))
+    try:
+        if getattr(config.option, "ref_as_candidate", False):
+            from .reference_candidate import configure_reference_candidate
+
+            configure_reference_candidate(config)
+        # Do not import/register the probe in ordinary test sessions.
+        if getattr(config.option, "dummy_candidate", None) or getattr(
+            config.option, "dummy_report", None
+        ):
+            from .candidate_probe import configure_dummy_candidate
+
+            configure_dummy_candidate(config, registry)
+        return apply_overrides_from_args(config.option, registry=registry)
+    except BaseException:
+        # Failed setup must restore any earlier successful overrides without
+        # masking the original parsing/import failure as an unused candidate.
+        try:
+            cleanup_overrides(config)
+        except AssertionError:
+            pass
+        raise
+
+
+def cleanup_overrides(config) -> None:
+    """Restore shared overrides once, retaining unused-candidate failures."""
+    registry = getattr(config, "_override_registry", None)
+    if registry is None:
+        return
+    del config._override_registry
+    registry.restore_all()

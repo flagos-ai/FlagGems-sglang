@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -188,13 +189,15 @@ def test_selective_state_update(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import selective_state_update
+        candidate = get_candidate(
+            "selective_state_update", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/selective_state_update ops module not found")
         return
 
     try:
-        actual = selective_state_update(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/selective_state_update not yet implemented")
         return

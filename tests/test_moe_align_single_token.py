@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -107,13 +108,15 @@ def test_moe_align_single_token(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import moe_align_single_token
+        candidate = get_candidate(
+            "moe_align_single_token", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_align_single_token ops module not found")
         return
 
     try:
-        actual = moe_align_single_token(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/moe_align_single_token not yet implemented")
         return

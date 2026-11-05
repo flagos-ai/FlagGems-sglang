@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from backend_utils import VendorDescriptor  # noqa: E402
+from ..backend_utils import VendorDescriptor  # noqa: E402
 
 vendor_info = VendorDescriptor(
     vendor_name="mthreads",

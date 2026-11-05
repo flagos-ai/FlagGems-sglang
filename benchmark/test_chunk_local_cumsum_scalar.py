@@ -22,6 +22,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/chunk_local_cumsum_scalar.
@@ -43,17 +44,38 @@ def _input_fn(shape, cur_dtype, device, reverse, scale=None):
     yield x, chunk_size, reverse, scale
 
 
+def _case_fn(shape, cur_dtype, reverse, scale=None):
+    (batch, nchunks, chunk_size, nheads) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (batch, nchunks * chunk_size, nheads)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "reverse": reverse,
+            "scale": scale,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "nheads": nheads,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunk_local_cumsum_scalar
 @pytest.mark.parametrize("reverse", [False, True])
 def test_perf_chunk_local_cumsum_scalar(reverse):
     bench = OpBenchmark(
         op_name="chunk_local_cumsum_scalar",
         torch_op=get_reference("chunk_local_cumsum_scalar"),
-        input_fn=partial(_input_fn, reverse=reverse),
+        case_fn=partial(_case_fn, reverse=reverse),
+        build_inputs_fn=single_input_builder(
+            partial(_input_fn, reverse=reverse)
+        ),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, nheads",
     )
-    bench.set_gems(flaggems_sglang.chunk_local_cumsum_scalar)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

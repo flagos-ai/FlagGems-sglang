@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/chunk_scaled_dot_kkt.
@@ -66,16 +67,40 @@ def _input_fn(shape, cur_dtype, device):
     yield k, beta, g_cumsum, {"chunk_size": chunk_size}
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, nchunks, chunk_size, hg, h, k_dim, use_g) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "k": (batch, nchunks * chunk_size, hg, k_dim),
+            "beta": (batch, nchunks * chunk_size, h),
+            "g_cumsum": (batch, nchunks * chunk_size, h) if use_g else None,
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "hg": hg,
+            "h": h,
+            "k_dim": k_dim,
+            "use_g": use_g,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunk_scaled_dot_kkt
 def test_perf_chunk_scaled_dot_kkt():
     bench = OpBenchmark(
         op_name="chunk_scaled_dot_kkt",
         torch_op=get_reference("chunk_scaled_dot_kkt"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, hg, h, k_dim, use_g",
     )
-    bench.set_gems(flaggems_sglang.chunk_scaled_dot_kkt)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

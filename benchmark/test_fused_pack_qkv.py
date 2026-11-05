@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/diffusion/fused_pack_qkv.
@@ -51,16 +52,39 @@ def _input_fn(shape, cur_dtype, device):
     yield r(), r(), r(), indices
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, seq, num_heads, head_dim) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (bs, seq, num_heads, head_dim),
+            "k": (bs, seq, num_heads, head_dim),
+            "v": (bs, seq, num_heads, head_dim),
+            "indices": (max(1, int(bs * seq * _KEEP)),),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_KEEP": _KEEP,
+            "bs": bs,
+            "seq": seq,
+            "num_heads": num_heads,
+            "head_dim": head_dim,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_pack_qkv
 def test_perf_fused_pack_qkv():
     bench = OpBenchmark(
         op_name="fused_pack_qkv",
         torch_op=get_reference("fused_pack_qkv"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, seq, num_heads, head_dim",
     )
-    bench.set_gems(flaggems_sglang.fused_pack_qkv)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -131,13 +132,13 @@ def test_wide_row_softmax(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import wide_row_softmax
+        candidate = get_candidate("wide_row_softmax", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/wide_row_softmax ops module not found")
         return
 
     try:
-        actual = wide_row_softmax(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/wide_row_softmax not yet implemented")
         return

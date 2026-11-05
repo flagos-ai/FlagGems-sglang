@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/act_and_mul.
@@ -51,16 +52,33 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (m, half_hidden, activation, swiglu_limit) = shape
+    yield BenchmarkCasePlan(
+        shape={"gateup_output": (m, half_hidden * 2)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "m": m,
+            "half_hidden": half_hidden,
+            "activation": activation,
+            "swiglu_limit": swiglu_limit,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.act_and_mul
 def test_perf_act_and_mul():
     bench = OpBenchmark(
         op_name="act_and_mul",
         torch_op=get_reference("act_and_mul"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, half_hidden, activation, swiglu_limit",
     )
-    bench.set_gems(flaggems_sglang.act_and_mul)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

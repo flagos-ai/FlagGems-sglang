@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -113,13 +114,13 @@ def test_top_p_renorm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import top_p_renorm
+        candidate = get_candidate("top_p_renorm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("sampling_grammar/top_p_renorm ops module not found")
         return
 
     try:
-        actual = top_p_renorm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("sampling_grammar/top_p_renorm not yet implemented")
         return

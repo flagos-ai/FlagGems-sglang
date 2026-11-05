@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match
@@ -69,16 +70,40 @@ def _input_fn(shape, cur_dtype, device):
     yield q, k_buffer, v_buffer, kv_indptr, kv_indices, 1.0 / (D**0.5)
 
 
+def _case_fn(shape, cur_dtype):
+    (B, H_Q, H_KV, D, seq_len) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "q": (B, H_Q, D),
+            "k_buffer": (B * seq_len, H_KV, D),
+            "v_buffer": (B * seq_len, H_KV, D),
+            "kv_indptr": (B + 1,),
+            "kv_indices": (B * seq_len,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "B": B,
+            "H_Q": H_Q,
+            "H_KV": H_KV,
+            "D": D,
+            "seq_len": seq_len,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.decode_grouped_attention
 def test_perf_decode_grouped_attention():
     bench = OpBenchmark(
         op_name="decode_grouped_attention",
         torch_op=get_reference("decode_grouped_attention"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="B, H_Q, H_KV, D, seq_len",
     )
-    bench.set_gems(flaggems_sglang.decode_grouped_attention)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

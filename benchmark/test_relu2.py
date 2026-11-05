@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/activation_norm/relu2.
@@ -38,16 +39,31 @@ def _input_fn(shape, cur_dtype, device):
     yield (x,)
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={"x": (num_tokens, hidden)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "num_tokens": num_tokens,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.relu2
 def test_perf_relu2():
     bench = OpBenchmark(
         op_name="relu2",
         torch_op=get_reference("relu2"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
-    bench.set_gems(flaggems_sglang.relu2)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

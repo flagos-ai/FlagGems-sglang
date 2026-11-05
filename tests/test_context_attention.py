@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -155,13 +156,13 @@ def test_context_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import context_attention
+        candidate = get_candidate("context_attention", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/context_attention ops module not found")
         return
 
     try:
-        actual = context_attention(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/context_attention not yet implemented")
         return

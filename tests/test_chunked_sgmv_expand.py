@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -157,13 +158,13 @@ def test_chunked_sgmv_expand(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import chunked_sgmv_expand
+        candidate = get_candidate("chunked_sgmv_expand", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("lora/chunked_sgmv_expand ops module not found")
         return
 
     try:
-        actual = chunked_sgmv_expand(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("lora/chunked_sgmv_expand not yet implemented")
         return

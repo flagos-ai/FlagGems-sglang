@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/kvcache/
@@ -58,16 +59,39 @@ def _input_fn(shape, cur_dtype, device):
     yield req_to_token, req_pool_indices, lens, None, kv_indices, page_size
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, max_len, page_size) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "req_to_token": (_MAX_BATCH, _MAX_CONTEXT),
+            "req_pool_indices": (bs,),
+            "lens": (bs,),
+            "kv_indices": (bs, (max_len + page_size - 1) // page_size),
+        },
+        params={
+            "configuration": shape,
+            "seed": 7,
+            "_MAX_BATCH": _MAX_BATCH,
+            "_MAX_CONTEXT": _MAX_CONTEXT,
+            "bs": bs,
+            "max_len": max_len,
+            "page_size": page_size,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.create_flashmla_kv_indices
 def test_perf_create_flashmla_kv_indices():
     bench = OpBenchmark(
         op_name="create_flashmla_kv_indices",
         torch_op=get_reference("create_flashmla_kv_indices"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, max_len, page_size",
     )
-    bench.set_gems(flaggems_sglang.create_flashmla_kv_indices)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

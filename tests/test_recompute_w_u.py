@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -113,13 +114,13 @@ def test_recompute_w_u(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import recompute_w_u
+        candidate = get_candidate("recompute_w_u", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("fla/recompute_w_u ops module not found")
         return
 
     try:
-        actual = recompute_w_u(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("fla/recompute_w_u not yet implemented")
         return

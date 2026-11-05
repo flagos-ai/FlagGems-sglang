@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/fill_accept_out_cache_loc.
@@ -44,16 +45,30 @@ def _input_fn(shape, cur_dtype, device):
     yield accept_index, out_cache_loc, accept_out_cache_loc, size
 
 
+def _case_fn(shape, cur_dtype):
+    (size,) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "accept_index": (size,),
+            "out_cache_loc": (size,),
+            "accept_out_cache_loc": (size,),
+        },
+        params={"configuration": shape, "seed": 9, "size": size},
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fill_accept_out_cache_loc
 def test_perf_fill_accept_out_cache_loc():
     bench = OpBenchmark(
         op_name="fill_accept_out_cache_loc",
         torch_op=get_reference("fill_accept_out_cache_loc"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="size",
     )
-    bench.set_gems(flaggems_sglang.fill_accept_out_cache_loc)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

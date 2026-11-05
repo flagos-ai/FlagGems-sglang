@@ -35,6 +35,7 @@ supported case (restore() removes them again).
 
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -99,6 +100,29 @@ class TestDynamicOpOverride:
         torch.testing.assert_close(result, expected)
 
         registry.restore(OP_ABS)
+
+    def test_get_override_tracks_replacement_and_restore(self):
+        registry = DynamicOpOverride()
+        assert registry.get_override(OP_ABS) is None
+        assert registry.override(OP_ABS, custom_abs_impl)
+        assert registry.get_override(OP_ABS) is custom_abs_impl
+        assert registry.override(OP_ABS, custom_neg_impl)
+        assert registry.get_override(OP_ABS) is custom_neg_impl
+        registry.restore_all()
+        assert registry.get_override(OP_ABS) is None
+
+    def test_get_override_preserves_file_call_tracking(self, tmp_path):
+        implementation = tmp_path / "candidate.py"
+        implementation.write_text("def run(value): return value + 1\n")
+        registry = DynamicOpOverride()
+        assert registry.override_from_file(OP_ABS, str(implementation), "run")
+        candidate = registry.get_override(OP_ABS)
+        assert candidate is getattr(flaggems_sglang, OP_ABS)
+        assert candidate(3) == 4
+        # Calling through the public resolver must satisfy the same tracking
+        # check as invoking the package attribute directly.
+        registry.restore_all()
+        assert registry.get_override(OP_ABS) is None
 
     def test_multiple_overrides(self):
         """Test overriding multiple operators."""
@@ -456,6 +480,84 @@ class TestCLIOverride:
         with pytest.raises(FileNotFoundError):
             load_override_config("/nonexistent/config.yaml")
 
+    def test_shared_configuration_is_applied_and_restored_once(self, tmp_path):
+        from flaggems_sglang.cli_override import (
+            cleanup_overrides,
+            configure_overrides,
+        )
+
+        implementation = tmp_path / "candidate.py"
+        implementation.write_text("def run(value): return value + 1\n")
+        cleanups = []
+        config = SimpleNamespace(
+            option=SimpleNamespace(
+                override=[f"{OP_ABS}:{implementation}:run"],
+                override_config=None,
+            ),
+            add_cleanup=cleanups.append,
+        )
+        first = configure_overrides(config)
+        candidate = first.get_override(OP_ABS)
+        assert configure_overrides(config) is first
+        assert first.get_override(OP_ABS) is candidate
+        assert len(cleanups) == 1
+        assert candidate(3) == 4
+        cleanup_overrides(config)
+        cleanup_overrides(config)
+        cleanups[0]()
+        assert first.get_override(OP_ABS) is None
+        assert not hasattr(flaggems_sglang, OP_ABS)
+
+    def test_shared_cleanup_rejects_unused_candidate_once(self, tmp_path):
+        from flaggems_sglang.cli_override import (
+            cleanup_overrides,
+            configure_overrides,
+        )
+
+        implementation = tmp_path / "candidate.py"
+        implementation.write_text("def run(value): return value + 1\n")
+        cleanups = []
+        config = SimpleNamespace(
+            option=SimpleNamespace(
+                override=[f"{OP_ABS}:{implementation}:run"],
+                override_config=None,
+            ),
+            add_cleanup=cleanups.append,
+        )
+        configure_overrides(config)
+        with pytest.raises(AssertionError, match="never invoked"):
+            cleanup_overrides(config)
+        # One conftest reports the failure; the second conftest and pytest's
+        # fallback cleanup must not report it again or leave the override.
+        cleanup_overrides(config)
+        cleanups[0]()
+        assert not hasattr(flaggems_sglang, OP_ABS)
+
+    def test_failed_configuration_restores_partial_overrides(self, tmp_path):
+        from flaggems_sglang.cli_override import configure_overrides
+
+        implementation = tmp_path / "candidate.py"
+        implementation.write_text("def run(value): return value + 1\n")
+        cleanups = []
+        config = SimpleNamespace(
+            option=SimpleNamespace(
+                override=[
+                    f"{OP_ABS}:{implementation}:run",
+                    f"{OP_NEG}:{tmp_path / 'missing.py'}:run",
+                ],
+                override_config=None,
+            ),
+            add_cleanup=cleanups.append,
+        )
+        with pytest.warns(UserWarning, match="Failed to load"):
+            with pytest.raises(SystemExit) as error:
+                configure_overrides(config)
+        assert error.value.code == 1
+        assert not hasattr(config, "_override_registry")
+        assert not hasattr(flaggems_sglang, OP_ABS)
+        assert not hasattr(flaggems_sglang, OP_NEG)
+        cleanups[0]()
+
 
 class TestIntegrationScenarios:
     """Integration tests for realistic usage scenarios."""
@@ -541,18 +643,21 @@ class TestPytestIntegration:
     _CONFTEST = """
         from flaggems_sglang.cli_override import (
             add_override_arguments,
-            apply_overrides_from_args,
+            cleanup_overrides,
+            configure_overrides,
         )
 
         def pytest_addoption(parser):
             add_override_arguments(parser)
+            add_override_arguments(parser)
 
         def pytest_configure(config):
-            config._override_registry = apply_overrides_from_args(config.option)
+            configure_overrides(config)
+            configure_overrides(config)
 
         def pytest_unconfigure(config):
-            if hasattr(config, "_override_registry"):
-                config._override_registry.restore_all()
+            cleanup_overrides(config)
+            cleanup_overrides(config)
         """
 
     def test_override_option_registered(self, pytester):

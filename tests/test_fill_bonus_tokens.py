@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -118,13 +119,13 @@ def test_fill_bonus_tokens(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fill_bonus_tokens
+        candidate = get_candidate("fill_bonus_tokens", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/fill_bonus_tokens ops module not found")
         return
 
     try:
-        actual = fill_bonus_tokens(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/fill_bonus_tokens not yet implemented")
         return

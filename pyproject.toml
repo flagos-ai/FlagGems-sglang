@@ -13,7 +13,7 @@
 # limitations under the License.
 
 [build-system]
-requires = ["setuptools>=64.0", "scikit-build-core>=0.11", "pybind11"]
+requires = ["setuptools", "scikit-build-core", "pybind11"]
 build-backend = "setuptools.build_meta"
 
 
@@ -26,8 +26,7 @@ requires-python = ">=3.8.0"
 license = { text = "Apache Software License" }
 authors = [
     { name = "Hongyu Liu", email = "liuhyscc@gmail.com" },
-    { name = "Bingjie Wang", email = "xxx@xxx.com" },
-    { name = "Bin Zhang", email = "842884726@qq.com" },
+    { name = "flagos", email = "contact@flagos.io" },
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,7 +34,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "torch>=2.6.0",
+    "torch",
     "packaging",
     "pybind11",
     "PyYAML",
@@ -44,10 +43,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
-    "pytest>=7.1.0",
-    "numpy>=1.26",
-    "scipy>=1.14",
-    "cupy-cuda12x",
+    "pytest",
+    "scipy",
 ]
 
 [project.urls]

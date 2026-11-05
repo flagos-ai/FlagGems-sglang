@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -101,13 +102,13 @@ def test_relu2(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import relu2
+        candidate = get_candidate("relu2", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/relu2 ops module not found")
         return
 
     try:
-        actual = relu2(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/relu2 not yet implemented")
         return

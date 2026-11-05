@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/zero_experts_identity.
@@ -54,16 +55,38 @@ def _input_fn(shape, cur_dtype, device):
     }
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, top_k, hidden, num_experts) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "idx": (num_tokens, top_k),
+            "scales": (num_tokens, top_k),
+            "hidden_states": (num_tokens, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_NUM_ZERO": _NUM_ZERO,
+            "num_tokens": num_tokens,
+            "top_k": top_k,
+            "hidden": hidden,
+            "num_experts": num_experts,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.zero_experts_identity
 def test_perf_zero_experts_identity():
     bench = OpBenchmark(
         op_name="zero_experts_identity",
         torch_op=get_reference("zero_experts_identity"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, top_k, hidden, num_experts",
     )
-    bench.set_gems(flaggems_sglang.zero_experts_identity)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

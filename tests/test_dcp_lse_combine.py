@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -127,13 +128,13 @@ def test_dcp_lse_combine(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import dcp_lse_combine
+        candidate = get_candidate("dcp_lse_combine", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/dcp_lse_combine ops module not found")
         return
 
     try:
-        actual = dcp_lse_combine(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/dcp_lse_combine not yet implemented")
         return

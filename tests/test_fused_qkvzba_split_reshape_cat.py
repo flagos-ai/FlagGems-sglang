@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -121,7 +122,9 @@ def test_fused_qkvzba_split_reshape_cat(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_qkvzba_split_reshape_cat
+        candidate = get_candidate(
+            "fused_qkvzba_split_reshape_cat", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "attention/fused_qkvzba_split_reshape_cat ops module not found"
@@ -129,7 +132,7 @@ def test_fused_qkvzba_split_reshape_cat(case_idx):
         return
 
     try:
-        actual = fused_qkvzba_split_reshape_cat(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "attention/fused_qkvzba_split_reshape_cat not yet implemented"

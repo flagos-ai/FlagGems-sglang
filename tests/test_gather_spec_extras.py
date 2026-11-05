@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -138,13 +139,13 @@ def test_gather_spec_extras(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import gather_spec_extras
+        candidate = get_candidate("gather_spec_extras", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("speculative/gather_spec_extras ops module not found")
         return
 
     try:
-        actual = gather_spec_extras(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("speculative/gather_spec_extras not yet implemented")
         return

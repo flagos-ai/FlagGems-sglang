@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -110,13 +111,13 @@ def test_pack_topk_ids(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import pack_topk_ids
+        candidate = get_candidate("pack_topk_ids", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/pack_topk_ids ops module not found")
         return
 
     try:
-        actual = pack_topk_ids(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/pack_topk_ids not yet implemented")
         return

@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 SHAPES = [
@@ -46,16 +47,36 @@ def _input_fn(shape, cur_dtype, device):
     yield residual, update, gate
 
 
+def _case_fn(shape, cur_dtype):
+    (rows, hidden, broadcast) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "residual": (rows, hidden),
+            "update": (rows, hidden),
+            "gate": (1, hidden) if broadcast else (rows, hidden),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "rows": rows,
+            "hidden": hidden,
+            "broadcast": broadcast,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.residual_gate_add
 def test_perf_residual_gate_add():
     bench = OpBenchmark(
         op_name="residual_gate_add",
         torch_op=get_reference("residual_gate_add"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="rows, hidden, broadcast",
     )
-    bench.set_gems(flaggems_sglang.residual_gate_add)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -136,7 +137,9 @@ def test_create_chunked_prefix_cache_kv_indices(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import create_chunked_prefix_cache_kv_indices
+        candidate = get_candidate(
+            "create_chunked_prefix_cache_kv_indices", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip(
             "kvcache/create_chunked_prefix_cache_kv_indices ops module not found"
@@ -144,7 +147,7 @@ def test_create_chunked_prefix_cache_kv_indices(case_idx):
         return
 
     try:
-        actual = create_chunked_prefix_cache_kv_indices(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip(
             "kvcache/create_chunked_prefix_cache_kv_indices not yet implemented"

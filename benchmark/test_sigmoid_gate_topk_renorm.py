@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 ROUTE_SCALE = 1.5
@@ -46,16 +47,39 @@ def _input_fn(shape, cur_dtype, device):
     yield logits, k, n_shared, ROUTE_SCALE, global_scale, bias
 
 
+def _case_fn(shape, cur_dtype):
+    (m, n_routed, n_shared, k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "logits": (m, n_routed + n_shared),
+            "global_scale": (),
+            "bias": (n_routed,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "GLOBAL_SCALE": GLOBAL_SCALE,
+            "ROUTE_SCALE": ROUTE_SCALE,
+            "m": m,
+            "n_routed": n_routed,
+            "n_shared": n_shared,
+            "k": k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.sigmoid_gate_topk_renorm
 def test_perf_sigmoid_gate_topk_renorm():
     bench = OpBenchmark(
         op_name="sigmoid_gate_topk_renorm",
         torch_op=get_reference("sigmoid_gate_topk_renorm"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="m, n_routed, n_shared, k",
     )
-    bench.set_gems(flaggems_sglang.sigmoid_gate_topk_renorm)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

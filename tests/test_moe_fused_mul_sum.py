@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -166,13 +167,13 @@ def test_moe_fused_mul_sum(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import moe_fused_mul_sum
+        candidate = get_candidate("moe_fused_mul_sum", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/moe_fused_mul_sum ops module not found")
         return
 
     try:
-        actual = moe_fused_mul_sum(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/moe_fused_mul_sum not yet implemented")
         return

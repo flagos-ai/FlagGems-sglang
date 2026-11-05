@@ -20,7 +20,8 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
-from .op_benchmark import OpBenchmark
+from .cases import BenchmarkCasePlan, single_input_builder
+from .op_benchmark import OpBenchmark, is_case_listing
 
 
 def _shape(
@@ -127,16 +128,54 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (
+        m,
+        n,
+        topk,
+        scoring_func,
+        num_fused_shared_experts,
+        renormalize,
+        routed_scaling_factor,
+        apply_routed_scaling_factor_on_output,
+        moe_softcapping,
+        num_expert_group,
+        topk_group,
+    ) = shape
+    yield BenchmarkCasePlan(
+        shape={"scores": (m, n), "bias": (n,)},
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "m": m,
+            "n": n,
+            "topk": topk,
+            "scoring_func": scoring_func,
+            "num_fused_shared_experts": num_fused_shared_experts,
+            "renormalize": renormalize,
+            "routed_scaling_factor": routed_scaling_factor,
+            "apply_routed_scaling_factor_on_output": apply_routed_scaling_factor_on_output,
+            "moe_softcapping": moe_softcapping,
+            "num_expert_group": num_expert_group,
+            "topk_group": topk_group,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.moe_fused_gate
 def test_perf_moe_fused_gate():
     # This op has a reference but no Triton implementation yet.
-    gems_op = flaggems_sglang.get_op("moe_fused_gate")
-    if gems_op is None:
-        pytest.skip("moe/moe_fused_gate not implemented yet")
+    gems_op = None
+    if not is_case_listing():
+        gems_op = flaggems_sglang.get_op("moe_fused_gate")
+        if gems_op is None:
+            pytest.skip("moe/moe_fused_gate not implemented yet")
     bench = OpBenchmark(
         op_name="moe_fused_gate",
         torch_op=get_reference("moe_fused_gate"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,

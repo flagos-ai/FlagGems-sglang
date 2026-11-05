@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -108,13 +109,13 @@ def test_ltx2_split_rotary(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import ltx2_split_rotary
+        candidate = get_candidate("ltx2_split_rotary", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/ltx2_split_rotary ops module not found")
         return
 
     try:
-        actual = ltx2_split_rotary(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/ltx2_split_rotary not yet implemented")
         return

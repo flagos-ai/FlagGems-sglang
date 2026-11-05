@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -131,13 +132,13 @@ def test_store_cache_4d(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import store_cache_4d
+        candidate = get_candidate("store_cache_4d", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("kvcache/store_cache_4d ops module not found")
         return
 
     try:
-        actual = store_cache_4d(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("kvcache/store_cache_4d not yet implemented")
         return

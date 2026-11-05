@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match
@@ -74,16 +75,40 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (bs, chunk) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "req_to_token": (_MAX_BATCH, _MAX_CONTEXT),
+            "req_pool_indices": (bs,),
+            "start_idx": (bs,),
+            "seq_lens": (bs,),
+            "cu": (bs + 1,),
+            "kv_indices": ("sum(seq_lens)",),
+        },
+        params={
+            "configuration": shape,
+            "seed": 7,
+            "_MAX_BATCH": _MAX_BATCH,
+            "_MAX_CONTEXT": _MAX_CONTEXT,
+            "bs": bs,
+            "chunk": chunk,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.create_chunked_prefix_cache_kv_indices
 def test_perf_create_chunked_prefix_cache_kv_indices():
     bench = OpBenchmark(
         op_name="create_chunked_prefix_cache_kv_indices",
         torch_op=get_reference("create_chunked_prefix_cache_kv_indices"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="bs, chunk",
     )
-    bench.set_gems(flaggems_sglang.create_chunked_prefix_cache_kv_indices)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

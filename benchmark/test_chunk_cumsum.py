@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/chunk_cumsum; every case
@@ -51,16 +52,37 @@ def _input_fn(shape, cur_dtype, device):
     yield dt, a, chunk_size, dict(dt_bias=dt_bias, dt_softplus=True)
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, nchunks, chunk_size, nheads) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "dt": (batch, nchunks * chunk_size, nheads),
+            "a": (nheads,),
+            "dt_bias": (nheads,),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "batch": batch,
+            "nchunks": nchunks,
+            "chunk_size": chunk_size,
+            "nheads": nheads,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.chunk_cumsum
 def test_perf_chunk_cumsum():
     bench = OpBenchmark(
         op_name="chunk_cumsum",
         torch_op=get_reference("chunk_cumsum"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, nheads",
     )
-    bench.set_gems(flaggems_sglang.chunk_cumsum)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

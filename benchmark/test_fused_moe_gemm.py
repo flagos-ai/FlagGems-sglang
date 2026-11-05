@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/fused_moe_gemm.
@@ -45,16 +46,39 @@ def _input_fn(shape, cur_dtype, device):
     yield A, B, topk_weights, topk_ids, top_k
 
 
+def _case_fn(shape, cur_dtype):
+    (T, E, N, K, top_k) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "A": (T, K),
+            "B": (E, N, K),
+            "topk_weights": (T, top_k),
+            "topk_ids": (T, top_k),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "T": T,
+            "E": E,
+            "N": N,
+            "K": K,
+            "top_k": top_k,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fused_moe_gemm
 def test_perf_fused_moe_gemm():
     bench = OpBenchmark(
         op_name="fused_moe_gemm",
         torch_op=get_reference("fused_moe_gemm"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="T, E, N, K, top_k",
     )
-    bench.set_gems(flaggems_sglang.fused_moe_gemm)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

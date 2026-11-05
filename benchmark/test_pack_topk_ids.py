@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/pack_topk_ids.
@@ -44,16 +45,32 @@ def _input_fn(shape, cur_dtype, device):
     yield ids, weights
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, topk, num_experts) = shape
+    yield BenchmarkCasePlan(
+        shape={"ids": (num_tokens, topk), "weights": (num_tokens, topk)},
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "num_tokens": num_tokens,
+            "topk": topk,
+            "num_experts": num_experts,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.pack_topk_ids
 def test_perf_pack_topk_ids():
     bench = OpBenchmark(
         op_name="pack_topk_ids",
         torch_op=get_reference("pack_topk_ids"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, topk, num_experts",
     )
-    bench.set_gems(flaggems_sglang.pack_topk_ids)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

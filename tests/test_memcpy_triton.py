@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -108,13 +109,13 @@ def test_memcpy_triton(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import memcpy_triton
+        candidate = get_candidate("memcpy_triton", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("utility/memcpy_triton ops module not found")
         return
 
     try:
-        actual = memcpy_triton(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("utility/memcpy_triton not yet implemented")
         return

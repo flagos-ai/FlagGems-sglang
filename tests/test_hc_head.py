@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -140,13 +141,13 @@ def test_hc_head(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import hc_head
+        candidate = get_candidate("hc_head", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("activation_norm/hc_head ops module not found")
         return
 
     try:
-        actual = hc_head(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("activation_norm/hc_head not yet implemented")
         return

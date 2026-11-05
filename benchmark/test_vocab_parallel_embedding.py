@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/vocab_parallel_embedding.
@@ -76,16 +77,38 @@ def _input_fn(shape, cur_dtype, device):
     )
 
 
+def _case_fn(shape, cur_dtype):
+    (num_tokens, hidden) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "tokens": (num_tokens,),
+            "weight": (
+                _ORG_END - _ORG_START + _PADDING + _ADDED_END - _ADDED_START,
+                hidden,
+            ),
+        },
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "_PADDING": _PADDING,
+            "num_tokens": num_tokens,
+            "hidden": hidden,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.vocab_parallel_embedding
 def test_perf_vocab_parallel_embedding():
     bench = OpBenchmark(
         op_name="vocab_parallel_embedding",
         torch_op=get_reference("vocab_parallel_embedding"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
-    bench.set_gems(flaggems_sglang.vocab_parallel_embedding)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

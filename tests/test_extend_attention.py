@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -200,13 +201,13 @@ def test_extend_attention(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import extend_attention
+        candidate = get_candidate("extend_attention", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/extend_attention ops module not found")
         return
 
     try:
-        actual = extend_attention(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/extend_attention not yet implemented")
         return

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -116,13 +117,13 @@ def test_set_token_filter(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import set_token_filter
+        candidate = get_candidate("set_token_filter", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("utility/set_token_filter ops module not found")
         return
 
     try:
-        actual = set_token_filter(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("utility/set_token_filter not yet implemented")
         return

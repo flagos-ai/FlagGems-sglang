@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -144,13 +145,13 @@ def test_chunk_cumsum(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import chunk_cumsum
+        candidate = get_candidate("chunk_cumsum", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("mamba/chunk_cumsum ops module not found")
         return
 
     try:
-        actual = chunk_cumsum(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("mamba/chunk_cumsum not yet implemented")
         return

@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -114,13 +115,13 @@ def test_seqlens_expand(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import seqlens_expand
+        candidate = get_candidate("seqlens_expand", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("attention/seqlens_expand ops module not found")
         return
 
     try:
-        actual = seqlens_expand(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("attention/seqlens_expand not yet implemented")
         return

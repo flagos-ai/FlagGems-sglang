@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -123,13 +124,13 @@ def test_set_mla_kv_buffer(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import set_mla_kv_buffer
+        candidate = get_candidate("set_mla_kv_buffer", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("kvcache/set_mla_kv_buffer ops module not found")
         return
 
     try:
-        actual = set_mla_kv_buffer(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("kvcache/set_mla_kv_buffer not yet implemented")
         return

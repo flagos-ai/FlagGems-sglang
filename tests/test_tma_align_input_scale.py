@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -105,13 +106,13 @@ def test_tma_align_input_scale(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import tma_align_input_scale
+        candidate = get_candidate("tma_align_input_scale", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/tma_align_input_scale ops module not found")
         return
 
     try:
-        actual = tma_align_input_scale(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/tma_align_input_scale not yet implemented")
         return

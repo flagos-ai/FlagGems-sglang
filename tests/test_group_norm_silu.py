@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -112,13 +113,13 @@ def test_group_norm_silu(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import group_norm_silu
+        candidate = get_candidate("group_norm_silu", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("diffusion/group_norm_silu ops module not found")
         return
 
     try:
-        actual = group_norm_silu(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("diffusion/group_norm_silu not yet implemented")
         return

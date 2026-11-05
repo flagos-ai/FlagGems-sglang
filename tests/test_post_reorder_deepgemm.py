@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -139,13 +140,13 @@ def test_post_reorder_deepgemm(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import post_reorder_deepgemm
+        candidate = get_candidate("post_reorder_deepgemm", reference=reference)
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/post_reorder_deepgemm ops module not found")
         return
 
     try:
-        actual = post_reorder_deepgemm(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/post_reorder_deepgemm not yet implemented")
         return

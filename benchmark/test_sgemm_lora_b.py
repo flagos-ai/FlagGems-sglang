@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/lora/sgemm_lora_b. The first
@@ -60,16 +61,45 @@ def _input_fn(shape, cur_dtype, device):
     yield x, weights, dict(batch_info=batch_info, base_output=base_output)
 
 
+def _case_fn(shape, cur_dtype):
+    (seg_lens, num_lora, r, n) = shape
+    yield BenchmarkCasePlan(
+        shape={
+            "x": (sum(seg_lens), r),
+            "weights": (num_lora, n, r),
+            "base_output": (sum(seg_lens), n),
+            "batch_info.seg_indptr": (len(seg_lens) + 1,),
+            "batch_info.seg_lens": (len(seg_lens),),
+            "batch_info.weight_indices": (len(seg_lens),),
+            "batch_info.lora_ranks": (num_lora,),
+            "batch_info.scalings": (num_lora,),
+            "batch_info.permutation": (
+                (sum(seg_lens),) if "none" != "none" else None
+            ),
+        },
+        params={
+            "configuration": shape,
+            "seed": 0,
+            "seg_lens": seg_lens,
+            "num_lora": num_lora,
+            "r": r,
+            "n": n,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.sgemm_lora_b
 def test_perf_sgemm_lora_b():
     bench = OpBenchmark(
         op_name="sgemm_lora_b",
         torch_op=get_reference("sgemm_lora_b"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="seg_lens, num_lora, r, n",
     )
-    bench.set_gems(flaggems_sglang.sgemm_lora_b)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()

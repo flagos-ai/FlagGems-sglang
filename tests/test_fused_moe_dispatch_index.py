@@ -17,6 +17,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
 
@@ -117,13 +118,15 @@ def test_fused_moe_dispatch_index(case_idx):
 
     # Operator under test
     try:
-        from flaggems_sglang import fused_moe_dispatch_index
+        candidate = get_candidate(
+            "fused_moe_dispatch_index", reference=reference
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("moe/fused_moe_dispatch_index ops module not found")
         return
 
     try:
-        actual = fused_moe_dispatch_index(**kwargs)
+        actual = candidate(**kwargs)
     except NotImplementedError:
         pytest.skip("moe/fused_moe_dispatch_index not yet implemented")
         return

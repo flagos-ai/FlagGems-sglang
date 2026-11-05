@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
+from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/fill_bonus_tokens.
@@ -50,16 +51,31 @@ def _input_fn(shape, cur_dtype, device):
     yield tokens, lens, bonus, width
 
 
+def _case_fn(shape, cur_dtype):
+    (batch, width) = shape
+    yield BenchmarkCasePlan(
+        shape={"tokens": (batch, width), "lens": (batch,), "bonus": (batch,)},
+        params={
+            "configuration": shape,
+            "seed": 9,
+            "batch": batch,
+            "width": width,
+        },
+        builder_args=(shape,),
+    )
+
+
 @pytest.mark.fill_bonus_tokens
 def test_perf_fill_bonus_tokens():
     bench = OpBenchmark(
         op_name="fill_bonus_tokens",
         torch_op=get_reference("fill_bonus_tokens"),
-        input_fn=_input_fn,
+        case_fn=_case_fn,
+        build_inputs_fn=single_input_builder(_input_fn),
         dtypes=[torch.bfloat16],
         shapes=SHAPES,
         more_shapes=MORE_SHAPES,
         shape_desc="batch, accept_stride",
     )
-    bench.set_gems(flaggems_sglang.fill_bonus_tokens)
+    bench.set_gems_from_module(flaggems_sglang)
     bench.run()
