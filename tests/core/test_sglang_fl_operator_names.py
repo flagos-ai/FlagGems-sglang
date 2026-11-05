@@ -1,6 +1,6 @@
 # Copyright 2026 FlagOS Contributors
 # SPDX-License-Identifier: Apache-2.0
-"""Plugin ABI names stay separate from immutable native/data identities."""
+"""Public baseline names share the plugin ABI; native tensor identities stay fixed."""
 
 import ast
 import importlib.util
@@ -47,13 +47,26 @@ def test_eight_named_triads_and_immutable_dataset_aliases(cases):
             ("src/flaggems_sglang/reference", "", ".py"),
         ]:
             assert (ROOT / folder / (prefix + plugin + ext)).is_file()
+        benchmark = ast.parse(
+            (ROOT / "benchmark" / ("test_" + plugin + ".py")).read_text()
+        )
+        calls = [
+            node
+            for node in ast.walk(benchmark)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "OpBenchmark"
+        ]
+        assert len(calls) == 1
+        assert "baseline_op_name" not in {kw.arg for kw in calls[0].keywords}
         definition = json.loads(
             (ROOT / "definitions" / (plugin + ".json")).read_text()
         )
         assert definition["name"] == plugin
         record = datasets[plugin]
         assert (
-            record["baseline_operator"] == record["native_operator"] == native
+            record["baseline_operator"] == plugin
+            and record["native_operator"] == native
         )
         group = "rope" if native == "mrotary_embedding" else "operators"
         current = (
@@ -93,7 +106,7 @@ def test_native_and_prefixed_workload_keys_are_identical(cases):
     assert total == 28
 
 
-def test_all_34_keys_match_published_unmodified_nv_records(cases):
+def test_all_34_keys_match_published_nv_records(cases):
     directory = os.environ.get("OPERATOR_BASELINE_DIR")
     if directory is None:
         pytest.skip(
@@ -104,16 +117,21 @@ def test_all_34_keys_match_published_unmodified_nv_records(cases):
             Path(directory) / "op_sglang_native_h800_perf_baseline.json"
         ).read_text()
     )
+    attr = load("benchmark/attri_util.py", "_sglang_fl_baseline_lookup")
     for plugin in cases.OPERATORS:
-        native = cases.native_operator(plugin)
         keys = {
             cases.baseline_key(
                 plugin, cases.build_inputs(plugin, row, torch.bfloat16, "meta")
             )
             for row in cases.workloads(plugin)
         }
-        assert keys == set(artifact[native]["shapes"])
-        assert plugin not in artifact
+        assert keys == set(artifact[plugin]["shapes"])
+        assert cases.native_operator(plugin) not in artifact
+        for key in keys:
+            record, reason = attr.lookup_base_record_ex(
+                artifact, plugin, torch.bfloat16, {"baseline_key": key}
+            )
+            assert reason is None and record["latency_ms"] > 0
     rope = load(
         "src/flaggems_sglang/reference/mrotary_embedding_cases.py",
         "_sglang_fl_mrope_cases",
@@ -128,8 +146,16 @@ def test_all_34_keys_match_published_unmodified_nv_records(cases):
         for row in rope.WORKLOADS
     }
     assert len(keys) == 6 and keys == set(
-        artifact["mrotary_embedding"]["shapes"]
+        artifact["sglang_fl_mrotary_embedding"]["shapes"]
     )
+    for key in keys:
+        record, reason = attr.lookup_base_record_ex(
+            artifact,
+            "sglang_fl_mrotary_embedding",
+            torch.bfloat16,
+            {"baseline_key": key},
+        )
+        assert reason is None and record["latency_ms"] > 0
 
 
 def test_explicit_baseline_group_keeps_exact_key_lookup(capsys):

@@ -11,7 +11,6 @@ from flaggems_sglang.testing.operator_workloads import (
     baseline_key,
     build_inputs,
     describe,
-    native_operator,
     parameters,
     workloads,
 )
@@ -50,7 +49,6 @@ def _baseline_key(**kwargs):
 def test_perf_sglang_fl_fused_moe_kernel_sequence():
     bench = OpBenchmark(
         op_name=OPERATOR,
-        baseline_op_name=native_operator(OPERATOR),
         torch_op=get_reference(OPERATOR),
         case_fn=_case_fn,
         build_inputs_fn=single_input_builder(_input_fn),

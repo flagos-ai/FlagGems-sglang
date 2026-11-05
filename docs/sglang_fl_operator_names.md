@@ -5,7 +5,7 @@ an API name with independent operators synchronized from master. This is a name
 migration: signatures, input values/layouts, mathematical references, mutation
 and alias checks, tolerances, timing and workload coverage are unchanged.
 
-| Test / Definition / candidate name | Native implementation / stored baseline group |
+| Test / Definition / candidate name | Native implementation |
 | --- | --- |
 | `sglang_fl_gemma_rmsnorm` | `gemma_rmsnorm` |
 | `sglang_fl_gemma_fused_add_rmsnorm` | `gemma_fused_add_rmsnorm` |
@@ -34,13 +34,13 @@ pytest benchmark/test_sglang_fl_gemma_fused_add_rmsnorm.py --dummy-candidate sgl
 
 ## Reuse published performance measurements
 
-Pass the existing paired ops-baseline artifacts unchanged:
+Use the paired ops-baseline artifacts with public operator keys:
 `op_sglang_native_h800_perf_baseline.json` (28 cases) and
-`op_sglang_mrotary_h800_perf_baseline.json` (6 cases). Each plugin benchmark sets
-`baseline_op_name` to the stored native group and emits `baseline_operator` in
-its shape metadata. Its exact geometry/ABI/timing hash remains unchanged. A
-missing key is still a miss; the alias does not enable shape-only fallback.
-Output operator names and case IDs use the documented namespace.
+`op_sglang_mrotary_h800_perf_baseline.json` (6 cases). Their eight top-level
+operator keys match the `sglang_fl_` Test / Definition names above. Benchmarks
+look up their own operator name directly. Existing measurements, exact workload
+keys and timing metadata are preserved. A missing exact key remains a miss.
+Update these JSON files together with this checkout and the KGS baseline selector.
 
 ```sh
 pytest benchmark/test_sglang_fl_gemma_fused_add_rmsnorm.py --ref-as-candidate \
@@ -48,10 +48,9 @@ pytest benchmark/test_sglang_fl_gemma_fused_add_rmsnorm.py --ref-as-candidate \
   --base-data /path/to/ops-baseline/op_sglang_native_h800_perf_baseline.json
 ```
 
-Native collectors continue to call the original SGLang entrypoints under their
-native names. The source workload helpers accept both native IDs (for the
-collector) and the eight explicit plugin aliases. No latency/counter, baseline
-artifact or timing specification is rewritten by this migration.
+Native collectors publish the same `sglang_fl_` keys while calling the original
+SGLang entrypoints under their native names. The source workload helpers accept both native IDs (for the
+collector) and the eight explicit plugin aliases. Latency/counter values, workload keys and timing specifications are preserved.
 
 ## Reuse fixed NVIDIA tensors
 

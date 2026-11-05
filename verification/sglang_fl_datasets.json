@@ -1,7 +1,7 @@
 {
   "sglang_fl_gemma_rmsnorm": {
     "native_operator": "gemma_rmsnorm",
-    "baseline_operator": "gemma_rmsnorm",
+    "baseline_operator": "sglang_fl_gemma_rmsnorm",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/gemma_rmsnorm",
     "cache_group": "qwen36-cache",
@@ -9,7 +9,7 @@
   },
   "sglang_fl_gemma_fused_add_rmsnorm": {
     "native_operator": "gemma_fused_add_rmsnorm",
-    "baseline_operator": "gemma_fused_add_rmsnorm",
+    "baseline_operator": "sglang_fl_gemma_fused_add_rmsnorm",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/gemma_fused_add_rmsnorm",
     "cache_group": "qwen36-cache",
@@ -17,7 +17,7 @@
   },
   "sglang_fl_silu_and_mul_out": {
     "native_operator": "silu_and_mul_out",
-    "baseline_operator": "silu_and_mul_out",
+    "baseline_operator": "sglang_fl_silu_and_mul_out",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/silu_and_mul_out",
     "cache_group": "qwen36-cache",
@@ -25,7 +25,7 @@
   },
   "sglang_fl_select_experts": {
     "native_operator": "select_experts",
-    "baseline_operator": "select_experts",
+    "baseline_operator": "sglang_fl_select_experts",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/select_experts",
     "cache_group": "qwen36-cache",
@@ -33,7 +33,7 @@
   },
   "sglang_fl_fused_moe_kernel_sequence": {
     "native_operator": "_fused_moe_kernel_sequence",
-    "baseline_operator": "_fused_moe_kernel_sequence",
+    "baseline_operator": "sglang_fl_fused_moe_kernel_sequence",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/fused_moe_kernel_sequence",
     "cache_group": "qwen36-cache",
@@ -41,7 +41,7 @@
   },
   "sglang_fl_chunk_gated_delta_rule_fwd": {
     "native_operator": "chunk_gated_delta_rule_fwd",
-    "baseline_operator": "chunk_gated_delta_rule_fwd",
+    "baseline_operator": "sglang_fl_chunk_gated_delta_rule_fwd",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/chunk_gated_delta_rule_fwd",
     "cache_group": "qwen36-cache",
@@ -49,7 +49,7 @@
   },
   "sglang_fl_fused_recurrent_gated_delta_rule_packed_decode": {
     "native_operator": "fused_recurrent_gated_delta_rule_packed_decode",
-    "baseline_operator": "fused_recurrent_gated_delta_rule_packed_decode",
+    "baseline_operator": "sglang_fl_fused_recurrent_gated_delta_rule_packed_decode",
     "prefix": "op-verify/sglang-qwen36/20261030-native-v1",
     "problem": "qwen36/fused_recurrent_gated_delta_rule_packed_decode",
     "cache_group": "qwen36-cache",
@@ -57,7 +57,7 @@
   },
   "sglang_fl_mrotary_embedding": {
     "native_operator": "mrotary_embedding",
-    "baseline_operator": "mrotary_embedding",
+    "baseline_operator": "sglang_fl_mrotary_embedding",
     "prefix": "op-verify/sglang-mrotary/20261029-native-v1",
     "problem": "rope/mrotary_embedding",
     "cache_group": "mrope-cache",

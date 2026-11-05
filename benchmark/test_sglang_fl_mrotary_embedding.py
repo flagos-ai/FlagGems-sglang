@@ -14,7 +14,6 @@ from flaggems_sglang.reference.sglang_fl_mrotary_embedding import (
     describe_inputs,
 )
 from flaggems_sglang.reference_candidate import reference_mode_enabled
-from flaggems_sglang.testing.operator_workloads import native_operator
 from flaggems_sglang.testing.reset_timing import reset_factory
 
 from . import conftest
@@ -46,7 +45,6 @@ def _case_fn(shape, cur_dtype):
 def test_perf_sglang_fl_mrotary_embedding():
     bench = OpBenchmark(
         op_name="sglang_fl_mrotary_embedding",
-        baseline_op_name=native_operator("sglang_fl_mrotary_embedding"),
         torch_op=get_reference("sglang_fl_mrotary_embedding"),
         case_fn=_case_fn,
         build_inputs_fn=single_input_builder(_input_fn),
