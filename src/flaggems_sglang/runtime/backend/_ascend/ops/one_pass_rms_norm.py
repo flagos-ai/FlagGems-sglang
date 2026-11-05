@@ -40,8 +40,9 @@ def _late_weight(
 
 
 @triton.jit(do_not_specialize=["X", "W", "Y"])
-def _compact_loop1(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
-    B: tl.constexpr = triton.next_power_of_2(D)
+def _compact_loop1(
+    X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr
+):
     CAP: tl.constexpr = 1 if B >= 16384 else 16384 // B if B >= 1024 else 16
     SMALL: tl.constexpr = 4 if B <= 2048 else 2
     R: tl.constexpr = CAP if M >= 512 or CAP < SMALL else SMALL
@@ -57,8 +58,7 @@ def _compact_loop1(X, W, Y, M: tl.constexpr, D: tl.constexpr, E: tl.constexpr):
 
 
 @triton.jit(do_not_specialize=["X", "W", "Y"])
-def _small_no_m(X, W, Y, D: tl.constexpr, E: tl.constexpr):
-    B: tl.constexpr = triton.next_power_of_2(D)
+def _small_no_m(X, W, Y, D: tl.constexpr, E: tl.constexpr, B: tl.constexpr):
     rows = tl.program_id(0) + tl.arange(0, 1)
     cols = tl.arange(0, B)
     offsets = rows[:, None] * D + cols[None, :]
@@ -75,6 +75,7 @@ def one_pass_rms_norm(x, w, eps):
     out = torch.empty_like(values)
     d = values.shape[-1]
     m = values.numel() // d
+    b = triton.next_power_of_2(d)
     if m < 32 and d <= 4096:
         kernel = _small_no_m
         kernel.run(
@@ -83,13 +84,13 @@ def one_pass_rms_norm(x, w, eps):
             out,
             d,
             eps,
+            b,
             grid=(m,),
             warmup=False,
             num_warps=4,
             num_stages=1,
         )
         return out
-    b = triton.next_power_of_2(d)
     if b > 4096:
         _late_weight.run(
             values,
@@ -115,6 +116,7 @@ def one_pass_rms_norm(x, w, eps):
             m,
             d,
             eps,
+            b,
             grid=(min(40, triton.cdiv(m, r)),),
             warmup=False,
             num_warps=4,
