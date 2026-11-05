@@ -69,6 +69,9 @@ _CASE_FACTORIES = [
     lambda: _case(4, 2048, 4096, seed=1),
     lambda: _case(8, 512, 2048, out_dtype=torch.float32, seed=2),
     lambda: _case(16, 1024, 4096, seed=3),
+    lambda: _case(4, 512, 1000, seed=4),
+    lambda: _case(2, 64, 2000, out_dtype=torch.float32, seed=5),
+    lambda: _case(16, 96, 300, seed=6),
 ]
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
