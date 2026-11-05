@@ -18,10 +18,10 @@
 # 接收从 backend-test.yaml 传过来的 vendor 参数 (如 nvidia, ascend)
 VENDOR=${1:?"Usage: bash tools/run_tests.sh <vendor>"}
 # 如果你的项目需要特定的环境变量，在这里导出。这里参考 FlagGems 的命名：
-export DNN_VENDOR=$VENDOR
+export GEMS_VENDOR=$VENDOR
 
 echo "===================================================="
-echo "🚀 开始运行 FlagGems-sglang 测试 | 硬件平台: $DNN_VENDOR"
+echo "🚀 开始运行 FlagGems-sglang 测试 | 硬件平台: $GEMS_VENDOR"
 echo "===================================================="
 
 
