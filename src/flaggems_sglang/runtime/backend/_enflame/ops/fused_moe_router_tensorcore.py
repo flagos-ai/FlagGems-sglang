@@ -114,7 +114,7 @@ and no masked-reduce; see ``_post_kernel`` for the derivation.
 
 Portability / safety
 --------------------
-* Device is ``flaggems_sglang.device`` (runtime follows ``DNN_VENDOR`` to
+* Device is ``flaggems_sglang.device`` (runtime follows ``GEMS_VENDOR`` to
   cuda/npu/gcu/...); no hardcoded ``"cuda"`` or vendor name.
 * No module-level mutable container (no global dict/set/list cache) — the
   per-shape ``(ROW_TILE, BLOCK_K, num_warps, num_stages)`` selection is a

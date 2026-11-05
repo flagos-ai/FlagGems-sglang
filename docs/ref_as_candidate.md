@@ -15,6 +15,10 @@ pytest -q benchmark/test_silu_and_mul.py -m silu_and_mul --level core \
   --ref-as-candidate --record json --output silu-reference-timing.json
 ```
 
+The runtime uses `GEMS_VENDOR` for explicit vendor selection. An unknown
+value raises an error; with the variable unset, device detection runs
+automatically. Correctness, benchmark and profile use that same runtime.
+
 ## Declare a correctness reference
 
 All 125 operator correctness tests use ordinary pytest functions and explicitly

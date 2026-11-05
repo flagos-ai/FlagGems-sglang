@@ -53,7 +53,6 @@ class DeviceDetector(object):
 
     def __init__(self, vendor_name=None):
         if not hasattr(self, "initialized"):
-            self.initialized = True
             # A list of all available vendor names.
             self.vendor_list = vendors.get_all_vendors().keys()
 
@@ -76,6 +75,7 @@ class DeviceDetector(object):
             self.support_fp64 = self.vendor not in UNSUPPORT_FP64
             self.support_bf16 = self.vendor not in UNSUPPORT_BF16
             self.support_int64 = self.vendor not in UNSUPPORT_INT64
+            self.initialized = True
 
     def get_vendor(self, vendor_name=None) -> tuple:
         # Try to get the vendor name from a quick special
@@ -116,12 +116,16 @@ class DeviceDetector(object):
         return None
 
     def _get_vendor_from_env(self):
-        device_from_evn = os.environ.get("DNN_VENDOR")
-        return (
-            None
-            if device_from_evn not in self.vendor_list
-            else device_from_evn
-        )
+        vendor = os.environ.get("GEMS_VENDOR")
+        if vendor is None:
+            return None
+        vendor = vendor.lower()
+        if vendor not in self.vendor_list:
+            raise ValueError(
+                f"Unknown GEMS_VENDOR {vendor!r}; "
+                f"choose from {', '.join(self.vendor_list)}"
+            )
+        return vendor
 
     def _get_vendor_from_sys(self):
         vendor_infos = backend.get_vendor_infos()
