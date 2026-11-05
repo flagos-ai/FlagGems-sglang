@@ -90,6 +90,14 @@ _CASE_FACTORIES = [
     for b in (1, 2, 8)
     for s in (77, 1024, 4096)
 ]
+# Other hidden sizes are padded to a power of two: the DiT widths 1536, 3072
+# and 5120, and one that is not a multiple of 128.
+_CASE_FACTORIES += [
+    lambda: _case(1, 77, 1536),
+    lambda: _case(2, 256, 3072),
+    lambda: _case(1, 1024, 5120),
+    lambda: _case(2, 77, 1000),
+]
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 

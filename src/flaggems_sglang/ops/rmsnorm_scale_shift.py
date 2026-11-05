@@ -15,7 +15,9 @@
 """Fused RMSNorm with per-batch scale and shift.
 
 Inputs: x [B, S, D], weight [D], scale/shift [B, 1, D].
-The generic path requires positive power-of-two D divisible by 128.
+Rows are padded to the next power of two, so any positive D works; the
+sum of squares follows FlashInfer's thread mapping only for D = 2048 and
+4096, the sizes that mapping exists for.
 """
 
 import torch
@@ -88,10 +90,18 @@ def _rmsnorm_scale_shift_kernel(
     q = tl.arange(0, 128)
     accum = tl.full((128,), 0, tl.float32)
     for start in tl.static_range(0, D, 128):
-        v = tl.load(
-            ptr + (start + q) * X_STRIDES[2],
-            cache_modifier=".cg" if USE_CG else "",
-        ).to(tl.float32)
+        if start + 128 <= D:
+            v = tl.load(
+                ptr + (start + q) * X_STRIDES[2],
+                cache_modifier=".cg" if USE_CG else "",
+            ).to(tl.float32)
+        else:
+            v = tl.load(
+                ptr + (start + q) * X_STRIDES[2],
+                start + q < D,
+                other=0,
+                cache_modifier=".cg" if USE_CG else "",
+            ).to(tl.float32)
         accum = accum + v * v
     even, odd = tl.split(tl.reshape(accum, (32, 2, 2)))
     a0, a2 = tl.split(even)
@@ -315,7 +325,7 @@ def rmsnorm_scale_shift(x, weight, scale, shift, eps):
             tuple(scale.stride()),
             tuple(shift.stride()),
             float(eps),
-            hidden_size,
+            triton.next_power_of_2(hidden_size),
             is_hip,
             is_hip and rows <= 16384,
             num_warps=8 if is_hip else 4,

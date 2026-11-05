@@ -99,6 +99,12 @@ _CASE_FACTORIES = [
 _CASE_FACTORIES += [
     (lambda e=e: _case(e, 256, 4096, [256] * e)) for e in (4, 8, 32)
 ]
+# Half rows of 1024 on the column kernel, whose fused loads only fit a half
+# row of 2048, and of 768, which is not a power of two.
+_CASE_FACTORIES += [
+    lambda: _case(8, 256, 2048, [256, 0, 255, 1, 128, 256, 7, 64]),
+    lambda: _case(4, 64, 1536, [64, 0, 17, 63]),
+]
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))
 
