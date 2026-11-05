@@ -53,29 +53,45 @@ class DeviceDetector(object):
 
     def __init__(self, vendor_name=None):
         if not hasattr(self, "initialized"):
-            # A list of all available vendor names.
-            self.vendor_list = vendors.get_all_vendors().keys()
-
-            # A dataclass instance, get the vendor information
-            # based on the provided or default vendor name.
-            self.info = self.get_vendor(vendor_name)
-
-            # vendor_name is like 'nvidia', device_name is like 'cuda'.
-            self.vendor_name = self.info.vendor_name
-            self.name = self.info.device_name
-            self.vendor = vendors.get_all_vendors()[self.vendor_name]
-            self.dispatch_key = (
-                self.name.upper()
-                if self.info.dispatch_key is None
-                else self.info.dispatch_key
+            cache = (
+                backend.vendor_module,
+                backend.device_name,
+                backend.torch_device_object,
             )
-            self.device_count = backend.gen_torch_device_object(
-                self.vendor_name
-            ).device_count()
-            self.support_fp64 = self.vendor not in UNSUPPORT_FP64
-            self.support_bf16 = self.vendor not in UNSUPPORT_BF16
-            self.support_int64 = self.vendor not in UNSUPPORT_INT64
-            self.initialized = True
+            previous_state = self.__dict__.copy()
+            try:
+                # A list of all available vendor names.
+                self.vendor_list = vendors.get_all_vendors().keys()
+
+                # A dataclass instance, get the vendor information
+                # based on the provided or default vendor name.
+                self.info = self.get_vendor(vendor_name)
+
+                # vendor_name is like 'nvidia', device_name is like 'cuda'.
+                self.vendor_name = self.info.vendor_name
+                self.name = self.info.device_name
+                self.vendor = vendors.get_all_vendors()[self.vendor_name]
+                self.dispatch_key = (
+                    self.name.upper()
+                    if self.info.dispatch_key is None
+                    else self.info.dispatch_key
+                )
+                self.device_count = backend.gen_torch_device_object(
+                    self.vendor_name
+                ).device_count()
+                self.support_fp64 = self.vendor not in UNSUPPORT_FP64
+                self.support_bf16 = self.vendor not in UNSUPPORT_BF16
+                self.support_int64 = self.vendor not in UNSUPPORT_INT64
+                self.initialized = True
+            except BaseException:
+                (
+                    backend.vendor_module,
+                    backend.device_name,
+                    backend.torch_device_object,
+                ) = cache
+                self.__dict__.clear()
+                self.__dict__.update(previous_state)
+                raise
 
     def get_vendor(self, vendor_name=None) -> tuple:
         # Try to get the vendor name from a quick special
