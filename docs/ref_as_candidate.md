@@ -15,9 +15,12 @@ pytest -q benchmark/test_silu_and_mul.py -m silu_and_mul --level core \
   --ref-as-candidate --record json --output silu-reference-timing.json
 ```
 
-The runtime uses `GEMS_VENDOR` for explicit vendor selection. An unknown
-value raises an error; with the variable unset, device detection runs
-automatically. Correctness, benchmark and profile use that same runtime.
+The runtime prefers `GEMS_VENDOR` for explicit vendor selection.
+When it is unset, `DNN_VENDOR` remains supported and emits a visible
+deprecation warning asking callers to switch to `GEMS_VENDOR`; support
+will be removed in a future release. Unknown explicit values raise an
+error. With both variables unset, detection runs automatically.
+Correctness, benchmark and profile use that same runtime.
 
 ## Declare a correctness reference
 

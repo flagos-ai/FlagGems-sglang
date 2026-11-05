@@ -16,6 +16,7 @@ import os
 import shlex
 import subprocess
 import threading
+import warnings
 from queue import Queue
 
 import torch  # noqa: F401
@@ -132,13 +133,23 @@ class DeviceDetector(object):
         return None
 
     def _get_vendor_from_env(self):
-        vendor = os.environ.get("GEMS_VENDOR")
+        variable = "GEMS_VENDOR"
+        vendor = os.environ.get(variable)
         if vendor is None:
-            return None
+            variable = "DNN_VENDOR"
+            vendor = os.environ.get(variable)
+            if vendor is None:
+                return None
+            warnings.warn(
+                "DNN_VENDOR is deprecated and will be removed in a future "
+                "release; use GEMS_VENDOR instead.",
+                FutureWarning,
+                stacklevel=2,
+            )
         vendor = vendor.lower()
         if vendor not in self.vendor_list:
             raise ValueError(
-                f"Unknown GEMS_VENDOR {vendor!r}; "
+                f"Unknown {variable} {vendor!r}; "
                 f"choose from {', '.join(self.vendor_list)}"
             )
         return vendor

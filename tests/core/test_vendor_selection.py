@@ -2,10 +2,18 @@
 
 import ast
 import os
+import warnings
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def clean_vendor_env(monkeypatch):
+    monkeypatch.delenv("GEMS_VENDOR", raising=False)
+    monkeypatch.delenv("DNN_VENDOR", raising=False)
 
 
 @pytest.fixture
@@ -25,7 +33,7 @@ def vendor_from_env():
         if isinstance(node, ast.FunctionDef)
         and node.name == "_get_vendor_from_env"
     )
-    namespace = {"os": os}
+    namespace = {"os": os, "warnings": warnings}
     exec(
         compile(
             ast.Module(body=[method], type_ignores=[]), str(source), "exec"
@@ -49,6 +57,7 @@ def test_unset_vendor_uses_existing_detection(monkeypatch, vendor_from_env):
 
 def test_invalid_vendor_is_an_error(monkeypatch, vendor_from_env):
     monkeypatch.setenv("GEMS_VENDOR", "typo")
+    monkeypatch.setenv("DNN_VENDOR", "ascend")
     with pytest.raises(ValueError, match="Unknown GEMS_VENDOR"):
         vendor_from_env()
 
@@ -123,11 +132,12 @@ def runtime_modules(monkeypatch):
 @pytest.mark.parametrize(
     "failure_stage", ["vendor_info", "device_object", "device_count"]
 )
+@pytest.mark.parametrize("variable", ["GEMS_VENDOR", "DNN_VENDOR"])
 def test_failed_initialization_can_switch_vendor(
-    monkeypatch, runtime_modules, failure_stage
+    monkeypatch, runtime_modules, failure_stage, variable
 ):
     backend, detector, torch = runtime_modules
-    monkeypatch.setenv("GEMS_VENDOR", "nvidia")
+    monkeypatch.setenv(variable, "nvidia")
     with monkeypatch.context() as attempt:
         if failure_stage != "device_count":
             method_name = {
@@ -141,7 +151,12 @@ def test_failed_initialization_can_switch_vendor(
                 raise RuntimeError("simulated cached initialization failure")
 
             attempt.setattr(backend, method_name, fail_after_cache)
-        with pytest.raises(RuntimeError, match="simulated"):
+        warning = (
+            pytest.warns(FutureWarning, match="DNN_VENDOR.*GEMS_VENDOR")
+            if variable == "DNN_VENDOR"
+            else nullcontext()
+        )
+        with warning, pytest.raises(RuntimeError, match="simulated"):
             detector()
 
     assert backend.vendor_module is None
@@ -149,8 +164,14 @@ def test_failed_initialization_can_switch_vendor(
     assert backend.torch_device_object is None
     assert detector._instance.__dict__ == {}
 
-    monkeypatch.setenv("GEMS_VENDOR", "ascend")
-    result = detector()
+    monkeypatch.setenv(variable, "ascend")
+    warning = (
+        pytest.warns(FutureWarning, match="DNN_VENDOR.*GEMS_VENDOR")
+        if variable == "DNN_VENDOR"
+        else nullcontext()
+    )
+    with warning:
+        result = detector()
     assert result.vendor_name == "ascend"
     assert result.name == "npu"
     assert result.device_count == 2
@@ -158,3 +179,25 @@ def test_failed_initialization_can_switch_vendor(
     assert backend.device_name == "npu"
     assert backend.torch_device_object is torch.npu
     assert detector() is result
+
+
+def test_legacy_vendor_warns_and_is_normalized(monkeypatch, vendor_from_env):
+    monkeypatch.setenv("DNN_VENDOR", "ASCEND")
+    with pytest.warns(FutureWarning, match="DNN_VENDOR.*GEMS_VENDOR"):
+        assert vendor_from_env() == "ascend"
+
+
+def test_new_vendor_takes_precedence(monkeypatch, vendor_from_env):
+    monkeypatch.setenv("GEMS_VENDOR", "nvidia")
+    monkeypatch.setenv("DNN_VENDOR", "ascend")
+    with warnings.catch_warnings(record=True) as observed:
+        warnings.simplefilter("always")
+        assert vendor_from_env() == "nvidia"
+    assert not observed
+
+
+def test_invalid_legacy_vendor_is_an_error(monkeypatch, vendor_from_env):
+    monkeypatch.setenv("DNN_VENDOR", "typo")
+    with pytest.warns(FutureWarning, match="GEMS_VENDOR"):
+        with pytest.raises(ValueError, match="Unknown DNN_VENDOR"):
+            vendor_from_env()
