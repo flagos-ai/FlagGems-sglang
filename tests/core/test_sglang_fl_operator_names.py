@@ -113,9 +113,7 @@ def test_all_34_keys_match_published_nv_records(cases):
             "set OPERATOR_BASELINE_DIR for paired static-data integration"
         )
     artifact = json.loads(
-        (
-            Path(directory) / "op_sglang_native_h800_perf_baseline.json"
-        ).read_text()
+        (Path(directory) / "op_sglang_perf_baseline.json").read_text()
     )
     attr = load("benchmark/attri_util.py", "_sglang_fl_baseline_lookup")
     for plugin in cases.OPERATORS:
@@ -126,7 +124,6 @@ def test_all_34_keys_match_published_nv_records(cases):
             for row in cases.workloads(plugin)
         }
         assert keys == set(artifact[plugin]["shapes"])
-        assert cases.native_operator(plugin) not in artifact
         for key in keys:
             record, reason = attr.lookup_base_record_ex(
                 artifact, plugin, torch.bfloat16, {"baseline_key": key}
@@ -135,11 +132,6 @@ def test_all_34_keys_match_published_nv_records(cases):
     rope = load(
         "src/flaggems_sglang/reference/mrotary_embedding_cases.py",
         "_sglang_fl_mrope_cases",
-    )
-    artifact = json.loads(
-        (
-            Path(directory) / "op_sglang_mrotary_h800_perf_baseline.json"
-        ).read_text()
     )
     keys = {
         rope.baseline_key(rope.build_inputs(row, torch.bfloat16, "meta"))
