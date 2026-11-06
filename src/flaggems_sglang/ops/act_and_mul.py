@@ -82,7 +82,9 @@ def _act_and_mul_kernel(
 
     out_base = out_ptr + row_idx.to(tl.int64) * d
     tl.store(
-        out_base + col_offs, tl.cast(act, up_raw.dtype) * up_raw, mask=mask
+        out_base + col_offs,
+        tl.cast(act, up_raw.dtype) * tl.cast(up, up_raw.dtype),
+        mask=mask,
     )
 
 
