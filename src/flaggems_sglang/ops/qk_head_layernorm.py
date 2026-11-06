@@ -27,15 +27,24 @@ def _qk_head_ln_kernel(
     k_ptr,
     qo_ptr,
     ko_ptr,
-    N_ROWS,
+    N_ROWS_Q,
+    N_ROWS_K,
     DH: tl.constexpr,  # true head dim (mean/var divisor, column bound)
     eps,
     BLOCK: tl.constexpr,  # next_pow2(DH), row is padded + masked up to it
     ROWS: tl.constexpr,  # rows of (B*S*H) processed per program
-    EVEN: tl.constexpr,  # N_ROWS % ROWS == 0: row mask compiled out
+    EVEN: tl.constexpr,  # both row counts % ROWS == 0: row mask compiled out
 ):
     block_id = tl.program_id(0)
     is_k = tl.program_id(1)  # grid axis 1 selects the tensor
+    # Q and K have their own head counts under GQA, so their own row counts;
+    # the grid covers the larger one.
+    if is_k:
+        N_ROWS = N_ROWS_K
+    else:
+        N_ROWS = N_ROWS_Q
+    if block_id * ROWS >= N_ROWS:
+        return
 
     rows = block_id * ROWS + tl.arange(0, ROWS)
     # Contiguity proof for vectorized access; exact for every BLOCK.
@@ -123,7 +132,13 @@ def qk_head_layernorm(q, k, eps):
     k_out = torch.empty_like(k)
 
     dh = q.shape[-1]
-    n_rows = q.numel() // dh
+    if k.shape[-1] != dh:
+        raise ValueError(
+            f"q and k must share the head dim, got {dh} and {k.shape[-1]}"
+        )
+    n_rows_q = q.numel() // dh
+    n_rows_k = k.numel() // dh
+    n_rows = max(n_rows_q, n_rows_k)
     if n_rows == 0:
         return q_out, k_out
 
@@ -136,12 +151,13 @@ def qk_head_layernorm(q, k, eps):
         k,
         q_out,
         k_out,
-        n_rows,
+        n_rows_q,
+        n_rows_k,
         dh,
         eps,
         BLOCK=block,
         ROWS=rows,
-        EVEN=(n_rows % rows == 0),
+        EVEN=(n_rows_q % rows == 0 and n_rows_k % rows == 0),
         num_warps=_WARPS,
     )
     return q_out, k_out

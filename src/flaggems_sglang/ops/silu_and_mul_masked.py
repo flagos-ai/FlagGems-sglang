@@ -129,7 +129,22 @@ def _col_configs():
     return cfgs
 
 
-@triton.autotune(configs=_col_configs(), key=["E", "T", "half"])
+def _prune_col_configs(configs, named_args, **kwargs):
+    # FUSED loads 2 * BLOCK contiguous columns and splits them into gate and
+    # up, which is only right when one block spans the whole half row.
+    half = kwargs.get("half", named_args.get("half"))
+    return [
+        c
+        for c in configs
+        if not c.kwargs["FUSED"] or c.kwargs["BLOCK"] == half
+    ]
+
+
+@triton.autotune(
+    configs=_col_configs(),
+    key=["E", "T", "half"],
+    prune_configs_by={"early_config_prune": _prune_col_configs},
+)
 @triton.jit
 def _silu_and_mul_masked_col_kernel(
     input_ptr,
@@ -213,7 +228,9 @@ def silu_and_mul_masked(input, masked_m):
     s_ei, s_ti, s_hi = input.stride(0), input.stride(1), input.stride(2)
     s_eo, s_to, s_ho = out.stride(0), out.stride(1), out.stride(2)
 
-    if E * T <= _ROW_KERNEL_MAX_ROWS:
+    # The row kernel spans the half row with one tl.arange, which needs a
+    # power of two.
+    if E * T <= _ROW_KERNEL_MAX_ROWS and half & (half - 1) == 0:
         grid = lambda meta: (triton.cdiv(T, meta["BLOCK_T"]), E)
         _silu_and_mul_masked_row_kernel[grid](
             input,
