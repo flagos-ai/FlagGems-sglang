@@ -1826,6 +1826,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: act_and_mul
+    description: |
+      Fused MoE gated activation. Applies silu or tanh-approximated gelu to the first half of the last dim,
+      multiplies by the second half, and supports an optional SwiGLU input clamp; all fused in a single pass.
+    for:
+      - act_and_mul
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: silu_and_mul
     description: |
       Fused SiLU gate and multiply operation. Computes silu(x[..., :d]) * x[..., d:] in a single pass.
