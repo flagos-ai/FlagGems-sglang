@@ -32,7 +32,6 @@ operands are cast back to the input dtype before multiplying, matching the
 reference's rounding exactly.
 """
 
-import torch
 import triton
 import triton.language as tl
 
@@ -82,7 +81,9 @@ def _act_and_mul_kernel(
         act = tl.fdiv(gate, 1.0 + tl.exp(-2.0 * inner))
 
     out_base = out_ptr + row_idx.to(tl.int64) * d
-    tl.store(out_base + col_offs, tl.cast(act, up_raw.dtype) * up_raw, mask=mask)
+    tl.store(
+        out_base + col_offs, tl.cast(act, up_raw.dtype) * up_raw, mask=mask
+    )
 
 
 def act_and_mul(gateup_output, activation="silu", swiglu_limit=None):
