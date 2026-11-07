@@ -66,4 +66,16 @@ pytest -q benchmark/test_silu_and_mul.py --level core --iter 1 --warmup 1
 - All operator benchmarks support tensor-free case listing and exact replay;
   see [the case API guide](docs/benchmark_case_api.md).
 
+### DeepSeek V4.1 H100 operators
+
+Install the optional dependencies with `pip install '.[dsv41]'`. The SGLang
+indexer operators support the H100 packed FP4 cache and compressed-candidate
+layouts; common FP4, block-FP8 and mHC arithmetic comes from FlagGems. The
+framework plugin routes the request and candidate indexers through its backend
+policy; the optional adapter installs other supported entries before CUDA Graph
+capture.
+For SGLang v0.5.18, also apply the separate model and operator source
+backports before installing the adapter. The long-context APIs return `None`
+before launching when the input or hardware is outside their supported contract.
+
 This project is licensed under the [Apache (version 2.0) License](./LICENSE).
