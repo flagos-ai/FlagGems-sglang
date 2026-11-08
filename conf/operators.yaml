@@ -1559,6 +1559,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: reduce_head_scores
+    description: |
+      Weighted sum of the 32 DSA index head scores, in the accumulation
+      order Torch's CUDA reduction uses: each head product rounds to bf16
+      before it enters the sum, and four interleaved accumulators are
+      folded at the end.
+    for:
+      - reduce_head_scores
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
   - id: relu2
     description: |
       Squared ReLU, elementwise: max(0, x) ** 2, computed in fp32 and cast back.
@@ -1824,22 +1840,6 @@ ops:
       - MoE
     kind:
       - NeuralNetwork
-    stages:
-      - stable: '1.0'
-  - id: reduce_head_scores
-    description: |
-      Weighted sum of the 32 DSA index head scores, in the accumulation
-      order Torch's CUDA reduction uses: each head product rounds to bf16
-      before it enters the sum, and four interleaved accumulators are
-      folded at the end.
-    for:
-      - reduce_head_scores
-    labels:
-      - fused
-      - sglang
-      - Attention
-    kind:
-      - Reduction
     stages:
       - stable: '1.0'
   - id: silu_and_mul
