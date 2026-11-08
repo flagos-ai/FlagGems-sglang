@@ -154,3 +154,96 @@ def test_reduce_head_scores(case_idx):
                 assert_close(a, e)
     if check is not None:
         case["check"] = check
+
+
+@pytest.mark.reduce_head_scores
+def test_bf16_halfway_rounding():
+    """Replicates upstream's halfway case, which only the right order passes.
+
+    Row 6 sums 2^24, -2^24, 1.0 and 2^-8 over the 32 heads. The two large
+    terms cancel, leaving 1.0 + 2^-8 = 1.00390625, which rounds to 1.0 in
+    bf16. Summing 2^24 + 1.0 first would lose the 1.0 entirely, so the
+    expected values below cannot be produced by an accumulation that skips
+    the per-head bf16 cast or reorders the 32 heads.
+    """
+    dev = flaggems_sglang.device
+    scores = torch.ones(8, NUM_HEADS, 257, device=dev, dtype=torch.bfloat16)
+    weights = torch.zeros(8, NUM_HEADS, device=dev, dtype=torch.bfloat16)
+    weights[0, :2] = torch.tensor([1.0, 2.0**-8], device=dev)
+    weights[1, :2] = torch.tensor([1.0 + 2.0**-7, 2.0**-8], device=dev)
+    weights[2] = -weights[0]
+    weights[3] = -weights[1]
+    scores[4:6, 0] = 1.0 + 2.0**-7
+    weights[4, :2] = torch.tensor([1.5, -(2.0**-9)], device=dev)
+    weights[5] = -weights[4]
+    weights[6, :4] = torch.tensor(
+        [2.0**24, -(2.0**24), 1.0, 2.0**-8], device=dev
+    )
+    weights[7] = -weights[6]
+
+    expected = torch.tensor(
+        [1.0, 1.015625, -1.0, -1.015625, 1.515625, -1.515625, 1.0, -1.0],
+        device=dev,
+    )
+
+    candidate = get_candidate("reduce_head_scores")
+    actual = candidate(scores, weights)
+    assert actual.dtype == torch.float32
+    # Scores are all ones except rows 4-5 at column 0, so every column of the
+    # output holds the value its row's row-6 pattern produces; upstream
+    # compares column 0, which is the column the special scores sit in.
+    assert torch.equal(actual[:, 0], expected), (
+        f"halfway values differ: got {actual[:, 0].tolist()}, "
+        f"expected {expected.tolist()}"
+    )
+
+
+@pytest.mark.parametrize("width", [65537, 2049])
+@pytest.mark.reduce_head_scores
+def test_wide_widths(width):
+    """Widths past the upstream grid's largest point, over the 256-col block.
+
+    65537 is the widest upstream tests; it is one column past a whole
+    multiple of 65536, so it lands on the far tail of the mask.
+    """
+    scores = _scores(3, width, seed=width)
+    weights = torch.randn(
+        3, NUM_HEADS, generator=None, device=scores.device
+    ).to(torch.bfloat16)
+    candidate = get_candidate("reduce_head_scores")
+    reference = get_reference("reduce_head_scores")
+    actual = candidate(scores, weights)
+    expected = reference(scores, weights)
+    assert torch.equal(actual, expected)
+
+
+@pytest.mark.reduce_head_scores
+def test_head_contiguous_and_transposed_weights():
+    """Strides the upstream fallback list assumes this kernel cannot read.
+
+    Upstream falls back to torch for head-contiguous scores and for a
+    transposed 2-D weight. Score and weight strides are passed to the kernel
+    as runtime scalars, so both should read correctly; assert bit equality
+    rather than closeness, because no arithmetic differs.
+    """
+    dev = flaggems_sglang.device
+    rows, heads, width = 5, NUM_HEADS, 257
+
+    head_major = torch.randn(heads, rows, width, device=dev).to(torch.bfloat16)
+    scores = head_major.permute(1, 0, 2)
+    assert scores.stride() == (width, rows * width, 1)
+
+    weights = torch.randn(rows, heads, device=dev).to(torch.bfloat16)
+    candidate = get_candidate("reduce_head_scores")
+    reference = get_reference("reduce_head_scores")
+    actual = candidate(scores, weights)
+    expected = reference(scores, weights)
+    assert torch.equal(actual, expected)
+
+    w2 = torch.randn(heads, rows, device=dev).to(torch.bfloat16)
+    transposed = w2.t()
+    assert transposed.stride() == (1, rows)
+    scores2 = _scores(rows, width, seed=11)
+    actual2 = candidate(scores2, transposed)
+    expected2 = reference(scores2, transposed)
+    assert torch.equal(actual2, expected2)
