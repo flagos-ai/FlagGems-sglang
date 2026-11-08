@@ -31,7 +31,10 @@ PADDED_SCALE_PER_TOKEN = NUM_SCALE_TILES + 1
 
 PAGE_SIZE = 16
 SHAPES = [(tokens, PAGE_SIZE) for tokens in (1, 64, 512, 2048)]
-MORE_SHAPES = [(8, 1), (8, 4), (2048, 64)]
+# The cache pool actually uses page_size 64 and 256 (upstream's registered test
+# says "both cache page sizes the pool uses"), so cover those token counts too
+# instead of only the small-page edge cases.
+MORE_SHAPES = [(8, 1), (8, 4), (2048, 64), (333, 64), (4097, 256)]
 
 
 def _pack(num_pages, page_size, device, seed=0):
