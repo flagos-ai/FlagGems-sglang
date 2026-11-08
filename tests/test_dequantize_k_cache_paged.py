@@ -112,6 +112,52 @@ def _page_table(num_tokens, num_rows, mode, seed=0):
     return index.to(torch.int32)
 
 
+_DV = 512
+_TILE = 128
+_D = 576
+
+
+def _quantize_upstream(x, dv=_DV, tile_size=_TILE):
+    """Pack rows exactly the way upstream's quantizer does.
+
+    Mirrors ``python/sglang/test/kernels/dsa_k_cache_reference.py``
+    (2165 B), the only quantizer upstream ships for this layout. sglang is
+    not a dependency of this repo, so the statements are reproduced here
+    rather than imported.
+
+    Args:
+        x: ``bfloat16`` tensor of shape ``(blocks, block_size, 1, d)``.
+
+    Returns:
+        ``float8_e4m3fn`` tensor of shape ``(blocks, block_size, 1, 656)``
+        laid out as ``[dv fp8 nope | dv/tile_size fp32 scales | bf16 rope]``.
+    """
+    assert dv % tile_size == 0
+    num_tiles = dv // tile_size
+    blocks, block_size, _, d = x.shape
+    flat = x.squeeze(2)
+    dim_quant = dv + num_tiles * 4 + flat.dtype.itemsize * (d - dv)
+    result = torch.empty(
+        (blocks, block_size, dim_quant),
+        dtype=torch.float8_e4m3fn,
+        device=flat.device,
+    )
+    nope = result[..., :dv]
+    scales = result[..., dv : dv + num_tiles * 4].view(torch.float32)
+    rope = result[..., dv + num_tiles * 4 :].view(flat.dtype)
+    rope[:] = flat[..., dv:]
+
+    for tile in range(num_tiles):
+        sl = slice(tile * tile_size, (tile + 1) * tile_size)
+        inv = flat[..., sl].abs().max(dim=-1).values / 448.0
+        scales[..., tile] = inv
+        nope[..., sl] = (flat[..., sl].float() / inv.float().unsqueeze(-1)).to(
+            torch.float8_e4m3fn
+        )
+
+    return result.view(blocks, block_size, 1, dim_quant)
+
+
 def _case(
     num_rows, num_tokens, dim_nope, dim_rope, mode, seed=0, block_size=None
 ):
@@ -181,3 +227,37 @@ def test_dequantize_k_cache_paged(case_idx):
                 assert_close(a, e)
     if check is not None:
         case["check"] = check
+
+
+@pytest.mark.parametrize("num_rows", [8, 64, 512])
+@pytest.mark.dequantize_k_cache_paged
+def test_paged_matches_direct_rows(num_rows):
+    """Paged addressing must not change the decode.
+
+    The same upstream-packed rows go through the paged kernel (with an
+    identity page table) and the direct-row kernel. Comparing them to each
+    other rather than to this repo's reference keeps the oracle out of the
+    pair: any disagreement is a real defect in the addressing rewrite, and
+    bit equality is the right bar because neither side performs arithmetic
+    the other does not.
+    """
+    dev = flaggems_sglang.device
+    g = torch.Generator(device=dev).manual_seed(num_rows)
+    x = torch.randn((num_rows, 1, 1, _D), generator=g, device=dev).to(
+        torch.bfloat16
+    )
+    packed = _quantize_upstream(x)
+    rows = packed.reshape(num_rows, -1)
+
+    paged = get_candidate("dequantize_k_cache_paged")
+    direct = get_candidate("dequantize_k_cache_fast")
+    table = torch.arange(num_rows, dtype=torch.int32, device=dev)
+
+    got_paged = paged(rows, table, _TILE).reshape(num_rows, -1)
+    got_direct = direct(rows, _DV, _D - _DV, _TILE).reshape(num_rows, -1)
+
+    assert got_paged.dtype == torch.bfloat16
+    assert torch.equal(got_paged, got_direct), (
+        "paged and direct-row decoders disagree on the same packed rows; "
+        "the page table only selects a row, so the decode must be identical"
+    )

@@ -92,6 +92,53 @@ def _pack(num_rows, dim_nope, dim_rope, group_size=128, seed=0):
     return buf.view(torch.float8_e4m3fn)
 
 
+_DV = 512
+_TILE = 128
+_D = 576
+
+
+def _quantize_upstream(x, dv=_DV, tile_size=_TILE):
+    """Pack rows exactly the way upstream's quantizer does.
+
+    Mirrors ``python/sglang/test/kernels/dsa_k_cache_reference.py``
+    (2165 B), the only quantizer upstream ships for this layout. sglang is
+    not a dependency of this repo, so the statements are reproduced here
+    rather than imported; the row it builds is what the kernels under test
+    are expected to read.
+
+    Args:
+        x: ``bfloat16`` tensor of shape ``(blocks, block_size, 1, d)``.
+
+    Returns:
+        ``float8_e4m3fn`` tensor of shape ``(blocks, block_size, 1, 656)``
+        laid out as ``[dv fp8 nope | dv/tile_size fp32 scales | bf16 rope]``.
+    """
+    assert dv % tile_size == 0
+    num_tiles = dv // tile_size
+    blocks, block_size, _, d = x.shape
+    flat = x.squeeze(2)
+    dim_quant = dv + num_tiles * 4 + flat.dtype.itemsize * (d - dv)
+    result = torch.empty(
+        (blocks, block_size, dim_quant),
+        dtype=torch.float8_e4m3fn,
+        device=flat.device,
+    )
+    nope = result[..., :dv]
+    scales = result[..., dv : dv + num_tiles * 4].view(torch.float32)
+    rope = result[..., dv + num_tiles * 4 :].view(flat.dtype)
+    rope[:] = flat[..., dv:]
+
+    for tile in range(num_tiles):
+        sl = slice(tile * tile_size, (tile + 1) * tile_size)
+        inv = flat[..., sl].abs().max(dim=-1).values / 448.0
+        scales[..., tile] = inv
+        nope[..., sl] = (flat[..., sl].float() / inv.float().unsqueeze(-1)).to(
+            torch.float8_e4m3fn
+        )
+
+    return result.view(blocks, block_size, 1, dim_quant)
+
+
 def _case(num_tokens, dim_nope, dim_rope, seed=0, block_size=None):
     packed = _pack(num_tokens, dim_nope, dim_rope, seed=seed)
     if block_size is not None:
@@ -159,3 +206,50 @@ def test_dequantize_k_cache_fast(case_idx):
                 assert_close(a, e)
     if check is not None:
         case["check"] = check
+
+
+@pytest.mark.parametrize("num_rows", [8, 64, 512])
+@pytest.mark.dequantize_k_cache_fast
+def test_against_upstream_quantizer(num_rows):
+    """The original bf16 is the oracle, not this repo's reference.
+
+    Upstream ships only a quantizer for this layout, so this case has it
+    write the packed rows and compares the kernel's output against the
+    input it quantized -- never against ``reference/dequantize_k_cache_fast``.
+    The RoPE tail is stored as bf16 and copied verbatim, so it must return
+    bit-exact; misreading where that tail starts shifts it and fails
+    immediately. The NoPE half goes through fp8 e4m3 (3 mantissa bits,
+    half-ulp = 1/16 of the tile magnitude), so it is held to that format
+    precision rather than to bit equality.
+    """
+    dev = flaggems_sglang.device
+    g = torch.Generator(device=dev).manual_seed(num_rows)
+    x = torch.randn((num_rows, 1, 1, _D), generator=g, device=dev).to(
+        torch.bfloat16
+    )
+
+    packed = _quantize_upstream(x)
+    candidate = get_candidate("dequantize_k_cache_fast")
+    actual = candidate(
+        packed.reshape(num_rows, -1),
+        _DV,
+        _D - _DV,
+        _TILE,
+    )
+    # Tolerate both a row-major and a leading singleton dimension.
+    actual = actual.reshape(num_rows, -1)
+
+    want_rope = x.reshape(num_rows, _D)[:, _DV:].to(torch.float32)
+    got_rope = actual[:, _DV:].to(torch.float32)
+    assert torch.equal(got_rope, want_rope), (
+        "RoPE tail must be bit-exact: it is copied verbatim as bf16, so a "
+        "non-zero diff means the dequantizer reads the wrong tail offset"
+    )
+
+    want_nope = x.reshape(num_rows, _D)[:, :_DV].to(torch.float32)
+    got_nope = actual[:, :_DV].to(torch.float32)
+    scale_ref = want_nope.abs().max().item()
+    rel = (got_nope - want_nope).abs().max().item() / scale_ref
+    # fp8 e4m3 half-ulp is 1/16 of the tile magnitude, and the output also
+    # rounds to bf16; 5% of the tensor max is the format's own precision.
+    assert rel < 0.05, f"NoPE relative error {rel:.3%} exceeds fp8 precision"
