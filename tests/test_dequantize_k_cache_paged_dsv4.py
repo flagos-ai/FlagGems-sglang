@@ -98,8 +98,10 @@ def _pack(num_pages, page_size, seed=0):
     buf[:, : page_size * NOPE_ROPE_BYTES] = data
 
     # ue8m0 bytes stay in 100..160 (2^-27 .. 2^33), the range real MX scales
-    # live in. Bytes near 254 decode to 2^127 and a fp8 zero then yields
-    # 0 * inf = nan on both sides, which is not a meaningful accuracy check.
+    # live in. Extrema are covered by _random_cache instead: byte 0 exercises
+    # the subnormal flush and byte 255 the NaN path, and both are exactly the
+    # checks that caught the scale decode bug, so they belong in the suite
+    # rather than being avoided.
     scales = torch.randint(
         100,
         161,
