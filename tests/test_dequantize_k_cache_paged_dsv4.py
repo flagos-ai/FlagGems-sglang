@@ -50,7 +50,6 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
             if expected.dtype.is_floating_point
             else expected
         ),
-        equal_nan=True,
         **tol,
     )
 
@@ -74,7 +73,7 @@ def _pack(num_pages, page_size, seed=0):
             device=dev,
             dtype=torch.float32,
         )
-        * 50.0
+        * 5.0
     ).to(torch.float8_e4m3fn)
     r = torch.randn(
         (num_pages, page_size, DIM_ROPE),
@@ -85,11 +84,11 @@ def _pack(num_pages, page_size, seed=0):
 
     data = torch.cat(
         [
-            q.view(torch.uint8).reshape(num_pages, page_size * DIM_NOPE),
-            r.view(torch.uint8).reshape(num_pages, page_size * DIM_ROPE * 2),
+            q.view(torch.uint8).reshape(num_pages, page_size, DIM_NOPE),
+            r.view(torch.uint8).reshape(num_pages, page_size, DIM_ROPE * 2),
         ],
-        dim=1,
-    )
+        dim=2,
+    ).reshape(num_pages, page_size * NOPE_ROPE_BYTES)
     buf[:, : page_size * NOPE_ROPE_BYTES] = data
 
     # ue8m0 bytes stay in 100..160 (2^-27 .. 2^33), the range real MX scales

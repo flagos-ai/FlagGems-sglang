@@ -51,7 +51,7 @@ def _pack(num_pages, page_size, device, seed=0):
             device=device,
             dtype=torch.float32,
         )
-        * 50.0
+        * 5.0
     ).to(torch.float8_e4m3fn)
     r = torch.randn(
         (num_pages, page_size, DIM_ROPE),
@@ -62,11 +62,11 @@ def _pack(num_pages, page_size, device, seed=0):
 
     data = torch.cat(
         [
-            q.view(torch.uint8).reshape(num_pages, page_size * DIM_NOPE),
-            r.view(torch.uint8).reshape(num_pages, page_size * DIM_ROPE * 2),
+            q.view(torch.uint8).reshape(num_pages, page_size, DIM_NOPE),
+            r.view(torch.uint8).reshape(num_pages, page_size, DIM_ROPE * 2),
         ],
-        dim=1,
-    )
+        dim=2,
+    ).reshape(num_pages, page_size * NOPE_ROPE_BYTES)
     buf[:, : page_size * NOPE_ROPE_BYTES] = data
 
     scales = torch.randint(
