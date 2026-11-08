@@ -43,15 +43,21 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
         )
     )
     tol.update(overrides)
-    torch.testing.assert_close(
-        actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        (
-            expected.to(torch.float32)
-            if expected.dtype.is_floating_point
-            else expected
-        ),
-        **tol,
+    actual_f = (
+        actual.to(torch.float32) if actual.dtype.is_floating_point else actual
     )
+    expected_f = (
+        expected.to(torch.float32)
+        if expected.dtype.is_floating_point
+        else expected
+    )
+    # torch.testing.assert_close defaults equal_nan to False here, so a cache
+    # holding an fp8 NaN payload (byte 0x7F) fails even when the kernel and the
+    # reference produce NaN at exactly the same positions. Upstream's test
+    # passes equal_nan=True for the same reason.
+    if expected_f.dtype.is_floating_point:
+        tol.setdefault("equal_nan", True)
+    torch.testing.assert_close(actual_f, expected_f, **tol)
 
 
 def _pack(num_pages, page_size, seed=0):
@@ -115,6 +121,52 @@ def _pack(num_pages, page_size, seed=0):
     return buf
 
 
+def _random_cache(num_pages, page_size, seed=0):
+    """Cache filled with random bytes, mirroring the upstream registered test.
+
+    Every fp8 payload byte and every ue8m0 scale byte is drawn from 0..255, so
+    the scale range spans ``2 ** -127 .. 2 ** 128`` and byte 255 lands on NaN.
+    The upstream test in
+    ``sglang/test/registered/kernels/ops/attention/test_dsv4_dequant_k_cache.py``
+    builds its cache exactly this way. Restricting scales to the "realistic"
+    100..160 band (as ``_pack`` does) leaves the flush-to-zero path and the NaN
+    path unexercised, so a reference that forgets to flush subnormal scales
+    still passes.
+    """
+    dev = flaggems_sglang.device
+    raw = page_size * (NOPE_ROPE_BYTES + PADDED_SCALE_PER_TOKEN)
+    bytes_per_page = ((raw + NOPE_ROPE_BYTES - 1) // NOPE_ROPE_BYTES) * (
+        NOPE_ROPE_BYTES
+    )
+    g = torch.Generator(device=dev).manual_seed(seed)
+    return torch.randint(
+        0,
+        256,
+        (num_pages, bytes_per_page),
+        generator=g,
+        device=dev,
+        dtype=torch.uint8,
+    )
+
+
+def _random_case(num_tokens, page_size, seed=0):
+    dev = flaggems_sglang.device
+    num_pages = max(2, (num_tokens + page_size - 1) // page_size + 1)
+    g = torch.Generator(device=dev).manual_seed(seed)
+    return dict(
+        quant_k_cache=_random_cache(num_pages, page_size, seed),
+        page_table_1_flattened=torch.randint(
+            0,
+            num_pages * page_size,
+            (num_tokens,),
+            generator=g,
+            device=dev,
+            dtype=torch.int32,
+        ),
+        page_size=page_size,
+    )
+
+
 def _page_table(num_pages, page_size, num_tokens, mode, seed=0):
     dev = flaggems_sglang.device
     g = torch.Generator(device=dev).manual_seed(seed)
@@ -149,6 +201,13 @@ _CASE_FACTORIES = [
     lambda: _case(8, 8, 64, "sequential"),
     lambda: _case(8, 16, 128, "shuffled"),
     lambda: _case(1, 1, 1, "sequential"),
+    # Upstream's registered CASES: tails of 0/1/3 modulo the 4 tokens per
+    # program, and both page sizes the cache pool actually uses.
+    lambda: _random_case(1, 64),
+    lambda: _random_case(3, 64),
+    lambda: _random_case(333, 64),
+    lambda: _random_case(256, 256),
+    lambda: _random_case(4097, 256),
 ]
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))

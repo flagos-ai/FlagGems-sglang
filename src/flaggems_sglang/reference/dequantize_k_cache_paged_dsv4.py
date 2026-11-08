@@ -36,15 +36,19 @@ PADDED_SCALE_PER_TOKEN = NUM_SCALE_TILES + 1
 
 
 def _ue8m0_to_fp32(scale_u8):
-    """Decode a ue8m0 byte as ``2 ** (byte - 127)``.
+    """Decode a ue8m0 byte as ``2 ** (byte - 127)``, flushing subnormals.
 
-    Byte 0 therefore lands on the denormal ``2 ** -127``, matching the
-    kernel's ``exp2(byte - 127)``. Byte 255 (NaN in the float8_e8m0fnu
-    encoding) is left to the same formula, so the reference and the kernel
-    agree bit for bit; callers should keep scales in ``1..254`` when they
-    want a defined value.
+    ``exp2`` on the GPU flushes fp32 subnormal results to zero, so a byte of 0
+    yields ``0.0`` rather than the denormal ``2 ** -127``. The clamp below
+    reproduces that flush and matches the upstream torch reference in
+    ``sglang/test/kernels/deepseek_v4/k_cache_reference.py``, which applies the
+    same ``< 2 ** -126`` cut-off. Byte 255 (NaN in the float8_e8m0fnu encoding)
+    is left to the same formula so the reference and the kernel agree bit for
+    bit; callers should keep scales in ``1..254`` when they want a defined
+    value.
     """
-    return torch.exp2((scale_u8.to(torch.float32) - 127.0))
+    scale = torch.exp2((scale_u8.to(torch.float32) - 127.0))
+    return torch.where(scale < (2.0**-126), torch.zeros_like(scale), scale)
 
 
 def reference(quant_k_cache, page_table_1_flattened, page_size):
