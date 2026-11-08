@@ -1,0 +1,230 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""High-performance Triton kernel for moe/act_and_mul."""
+
+from __future__ import annotations
+
+import contextlib
+
+import torch
+import triton
+import triton.language as tl
+
+
+def _device_ctx(device: torch.device):
+    if device.type == "cpu":
+        return contextlib.nullcontext()
+    return torch.get_device_module(device).device(device)
+
+
+def _select_tile_config(m: int, n: int) -> tuple[int, int, int]:
+    """Deterministic 2D tile & warp heuristic (TRITON_DISABLE_AUTOTUNE safe)."""
+    if n <= 128:
+        block_n = triton.next_power_of_2(max(n, 32))
+    elif m <= 16:
+        block_n = 128 if n <= 2048 else 256
+    elif m <= 64:
+        block_n = 256
+    else:
+        block_n = 256 if n < 2048 else 512
+
+    if m <= 64:
+        block_m = 1
+    elif m <= 512:
+        block_m = 2
+    else:
+        block_m = 4
+
+    elems = block_m * block_n
+    if elems <= 256:
+        num_warps = 2
+    elif elems <= 1024:
+        num_warps = 4
+    else:
+        num_warps = 8
+    return block_m, block_n, num_warps
+
+
+@triton.jit
+def _act_and_mul_kernel(
+    gateup_ptr,
+    out_ptr,
+    m,
+    n,
+    stride_gm,
+    stride_gk,
+    stride_om,
+    limit_val,
+    IS_GELU: tl.constexpr,
+    HAS_LIMIT: tl.constexpr,
+    STREAM_LARGE: tl.constexpr,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+):
+    pid_n = tl.program_id(0)
+    pid_m = tl.program_id(1)
+
+    offs_n = (pid_n * BLOCK_N + tl.arange(0, BLOCK_N)).to(tl.int64)
+    mask_n = offs_n < n
+
+    stride_gm64 = tl.full((), stride_gm, tl.int64)
+    stride_gk64 = tl.full((), stride_gk, tl.int64)
+    stride_om64 = tl.full((), stride_om, tl.int64)
+    out_ty = out_ptr.dtype.element_ty
+
+    if BLOCK_M == 1:
+        row = tl.full((), pid_m, tl.int64)
+        gate_ptrs = gateup_ptr + row * stride_gm64 + offs_n * stride_gk64
+        up_ptrs = gateup_ptr + row * stride_gm64 + (offs_n + n) * stride_gk64
+
+        if STREAM_LARGE:
+            gate = tl.load(
+                gate_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
+            ).to(tl.float32)
+            up = tl.load(
+                up_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
+            ).to(tl.float32)
+        else:
+            gate = tl.load(gate_ptrs, mask=mask_n, other=0.0).to(tl.float32)
+            up = tl.load(up_ptrs, mask=mask_n, other=0.0).to(tl.float32)
+
+        if HAS_LIMIT:
+            lim = tl.full((), limit_val, tl.float32)
+            gate = tl.minimum(gate, lim)
+            up = tl.minimum(tl.maximum(up, -lim), lim)
+
+        if IS_GELU:
+            # Exact tanh-approximation GELU via overflow-safe 2*z sigmoid identity:
+            # 0.5 * x * (1 + tanh(z)) == x * sigmoid(2 * z), z = sqrt(2/pi) * (x + 0.044715 * x^3)
+            u = 1.5957691216057308 * (gate + 0.044715 * gate * gate * gate)
+            u = tl.maximum(tl.minimum(u, 80.0), -80.0)
+            act = gate * tl.sigmoid(u)
+        else:
+            act = gate * tl.sigmoid(gate)
+
+        # Match upstream reference intermediate cast: (act.to(dtype) * up.to(dtype)).to(dtype)
+        act_q = act.to(out_ty).to(tl.float32)
+        up_q = up.to(out_ty).to(tl.float32)
+        out = (act_q * up_q).to(out_ty)
+
+        tl.store(out_ptr + row * stride_om64 + offs_n, out, mask=mask_n)
+    else:
+        offs_m = (pid_m * BLOCK_M + tl.arange(0, BLOCK_M)).to(tl.int64)
+        mask_m = offs_m < m
+        mask_mn = mask_m[:, None] & mask_n[None, :]
+
+        gate_ptrs = (
+            gateup_ptr + offs_m[:, None] * stride_gm64 + offs_n[None, :] * stride_gk64
+        )
+        up_ptrs = (
+            gateup_ptr
+            + offs_m[:, None] * stride_gm64
+            + (offs_n[None, :] + n) * stride_gk64
+        )
+
+        if STREAM_LARGE:
+            gate = tl.load(
+                gate_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
+            ).to(tl.float32)
+            up = tl.load(
+                up_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
+            ).to(tl.float32)
+        else:
+            gate = tl.load(gate_ptrs, mask=mask_mn, other=0.0).to(tl.float32)
+            up = tl.load(up_ptrs, mask=mask_mn, other=0.0).to(tl.float32)
+
+        if HAS_LIMIT:
+            lim = tl.full((), limit_val, tl.float32)
+            gate = tl.minimum(gate, lim)
+            up = tl.minimum(tl.maximum(up, -lim), lim)
+
+        if IS_GELU:
+            u = 1.5957691216057308 * (gate + 0.044715 * gate * gate * gate)
+            u = tl.maximum(tl.minimum(u, 80.0), -80.0)
+            act = gate * tl.sigmoid(u)
+        else:
+            act = gate * tl.sigmoid(gate)
+
+        act_q = act.to(out_ty).to(tl.float32)
+        up_q = up.to(out_ty).to(tl.float32)
+        out = (act_q * up_q).to(out_ty)
+
+        out_ptrs = out_ptr + offs_m[:, None] * stride_om64 + offs_n[None, :]
+        tl.store(out_ptrs, out, mask=mask_mn)
+
+
+def act_and_mul(
+    gateup_output: torch.Tensor,
+    activation: str = "silu",
+    swiglu_limit: float | None = None,
+) -> torch.Tensor:
+    if activation == "silu":
+        is_gelu = False
+    elif activation == "gelu":
+        is_gelu = True
+    else:
+        raise ValueError(f"Unsupported activation: {activation}")
+
+    if gateup_output.ndim < 2 or gateup_output.shape[-1] % 2 != 0:
+        raise ValueError(
+            f"Expected gateup_output with ndim>=2 and even last dim, got {tuple(gateup_output.shape)}"
+        )
+
+    orig_prefix = gateup_output.shape[:-1]
+    two_n = gateup_output.shape[-1]
+    n = two_n // 2
+
+    if gateup_output.ndim == 2:
+        x2d = gateup_output
+    else:
+        try:
+            x2d = gateup_output.view(-1, two_n)
+        except RuntimeError:
+            x2d = gateup_output.reshape(-1, two_n)
+
+    m = x2d.shape[0]
+    out2d = torch.empty((m, n), dtype=gateup_output.dtype, device=gateup_output.device)
+    if m == 0 or n == 0:
+        return out2d if gateup_output.ndim == 2 else out2d.view(*orig_prefix, n)
+
+    has_limit = swiglu_limit is not None
+    limit_val = float(swiglu_limit) if has_limit else 0.0
+    block_m, block_n, num_warps = _select_tile_config(m, n)
+    stream_large = (
+        gateup_output.numel() * gateup_output.element_size() >= 32 * 1024 * 1024
+    )
+    grid = (triton.cdiv(n, block_n), triton.cdiv(m, block_m))
+
+    with _device_ctx(gateup_output.device):
+        _act_and_mul_kernel[grid](
+            x2d,
+            out2d,
+            m,
+            n,
+            x2d.stride(0),
+            x2d.stride(1),
+            out2d.stride(0),
+            limit_val,
+            IS_GELU=is_gelu,
+            HAS_LIMIT=has_limit,
+            STREAM_LARGE=stream_large,
+            BLOCK_M=block_m,
+            BLOCK_N=block_n,
+            num_warps=num_warps,
+        )
+    return out2d if gateup_output.ndim == 2 else out2d.view(*orig_prefix, n)
+
+
+__all__ = ["act_and_mul"]
