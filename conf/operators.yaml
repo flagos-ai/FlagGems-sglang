@@ -1826,6 +1826,23 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: dequantize_k_cache_paged_dsv4
+    description: |
+      Dequantize paged DeepSeek-V4 KV-cache tokens back to bf16. The V4
+      layout keeps the per-token ue8m0 scales in a separate page-level
+      block rather than inside the row, so the kernel resolves the data
+      and scale addresses independently and decodes the scale as an
+      exponent.
+    for:
+      - dequantize_k_cache_paged_dsv4
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: silu_and_mul
     description: |
       Fused SiLU gate and multiply operation. Computes silu(x[..., :d]) * x[..., d:] in a single pass.
