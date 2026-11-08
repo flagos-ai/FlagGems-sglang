@@ -1826,6 +1826,37 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: dequantize_k_cache_fast
+    description: |
+      Dequantize packed DSA KV-cache rows back to bf16 with direct row
+      addressing. Each row packs the fp8 NoPE segment, one fp32 scale per
+      group and the bf16 RoPE segment; the kernel reads each segment once
+      and writes the result once, instead of materialising intermediates.
+    for:
+      - dequantize_k_cache_fast
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: dequantize_k_cache_paged
+    description: |
+      Dequantize paged DSA KV-cache tokens back to bf16. Same packed layout
+      as the direct variant, but the source row is resolved through the
+      flattened page table so several sequences can share cache slots.
+    for:
+      - dequantize_k_cache_paged
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: silu_and_mul
     description: |
       Fused SiLU gate and multiply operation. Computes silu(x[..., :d]) * x[..., d:] in a single pass.
