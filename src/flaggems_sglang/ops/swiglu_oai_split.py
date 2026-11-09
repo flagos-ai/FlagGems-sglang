@@ -99,7 +99,10 @@ def _swiglu_oai_split_kernel(
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_n,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
@@ -126,10 +129,14 @@ def _swiglu_oai_split_kernel(
 
         if CONTIGUOUS_INNER:
             gate_ptrs = x_ptr + offs_m[:, None] * stride_xm64 + offs_n[None, :]
-            up_ptrs = x_ptr + offs_m[:, None] * stride_xm64 + offs_n[None, :] + n
+            up_ptrs = (
+                x_ptr + offs_m[:, None] * stride_xm64 + offs_n[None, :] + n
+            )
         else:
             gate_ptrs = (
-                x_ptr + offs_m[:, None] * stride_xm64 + offs_n[None, :] * stride_xk64
+                x_ptr
+                + offs_m[:, None] * stride_xm64
+                + offs_n[None, :] * stride_xk64
             )
             up_ptrs = (
                 x_ptr
@@ -139,7 +146,10 @@ def _swiglu_oai_split_kernel(
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_mn,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
