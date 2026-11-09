@@ -389,24 +389,9 @@ def _bounded_rows(X, W, OUT, SEG, WI, RANKS, SCALES, PERM, META: tl.constexpr):
                 tl.store(ptr, base + correction * scale, n < N)
 
 
-def step_b_v(
+def _bounded_step_b_v(
     attn_lora_a, B_buf, batch_info, base_output, qk_nope_head_dim, v_head_dim
 ):
-    if (
-        v_head_dim <= 128
-        and attn_lora_a.shape[-1] * attn_lora_a.element_size() <= 256
-        or base_output.numel() == 0
-        or batch_info.bs == 0
-        or (B_buf.shape[0] == 0)
-    ):
-        return _optimized_step_b_v(
-            attn_lora_a,
-            B_buf,
-            batch_info,
-            base_output,
-            qk_nope_head_dim,
-            v_head_dim,
-        )
     x = attn_lora_a.contiguous()
     weight = B_buf.contiguous()
     S, H, K = x.shape
@@ -448,6 +433,72 @@ def step_b_v(
         warmup=False,
     )
     return out
+
+
+def _optimized_fast_path_covers_all(batch_info, S, N):
+    """Whether _step_b_v_kernel's aligned fast path handles every tile.
+
+    _step_b_v_kernel has two paths: an "owner" fast path for program tiles
+    that lie entirely inside a single segment, and a general per-segment
+    accumulation loop for the remaining ragged tiles. On nvidia the ragged
+    loop miscompiles under FlagTree's Triton (it drops the LoRA contribution
+    and can read rows past S), so only route work here when every tile is
+    owned: no permutation, and every segment boundary is BM-aligned with
+    S >= BM. Otherwise the caller must use the bounded-rows kernel.
+    """
+    if batch_info.permutation is not None:
+        return False
+    bn = max(16, 0 if N == 0 else 1 << (N - 1).bit_length())
+    bm = max(16, 8192 // bn)
+    if S < bm:
+        return False
+    # Every BM tile is single-segment iff all interior segment boundaries sit
+    # on BM multiples. seg_indptr is bs+1 ints; reading it to host is cheap.
+    seg = batch_info.seg_indptr.tolist()
+    return all(boundary % bm == 0 for boundary in seg[1:-1])
+
+
+def step_b_v(
+    attn_lora_a, B_buf, batch_info, base_output, qk_nope_head_dim, v_head_dim
+):
+    if (
+        v_head_dim <= 128
+        and attn_lora_a.shape[-1] * attn_lora_a.element_size() <= 256
+        or base_output.numel() == 0
+        or batch_info.bs == 0
+        or (B_buf.shape[0] == 0)
+    ):
+        S = attn_lora_a.shape[0]
+        # The optimized kernel's ragged-tile loop is only correct on hip; on
+        # nvidia fall back to the bounded-rows kernel unless the aligned fast
+        # path covers every tile on its own.
+        if torch.version.hip is not None or _optimized_fast_path_covers_all(
+            batch_info, S, v_head_dim
+        ):
+            return _optimized_step_b_v(
+                attn_lora_a,
+                B_buf,
+                batch_info,
+                base_output,
+                qk_nope_head_dim,
+                v_head_dim,
+            )
+        return _bounded_step_b_v(
+            attn_lora_a,
+            B_buf,
+            batch_info,
+            base_output,
+            qk_nope_head_dim,
+            v_head_dim,
+        )
+    return _bounded_step_b_v(
+        attn_lora_a,
+        B_buf,
+        batch_info,
+        base_output,
+        qk_nope_head_dim,
+        v_head_dim,
+    )
 
 
 __all__ = ["step_b_v"]
