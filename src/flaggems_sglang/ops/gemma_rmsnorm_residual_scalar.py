@@ -126,7 +126,9 @@ def _gemma_rmsnorm_residual_scalar_kernel(
 
             normed = x * tl.rsqrt(tl.sum(x * x, axis=0) * inv_d + eps_f) * w
             out = (normed + res) * scalar
-            tl.store(out_ptr + row64 * stride_om64 + cols, out.to(out_ty), mask=mask)
+            tl.store(
+                out_ptr + row64 * stride_om64 + cols, out.to(out_ty), mask=mask
+            )
 
 
 @triton.jit
@@ -168,9 +170,13 @@ def _gemma_rmsnorm_residual_scalar_large_d_kernel(
             x_ptr + row64 * stride_xm + cols * stride_xd, mask=mask, other=0.0
         ).to(tl.float32)
         res = tl.load(
-            residual_ptr + row64 * stride_rm + cols * stride_rd, mask=mask, other=0.0
+            residual_ptr + row64 * stride_rm + cols * stride_rd,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
-        w = tl.load(weight_ptr + cols * stride_w, mask=mask, other=0.0).to(tl.float32)
+        w = tl.load(weight_ptr + cols * stride_w, mask=mask, other=0.0).to(
+            tl.float32
+        )
         out = (x * rstd * w + res) * scalar
         tl.store(out_ptr + row64 * stride_om + cols, out.to(out_ty), mask=mask)
 
