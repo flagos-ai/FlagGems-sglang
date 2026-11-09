@@ -159,9 +159,15 @@ def _gemma_dual_rmsnorm_residual_scalar_kernel(
             n1 = x1 * tl.rsqrt(tl.sum(x1 * x1, axis=0) * inv_d + eps1_f) * w1
             n2 = x2 * tl.rsqrt(tl.sum(x2 * x2, axis=0) * inv_d + eps2_f) * w2
             comb = n1 + n2
-            n3 = comb * tl.rsqrt(tl.sum(comb * comb, axis=0) * inv_d + eps3_f) * w3
+            n3 = (
+                comb
+                * tl.rsqrt(tl.sum(comb * comb, axis=0) * inv_d + eps3_f)
+                * w3
+            )
             out = (n3 + res) * scalar
-            tl.store(out_ptr + row64 * stride_om64 + cols, out.to(out_ty), mask=mask)
+            tl.store(
+                out_ptr + row64 * stride_om64 + cols, out.to(out_ty), mask=mask
+            )
 
 
 @triton.jit
@@ -200,10 +206,14 @@ def _gemma_dual_rmsnorm_large_d_kernel(
         cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
-            x1_ptr + row64 * stride_x1m + cols * stride_x1d, mask=mask, other=0.0
+            x1_ptr + row64 * stride_x1m + cols * stride_x1d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         x2 = tl.load(
-            x2_ptr + row64 * stride_x2m + cols * stride_x2d, mask=mask, other=0.0
+            x2_ptr + row64 * stride_x2m + cols * stride_x2d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         sum_sq1 += tl.sum(x1 * x1, axis=0)
         sum_sq2 += tl.sum(x2 * x2, axis=0)
@@ -216,10 +226,14 @@ def _gemma_dual_rmsnorm_large_d_kernel(
         cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
-            x1_ptr + row64 * stride_x1m + cols * stride_x1d, mask=mask, other=0.0
+            x1_ptr + row64 * stride_x1m + cols * stride_x1d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         x2 = tl.load(
-            x2_ptr + row64 * stride_x2m + cols * stride_x2d, mask=mask, other=0.0
+            x2_ptr + row64 * stride_x2m + cols * stride_x2d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         w1 = tl.load(weight1_ptr + cols * stride_w1, mask=mask, other=0.0).to(
             tl.float32
@@ -236,13 +250,19 @@ def _gemma_dual_rmsnorm_large_d_kernel(
         cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
-            x1_ptr + row64 * stride_x1m + cols * stride_x1d, mask=mask, other=0.0
+            x1_ptr + row64 * stride_x1m + cols * stride_x1d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         x2 = tl.load(
-            x2_ptr + row64 * stride_x2m + cols * stride_x2d, mask=mask, other=0.0
+            x2_ptr + row64 * stride_x2m + cols * stride_x2d,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         res = tl.load(
-            residual_ptr + row64 * stride_rm + cols * stride_rd, mask=mask, other=0.0
+            residual_ptr + row64 * stride_rm + cols * stride_rd,
+            mask=mask,
+            other=0.0,
         ).to(tl.float32)
         w1 = tl.load(weight1_ptr + cols * stride_w1, mask=mask, other=0.0).to(
             tl.float32
@@ -271,7 +291,9 @@ def gemma_dual_rmsnorm_residual_scalar(
     eps3: float = 1e-6,
 ) -> torch.Tensor:
     if x1.ndim < 2 or x2.shape != x1.shape or residual.shape != x1.shape:
-        raise ValueError("x1, x2, and residual must share shape with ndim >= 2")
+        raise ValueError(
+            "x1, x2, and residual must share shape with ndim >= 2"
+        )
 
     orig_shape = x1.shape
     hidden_size = orig_shape[-1]
@@ -290,10 +312,13 @@ def gemma_dual_rmsnorm_residual_scalar(
             block_d = triton.next_power_of_2(hidden_size)
             rows_per_cta, num_warps = _select_config(num_rows, block_d)
             contiguous_inner = (
-                x1_2d.stride(1) == 1 and x2_2d.stride(1) == 1 and res_2d.stride(1) == 1
+                x1_2d.stride(1) == 1
+                and x2_2d.stride(1) == 1
+                and res_2d.stride(1) == 1
             )
             stream_inputs = (
-                hidden_size >= 1024 and x1.numel() * x1.element_size() >= 1048576
+                hidden_size >= 1024
+                and x1.numel() * x1.element_size() >= 1048576
             )
             grid = (triton.cdiv(num_rows, rows_per_cta),)
             _gemma_dual_rmsnorm_residual_scalar_kernel[grid](
