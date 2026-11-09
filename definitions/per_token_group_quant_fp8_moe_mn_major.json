@@ -1,7 +1,7 @@
 {
   "api_version": "v6.0",
   "name": "per_token_group_quant_fp8_moe_mn_major",
-  "description": "Quantize the valid activation rows of each MoE expert to FP8 in groups. Expert offsets and problem sizes identify valid rows. Return quantized values and scales packed with the row index varying fastest within each expert and quantization group.",
+  "description": "Quantize the valid activation rows of each MoE expert to FP8 in groups. Expert offsets and problem sizes identify valid rows. For each valid group, compute the scale as max(absmax(group), 1e-4) divided by the finite FP8 maximum. Unused rows and scale slots are zero. Return quantized values and scales packed with the row index varying fastest within each expert and quantization group.",
   "parameters": [
     {
       "name": "A",
