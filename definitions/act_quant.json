@@ -1,7 +1,7 @@
 {
   "api_version": "v6.0",
   "name": "act_quant",
-  "description": "Quantize x to FP8 in groups along its last dimension. Each group uses an absolute-maximum scale. When scale_fmt is supplied, round the scale up to a power of two. Return the quantized tensor and per-group scales.",
+  "description": "Quantize x to FP8 in groups along its last dimension. Compute each scale as max(absmax(group), 1e-4) divided by the finite FP8 maximum. When scale_fmt is supplied, round that scale up to a power of two. Return the quantized tensor and per-group scales.",
   "parameters": [
     {
       "name": "x",

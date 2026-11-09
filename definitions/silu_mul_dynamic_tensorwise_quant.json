@@ -1,7 +1,7 @@
 {
   "api_version": "v6.0",
   "name": "silu_mul_dynamic_tensorwise_quant",
-  "description": "Compute SiLU(gate) times up on the active rows selected by num_tokens_tensor. Derive a per-tensor FP8 scale from those activations and write the quantized prefix into a copy of output. Return the updated values and the computed scale.",
+  "description": "Compute SiLU(gate) times up on the active rows selected by num_tokens_tensor. Compute the per-tensor scale as max(absmax(activations), 1e-10) divided by the finite FP8 maximum and write the quantized prefix into a copy of output. Return the updated values and the computed scale.",
   "parameters": [
     {
       "name": "input",
