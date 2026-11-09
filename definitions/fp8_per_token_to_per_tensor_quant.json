@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "fp8_per_token_to_per_tensor_quant",
+  "description": "Convert expert activations from per-group scaling to the supplied per-tensor output_scale. Multiply by x_scale and divide by output_scale on the valid rows of each expert. Rows beyond masked_m are zero in the result.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "x_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "masked_m",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

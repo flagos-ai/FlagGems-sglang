@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "dsv3_router_gemm",
+  "description": "Compute router logits as hidden_states multiplied by the transpose of router_weights, accumulating in FP32 and returning out_dtype.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "router_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "logits"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

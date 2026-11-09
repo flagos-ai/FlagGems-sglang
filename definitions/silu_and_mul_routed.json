@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_and_mul_routed",
+  "description": "Split gate and up channels using adjacent pairs when use_interleaved is true and two contiguous halves otherwise. Compute SiLU(gate) times up and multiply by the optional routing weights. Cast to out_dtype when supplied, or preserve the input dtype.",
+  "parameters": [
+    {
+      "name": "gateup_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "use_interleaved",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

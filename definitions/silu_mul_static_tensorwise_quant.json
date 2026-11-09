@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_mul_static_tensorwise_quant",
+  "description": "Compute SiLU(gate) times up on the active rows selected by num_tokens_tensor, divide by the supplied static scale and cast to FP8. Return a copy of output with the active prefix replaced.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_tokens_tensor",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expected_num_tokens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "intermediate_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

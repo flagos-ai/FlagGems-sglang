@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_recurrent_kda",
+  "description": "Run recurrent Kimi Delta Attention. Decay the state per key channel using exp(g), apply the beta-weighted delta update and read out with the scaled query. Optionally L2-normalize queries and keys. Return the token outputs and the updated state without modifying initial_state.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "initial_state",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "use_qk_l2norm_in_kernel",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output",
+    "final_state"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

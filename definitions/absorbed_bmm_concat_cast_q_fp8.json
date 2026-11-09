@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "absorbed_bmm_concat_cast_q_fp8",
+  "description": "Project each non-rotary query head with its corresponding slice of w_kc, round that projection to BF16, concatenate the rotary query channels and cast to the dtype of q_fp8_pad. Return a copy of the padded query buffer with the active token and head region replaced.",
+  "parameters": [
+    {
+      "name": "q_fp8_pad",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "q_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w_kc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "q_rope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_heads",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

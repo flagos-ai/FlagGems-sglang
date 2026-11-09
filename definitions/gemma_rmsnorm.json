@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_rmsnorm",
+  "description": "Compute last-dimension RMS normalization with epsilon eps and Gemma's weight convention, multiplying the normalized values by 1 + weight. Return in x's dtype.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

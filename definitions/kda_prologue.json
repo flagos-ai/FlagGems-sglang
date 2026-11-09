@@ -1,0 +1,54 @@
+{
+  "api_version": "v6.0",
+  "name": "kda_prologue",
+  "description": "Use cu_seqlens and chunk_indices to form within-chunk cumulative and terminal-relative gate sums. Return the keys scaled by the terminal-relative gate, its inverse and the cumulative gate, then the scaled queries using cumulative and terminal-relative gates, followed by the cumulative gate itself.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g_act",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cu_seqlens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "chunk_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_chunks",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "kL",
+    "kR",
+    "kgw",
+    "qg",
+    "qg2",
+    "g_cu_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

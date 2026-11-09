@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "swiglu_oai_mxfp8_quant",
+  "description": "Split the gate/up projection, apply the optional asymmetric clamp and compute gate times sigmoid(alpha times gate) times (up + beta). Quantize the result to MXFP8 and return its encoded block scales.",
+  "parameters": [
+    {
+      "name": "gate_up",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "alpha",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "limit",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

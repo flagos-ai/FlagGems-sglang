@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "store_sf_interleaved",
+  "description": "Store each input scale row at its page and interleaved within-page position according to loc and page_size. Return a copy of sf_out with the selected entries updated.",
+  "parameters": [
+    {
+      "name": "sf_in",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sf_out",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "scale_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

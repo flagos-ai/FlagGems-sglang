@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "cat_pad_channels_last_3d",
+  "description": "Prepend optional cached frames along the temporal axis, reduce front padding by the number of cached frames down to zero, and apply the remaining zero padding in time, height and width. Return the padded channels-last-3d tensor. When keep_cache_t is positive, return a pair of the padded tensor and a channels-last-3d cache of the trailing frames without spatial padding.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cache_x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "padding",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "keep_cache_t",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "result"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

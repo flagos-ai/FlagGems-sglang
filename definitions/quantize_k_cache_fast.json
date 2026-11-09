@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "quantize_k_cache_fast",
+  "description": "Quantize the non-rotary key groups to FP8 and store their scales alongside the quantized values. Append the unquantized rotary channels in the same packed cache row.",
+  "parameters": [
+    {
+      "name": "k_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_rope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 128
+    }
+  ],
+  "outputs": [
+    "packed_keys"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

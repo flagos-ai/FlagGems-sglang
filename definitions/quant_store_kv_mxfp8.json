@@ -1,0 +1,57 @@
+{
+  "api_version": "v6.0",
+  "name": "quant_store_kv_mxfp8",
+  "description": "Quantize keys and values to MXFP8 and place them at loc in copies of the paged caches. Place the encoded block scales in copies of the scale buffers using the interleaved page layout. Return the four updated buffers and preserve the originals.",
+  "parameters": [
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sfk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sfv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "key_cache_out",
+    "value_cache_out",
+    "key_scales_out",
+    "value_scales_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

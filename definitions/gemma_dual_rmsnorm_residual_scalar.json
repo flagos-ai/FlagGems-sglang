@@ -1,0 +1,64 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_dual_rmsnorm_residual_scalar",
+  "description": "RMS-normalize x1 and x2 with their respective weights and epsilons, sum the results and RMS-normalize again with weight3 and eps3. Add residual and multiply by scalar. Return in x1's dtype.",
+  "parameters": [
+    {
+      "name": "x1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "x2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight3",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scalar",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps3",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

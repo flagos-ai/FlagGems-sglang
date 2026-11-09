@@ -1,0 +1,24 @@
+{
+  "api_version": "v6.0",
+  "name": "bias_gelu_tanh",
+  "description": "Add bias across the last dimension of x and apply the tanh approximation of GELU.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

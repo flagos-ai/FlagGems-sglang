@@ -1,0 +1,50 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_group_quant_8bit_v2",
+  "description": "Quantize each group independently using its absolute maximum with floor eps and the supplied 8-bit limits. Return quantized values in output_q's shape and dtype and FP32 scales in output_s's shape. Preserve both template buffers.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_s",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "min_8bit",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "max_8bit",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

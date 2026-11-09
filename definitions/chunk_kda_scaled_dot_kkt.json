@@ -1,0 +1,50 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_kda_scaled_dot_kkt",
+  "description": "Within each chunk, compute key-key and query-key dot products with per-channel decay exp2(gk_scale * (gk_i - gk_j)). Multiply key-key scores by the row's beta and query-key scores by scale. Return a strictly lower-triangular key-key tensor and a lower-triangular query-key tensor including its diagonal.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gk_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "a",
+    "aqk"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

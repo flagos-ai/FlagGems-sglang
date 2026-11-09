@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_quant_int8_sum",
+  "description": "Quantize each token row symmetrically to INT8 using an absolute-maximum scale and rounding half away from zero. Return the quantized rows and scales cast to scale_dtype. When cal_sum is true, append the unquantized row sums as the third result.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cal_sum",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "result"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "w8a8_block_fp8_matmul",
+  "description": "Compute A times the transpose of B with FP8 block scaling. Apply activation scales per row and reduction block and weight scales per output and reduction block, accumulate the scaled products and cast to output_dtype.",
+  "parameters": [
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "B",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "As",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "Bs",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "block_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

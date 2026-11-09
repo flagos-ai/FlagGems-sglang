@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "awq_dequantize",
+  "description": "Unpack the AWQ four-bit weights and zero points from their packed layout, restore logical column order, subtract the matching per-group zero points and multiply by the group scales. Return the dense dequantized weight matrix.",
+  "parameters": [
+    {
+      "name": "qweight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scales",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "zeros",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "weight"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

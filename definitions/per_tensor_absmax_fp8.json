@@ -1,0 +1,24 @@
+{
+  "api_version": "v6.0",
+  "name": "per_tensor_absmax_fp8",
+  "description": "Return a per-tensor FP8 quantization scale from the absolute maximum of input divided by the finite FP8 limit. Use the shape of output_s for the result and leave both arguments unchanged.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_s",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "scale"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

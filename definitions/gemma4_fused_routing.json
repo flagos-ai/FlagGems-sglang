@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma4_fused_routing",
+  "description": "Select the topk experts per token from gating_output, normalize the selected logits with softmax and multiply their weights by the matching per_expert_scale. Return routing weights and expert IDs.",
+  "parameters": [
+    {
+      "name": "gating_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "per_expert_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "weights",
+    "expert_ids"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_recurrent_gdn",
+  "description": "Run the gated delta-rule recurrence over tokens, with scalar exponential decay per value head, beta-weighted key updates and a scaled query readout. Query and key heads may be shared by groups of value heads. Start from initial_state or zeros and optionally L2-normalize q and k. The second return value is the final state when requested, or None.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "initial_state",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_final_state",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "use_qk_l2norm_in_kernel",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false
+    }
+  ],
+  "outputs": [
+    "output",
+    "final_state"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

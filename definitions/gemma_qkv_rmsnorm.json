@@ -1,0 +1,61 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_qkv_rmsnorm",
+  "description": "Apply per-head RMS normalization to flattened Q, K and V projections. Q and K use their supplied weights when present, and V is unweighted. When either k or v is absent, normalize only q and pass through k and v, aliasing any tensor returned unchanged. The normalized projections are new tensors.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "q_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_q_heads",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_kv_heads",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out",
+    "v_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

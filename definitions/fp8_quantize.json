@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "fp8_quantize",
+  "description": "Multiply x by scale_inv, saturate to the finite range of fp8_dtype and cast to that dtype.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale_inv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "fp8_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

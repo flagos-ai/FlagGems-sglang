@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_append_shared_experts",
+  "description": "Append num_fused_shared_experts columns to the routed expert IDs and weights. The appended IDs start at N and the appended weights are scale_factor. A nonpositive count returns the original ID and weight tensors unchanged, aliasing those inputs only in that branch.",
+  "parameters": [
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_fused_shared_experts",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale_factor",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "N",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "expert_ids",
+    "expert_weights"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

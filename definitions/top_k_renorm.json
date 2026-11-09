@@ -1,0 +1,24 @@
+{
+  "api_version": "v6.0",
+  "name": "top_k_renorm",
+  "description": "Keep probabilities at or above each row's top-k cutoff, zero smaller entries and normalize the retained mass in FP32. top_k may be supplied per row or as a shared scalar. Values tied at the cutoff are retained.",
+  "parameters": [
+    {
+      "name": "probs",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "top_k",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "probabilities"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

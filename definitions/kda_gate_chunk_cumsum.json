@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "kda_gate_chunk_cumsum",
+  "description": "Form the KDA decay gate from g, A_log and optional dt_bias, using the lower-bounded variant when lower_bound is supplied. Take an inclusive cumulative sum that resets at each chunk and apply scale if supplied. Return FP32 gate prefixes.",
+  "parameters": [
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "A_log",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "chunk_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "dt_bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "lower_bound",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_norm_rope_inplace",
+  "description": "Apply last-dimension RMS normalization to kv with optional weight, then rotate the trailing rotary channels using adjacent complex pairs. Use positions to index freqs_cis when supplied. This callable returns the result in kv's dtype and preserves kv.",
+  "parameters": [
+    {
+      "name": "kv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "freqs_cis",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

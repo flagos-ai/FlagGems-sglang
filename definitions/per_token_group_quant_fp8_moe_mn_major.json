@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_group_quant_fp8_moe_mn_major",
+  "description": "Quantize the valid activation rows of each MoE expert to FP8 in groups. Expert offsets and problem sizes identify valid rows. Return quantized values and scales packed with the row index varying fastest within each expert and quantization group.",
+  "parameters": [
+    {
+      "name": "A",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_offsets",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "problem_sizes",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

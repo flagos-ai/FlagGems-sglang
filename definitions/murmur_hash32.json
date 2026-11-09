@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "murmur_hash32",
+  "description": "Compute a MurmurHash3-style 32-bit hash for every row and column pairing using that row's seed and position and the requested column index. Return the hash matrix as uint32.",
+  "parameters": [
+    {
+      "name": "seed",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "col_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "hashes"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

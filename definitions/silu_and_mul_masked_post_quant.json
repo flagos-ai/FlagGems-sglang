@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_and_mul_masked_post_quant",
+  "description": "Compute SiLU(gate) times up on the valid rows of each expert, then derive per-group scales and quantize to FP8. Return quantized activations and scales with zeros outside masked_m.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "quant_group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "masked_m",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
