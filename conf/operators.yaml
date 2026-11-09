@@ -333,6 +333,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: concat_cast_kv_fp8_pad
+    description: |
+      Casts the NoPE latent and the rope segment straight into the persistent fp8 KV cache buffer,
+      fused with the zeroing of the trailing pad band.
+      Replaces a bf16 materialization, a cast-copy and a tail clear -- three kernels plus one
+      [tokens, 576] bf16 allocation -- with a single row-per-program pass.
+    for:
+      - concat_cast_kv_fp8_pad
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: concat_mla_absorb_q
     description: |
       Concatenates the NoPE and RoPE halves of the absorbed MLA query along the last dimension.
