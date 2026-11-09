@@ -87,15 +87,24 @@ def _silu_and_mul_routed_kernel(
     if BLOCK_M == 1:
         row = tl.full((), pid_m, tl.int64)
         if INTERLEAVED:
-            gate_ptrs = gateup_ptr + row * stride_gm64 + (2 * offs_n) * stride_gk64
-            up_ptrs = gateup_ptr + row * stride_gm64 + (2 * offs_n + 1) * stride_gk64
+            gate_ptrs = (
+                gateup_ptr + row * stride_gm64 + (2 * offs_n) * stride_gk64
+            )
+            up_ptrs = (
+                gateup_ptr + row * stride_gm64 + (2 * offs_n + 1) * stride_gk64
+            )
         else:
             gate_ptrs = gateup_ptr + row * stride_gm64 + offs_n * stride_gk64
-            up_ptrs = gateup_ptr + row * stride_gm64 + (offs_n + n) * stride_gk64
+            up_ptrs = (
+                gateup_ptr + row * stride_gm64 + (offs_n + n) * stride_gk64
+            )
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_n,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
@@ -106,9 +115,9 @@ def _silu_and_mul_routed_kernel(
 
         acc = gate * tl.sigmoid(gate) * up
         if HAS_WEIGHTS:
-            w = tl.load(weights_ptr + row * stride_w, eviction_policy="evict_last").to(
-                tl.float32
-            )
+            w = tl.load(
+                weights_ptr + row * stride_w, eviction_policy="evict_last"
+            ).to(tl.float32)
             acc = acc * w
 
         out_ptrs = out_ptr + row * stride_om64 + offs_n
@@ -143,7 +152,10 @@ def _silu_and_mul_routed_kernel(
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_mn,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
@@ -199,7 +211,8 @@ def silu_and_mul_routed(
 
     block_m, block_n, num_warps = _select_tile_config(m, n)
     stream_large = (
-        gateup_output.numel() * gateup_output.element_size() >= 32 * 1024 * 1024
+        gateup_output.numel() * gateup_output.element_size()
+        >= 32 * 1024 * 1024
     )
     grid = (triton.cdiv(n, block_n), triton.cdiv(m, block_m))
 
