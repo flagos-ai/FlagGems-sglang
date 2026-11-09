@@ -91,7 +91,10 @@ def _act_and_mul_kernel(
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_n,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_n, other=0.0, eviction_policy="evict_first"
@@ -126,7 +129,9 @@ def _act_and_mul_kernel(
         mask_mn = mask_m[:, None] & mask_n[None, :]
 
         gate_ptrs = (
-            gateup_ptr + offs_m[:, None] * stride_gm64 + offs_n[None, :] * stride_gk64
+            gateup_ptr
+            + offs_m[:, None] * stride_gm64
+            + offs_n[None, :] * stride_gk64
         )
         up_ptrs = (
             gateup_ptr
@@ -136,7 +141,10 @@ def _act_and_mul_kernel(
 
         if STREAM_LARGE:
             gate = tl.load(
-                gate_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
+                gate_ptrs,
+                mask=mask_mn,
+                other=0.0,
+                eviction_policy="evict_first",
             ).to(tl.float32)
             up = tl.load(
                 up_ptrs, mask=mask_mn, other=0.0, eviction_policy="evict_first"
@@ -195,15 +203,20 @@ def act_and_mul(
             x2d = gateup_output.reshape(-1, two_n)
 
     m = x2d.shape[0]
-    out2d = torch.empty((m, n), dtype=gateup_output.dtype, device=gateup_output.device)
+    out2d = torch.empty(
+        (m, n), dtype=gateup_output.dtype, device=gateup_output.device
+    )
     if m == 0 or n == 0:
-        return out2d if gateup_output.ndim == 2 else out2d.view(*orig_prefix, n)
+        return (
+            out2d if gateup_output.ndim == 2 else out2d.view(*orig_prefix, n)
+        )
 
     has_limit = swiglu_limit is not None
     limit_val = float(swiglu_limit) if has_limit else 0.0
     block_m, block_n, num_warps = _select_tile_config(m, n)
     stream_large = (
-        gateup_output.numel() * gateup_output.element_size() >= 32 * 1024 * 1024
+        gateup_output.numel() * gateup_output.element_size()
+        >= 32 * 1024 * 1024
     )
     grid = (triton.cdiv(n, block_n), triton.cdiv(m, block_m))
 
