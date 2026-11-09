@@ -1,0 +1,26 @@
+{
+  "api_version": "v6.0",
+  "name": "per_tensor_quant_mla_fp8",
+  "description": "Compute a single FP8 scale for the MLA tensor from the absolute maximum with floor eps. Divide by that scale, saturate and cast. Return the quantized tensor and the scale.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-12
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scale"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

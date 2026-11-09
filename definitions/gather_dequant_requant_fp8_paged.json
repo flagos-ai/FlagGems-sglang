@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "gather_dequant_requant_fp8_paged",
+  "description": "Gather packed keys via the flattened page table, dequantize their non-rotary groups with stored scales and cast both non-rotary and rotary channels to FP8. Append extra_rows zero rows. The callable returns the result and preserves the supplied out buffer.",
+  "parameters": [
+    {
+      "name": "quant_k_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_table_1_flattened",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "extra_rows",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

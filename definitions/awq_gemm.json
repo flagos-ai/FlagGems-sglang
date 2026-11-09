@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "awq_gemm",
+  "description": "Multiply the activation matrix by the AWQ weight after unpacking its four-bit values and applying the supplied group scales and zero points. split_k_iters controls partitioning of the reduction.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "qweight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scales",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "qzeros",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "split_k_iters",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

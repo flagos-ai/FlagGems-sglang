@@ -1,0 +1,20 @@
+{
+  "api_version": "v6.0",
+  "name": "quantize_fp4_indexer",
+  "description": "Quantize indexer activations in blocks to FP4 E2M1 with power-of-two scales. Pack pairs of FP4 codes into bytes and return the packed values and packed exponent scales.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "packed_values",
+    "packed_scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

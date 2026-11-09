@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "triton_scaled_mm",
+  "description": "Multiply input by weight, apply scale_a and scale_b to the product with their row and column broadcasting, add bias if supplied and cast to out_dtype.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale_a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale_b",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

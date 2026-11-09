@@ -1,0 +1,33 @@
+{
+  "api_version": "v6.0",
+  "name": "per_token_group_quant_mla_masked_fp8",
+  "description": "Quantize each MLA activation group to FP8 using its absolute maximum with floor eps. Pad the row dimension of the quantized values and scales with zeros to the aligned size. Return both tensors, per-batch valid row counts, the unpadded row count and the aligned row count.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales",
+    "valid_rows",
+    "row_count",
+    "aligned_row_count"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

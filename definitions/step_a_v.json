@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "step_a_v",
+  "description": "Project the attention output into the low-rank value-adapter space using A_buf. batch_info selects the active adapters and the token rows they apply to.",
+  "parameters": [
+    {
+      "name": "attn_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "A_buf",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "mla_kv_pack_quantize_fp8",
+  "description": "Broadcast rotary keys across heads as needed and concatenate them with the non-rotary keys. Multiply the packed keys and values by their respective inverse scales, saturate and cast both to fp8_dtype.",
+  "parameters": [
+    {
+      "name": "k_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_pe",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_scale_inv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_scale_inv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "fp8_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "key",
+    "value"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "per_tensor_quant_fp8",
+  "description": "Quantize input to FP8 with a single scale. Read the scale from output_s in static mode and derive it from the input absolute maximum otherwise. Return the quantized tensor and the scale without modifying output_q or output_s.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_s",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "is_static",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scale"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

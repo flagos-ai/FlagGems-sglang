@@ -1,0 +1,20 @@
+{
+  "api_version": "v6.0",
+  "name": "to_mxfp8",
+  "description": "Convert x to MXFP8 using a power-of-two scale per contiguous block in the last dimension. Return quantized values and the encoded block-scale exponents.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scales"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

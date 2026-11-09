@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_and_mul_masked_post_per_tensor_quant",
+  "description": "Split each expert's gate/up input, compute SiLU(gate) times up on valid rows and quantize to FP8 with the supplied per-tensor scale. Return zeros on rows outside masked_m.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "masked_m",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

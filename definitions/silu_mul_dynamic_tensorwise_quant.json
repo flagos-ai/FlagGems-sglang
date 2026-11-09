@@ -1,0 +1,45 @@
+{
+  "api_version": "v6.0",
+  "name": "silu_mul_dynamic_tensorwise_quant",
+  "description": "Compute SiLU(gate) times up on the active rows selected by num_tokens_tensor. Derive a per-tensor FP8 scale from those activations and write the quantized prefix into a copy of output. Return the updated values and the computed scale.",
+  "parameters": [
+    {
+      "name": "input",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_tokens_tensor",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expected_num_tokens",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "intermediate_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "quantized",
+    "scale_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

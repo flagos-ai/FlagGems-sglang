@@ -1,0 +1,25 @@
+{
+  "api_version": "v6.0",
+  "name": "dequantize_k_cache_fast",
+  "description": "Decode each packed key-cache row by multiplying its FP8 non-rotary groups by their stored scales and reading the rotary channels from the unquantized part of the row. Return the assembled keys in BF16.",
+  "parameters": [
+    {
+      "name": "quant_k_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 128
+    }
+  ],
+  "outputs": [
+    "keys"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

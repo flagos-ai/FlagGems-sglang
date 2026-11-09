@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "step_b_q",
+  "description": "Project the low-rank query activations back to the query feature space using A_buf. Add the scaled per-adapter contributions selected by batch_info to a copy of base_output.",
+  "parameters": [
+    {
+      "name": "q_lora_a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "A_buf",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

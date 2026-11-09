@@ -1,0 +1,55 @@
+{
+  "api_version": "v6.0",
+  "name": "reshape_and_cache_flash",
+  "description": "Write token-major keys and values to copies of the paged FlashAttention caches. slot_mapping selects cache locations, optionally remapped by swa_slot_mapping. Ignore negative resolved slots and apply the supplied quantization scales by division when present. Return the updated cache copies.",
+  "parameters": [
+    {
+      "name": "key",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "value",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "key_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "value_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "slot_mapping",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "swa_slot_mapping",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "key_cache_out",
+    "value_cache_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

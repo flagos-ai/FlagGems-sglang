@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "apply_rotary_emb",
+  "description": "Treat adjacent features in x as complex pairs and multiply by the corresponding freqs_cis row. Select rows by positions when supplied and by token order otherwise. inverse uses the conjugate of the frequencies. Return the rotated tensor in x's dtype.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "freqs_cis",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "inverse",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

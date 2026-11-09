@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "mxfp8_block_scaled_matmul",
+  "description": "Decode the per-block MXFP8 exponent scales for a and b, multiply each block by its scale, compute a times the transpose of b and cast to output_dtype.",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "a_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

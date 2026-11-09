@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "zimage_qk_rmsnorm",
+  "description": "RMS-normalize the last dimension using eps. Cast the normalized values to x's dtype before multiplying by weight.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

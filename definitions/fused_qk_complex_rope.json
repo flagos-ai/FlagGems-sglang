@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_qk_complex_rope",
+  "description": "Apply complex-frequency RoPE independently to q and k, using adjacent features as complex pairs and broadcasting token frequencies across heads. Return the rotated query and key tensors.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "freqs_cis",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

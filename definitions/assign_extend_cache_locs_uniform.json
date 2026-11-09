@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "assign_extend_cache_locs_uniform",
+  "description": "For each request in req_pool_indices, gather draft_token_num consecutive cache locations from req_to_token, starting at that request's start_offset. Return the locations flattened in request-major order as int64.",
+  "parameters": [
+    {
+      "name": "req_pool_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "req_to_token",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "start_offset",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "draft_token_num",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "device",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "cache_locations"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

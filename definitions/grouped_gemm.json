@@ -1,0 +1,49 @@
+{
+  "api_version": "v6.0",
+  "name": "grouped_gemm",
+  "description": "Multiply expert-grouped rows of a by the transpose of each expert's matrix in b. expert_token_offs identifies the row spans; the block offsets and schedule describe their dispatch. Return the products in the original grouped row order.",
+  "parameters": [
+    {
+      "name": "a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "b",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_experts",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_tokens_per_expert",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_token_offs",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_block_offs",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_block_schedule",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

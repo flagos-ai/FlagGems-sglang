@@ -1,0 +1,31 @@
+{
+  "api_version": "v6.0",
+  "name": "quantize_k_cache_fast_separate",
+  "description": "Return the packed FP8 non-rotary keys and their group scales in one byte tensor, and the unquantized rotary key bytes in a separate tensor. Both results retain a singleton head axis.",
+  "parameters": [
+    {
+      "name": "k_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_rope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 128
+    }
+  ],
+  "outputs": [
+    "nonrotary_bytes",
+    "rotary_bytes"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

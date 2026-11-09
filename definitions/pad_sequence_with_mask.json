@@ -1,0 +1,36 @@
+{
+  "api_version": "v6.0",
+  "name": "pad_sequence_with_mask",
+  "description": "Gather each sequence from input_emb using its offset and length, zero-padding to max_len. Return the number of sequences, the padded batch and a flattened boolean mask marking valid positions.",
+  "parameters": [
+    {
+      "name": "input_emb",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "offsets",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "lengths",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "max_len",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "batch_size",
+    "padded",
+    "valid_mask"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

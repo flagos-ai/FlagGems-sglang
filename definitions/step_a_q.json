@@ -1,0 +1,34 @@
+{
+  "api_version": "v6.0",
+  "name": "step_a_q",
+  "description": "Apply the per-request low-rank query projection to the non-rotary query channels. Use batch_info to select adapter weights and rows, and full_K_per_head to interpret the packed head layout of B_buf.",
+  "parameters": [
+    {
+      "name": "q_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "B_buf",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "full_K_per_head",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

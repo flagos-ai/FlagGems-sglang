@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "wan_rmsnorm_silu",
+  "description": "Normalize x across channels using eps, multiply by rms_scale or the square root of the channel count and apply gamma and optional bias. Apply SiLU and return in the promoted dtype of x and gamma.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gamma",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "rms_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

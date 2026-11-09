@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "swiglu_oai_split",
+  "description": "Split the gate/up projection, optionally cap gate and clamp up, then compute gate times sigmoid(alpha times gate) times (up + beta). Cast to out_dtype when supplied, or use gate_up's dtype.",
+  "parameters": [
+    {
+      "name": "gate_up",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "alpha",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "limit",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "step_b_v",
+  "description": "Select the value-channel slice of B_buf, project the low-rank attention activations back to the value feature space and add the scaled per-adapter contributions to a copy of base_output.",
+  "parameters": [
+    {
+      "name": "attn_lora_a",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "B_buf",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_info",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "base_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "qk_nope_head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v_head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

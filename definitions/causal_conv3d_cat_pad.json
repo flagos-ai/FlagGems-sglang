@@ -1,0 +1,29 @@
+{
+  "api_version": "v6.0",
+  "name": "causal_conv3d_cat_pad",
+  "description": "Prepend cache_x to x along the temporal axis and apply the requested width, height and temporal padding, deducting the cached frames from the front temporal padding.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cache_x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "padding",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

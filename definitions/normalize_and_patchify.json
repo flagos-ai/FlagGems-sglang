@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "normalize_and_patchify",
+  "description": "Zero-pad the image on the bottom and right to the requested spatial extent. Apply channel-wise affine normalization using image_scale and image_bias, then return non-overlapping square patches in row-major spatial order.",
+  "parameters": [
+    {
+      "name": "image",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "image_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "image_bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "patch_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "padded_height",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "padded_width",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "patches"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

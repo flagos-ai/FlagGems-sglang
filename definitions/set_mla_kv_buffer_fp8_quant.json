@@ -1,0 +1,39 @@
+{
+  "api_version": "v6.0",
+  "name": "set_mla_kv_buffer_fp8_quant",
+  "description": "Concatenate the non-rotary and rotary key channels, cast to fp8_dtype and store the rows at loc in an FP8 view of a copy of kv_buffer. Return the updated buffer.",
+  "parameters": [
+    {
+      "name": "kv_buffer",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cache_k_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cache_k_rope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "fp8_dtype",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "cache_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

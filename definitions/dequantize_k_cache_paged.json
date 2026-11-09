@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "dequantize_k_cache_paged",
+  "description": "Gather packed key rows by the flattened page table. Dequantize the FP8 non-rotary groups with their stored scales, append the unquantized rotary channels and return BF16 keys with a singleton head axis.",
+  "parameters": [
+    {
+      "name": "quant_k_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "page_table_1_flattened",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 128
+    }
+  ],
+  "outputs": [
+    "keys"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

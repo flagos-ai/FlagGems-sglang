@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "grouped_gemma_rmsnorm",
+  "description": "Split the last dimension into groups of group_size, apply RMS normalization separately in each group using eps, then multiply by 1 + weight and return in x's dtype.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "group_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1e-06
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

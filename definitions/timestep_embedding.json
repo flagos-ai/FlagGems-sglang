@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "timestep_embedding",
+  "description": "Build sinusoidal timestep embeddings using exponential frequencies derived from max_period and downscale_freq_shift. Multiply the timestep angles by scale. flip_sin_to_cos selects which half of the result contains the cosine terms. Each half has floor(dim/2) channels.",
+  "parameters": [
+    {
+      "name": "t",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "flip_sin_to_cos",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "downscale_freq_shift",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "max_period",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "embedding"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

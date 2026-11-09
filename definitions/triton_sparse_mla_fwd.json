@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "triton_sparse_mla_fwd",
+  "description": "Gather KV rows using sparse token indices and apply scaled attention with the concatenated non-rotary and rotary query features. Negative indices are masked. Use the first d_v gathered channels as values and return BF16 context with a leading singleton batch dimension.",
+  "parameters": [
+    {
+      "name": "q_nope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "q_rope",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "kv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "sm_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "d_v",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
