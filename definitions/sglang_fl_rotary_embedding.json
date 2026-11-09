@@ -1,0 +1,53 @@
+{
+  "api_version": "v6.0",
+  "name": "sglang_fl_rotary_embedding",
+  "requires_triton_kernel": true,
+  "description": "Apply position-indexed rotary embedding to query and key in place. Their rows store flattened heads of head_size lanes. Split the last dimension of cos_sin_cache into cosine and sine halves; its width determines the rotary width. With is_neox=True pair the two halves of the rotary region; otherwise pair even and odd lanes. Leave lanes beyond the rotary width unchanged and return the same query and key tensors.",
+  "parameters": [
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "query",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "key",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cos_sin_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "is_neox",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": true
+    }
+  ],
+  "outputs": [
+    "query",
+    "key"
+  ],
+  "effects": {
+    "mutates": [
+      "query",
+      "key"
+    ],
+    "returns_alias_of": {
+      "query": "query",
+      "key": "key"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_qk_inv_rms",
+  "requires_triton_kernel": true,
+  "description": "Given qkv of shape [B,N,3,H,D], take the Q and K slices at index 0 and 1. Compute rsqrt(mean(x**2)+eps) in FP32 across both H and D for each token. Return two newly allocated FP32 [B,N] tensors in Q, K order.",
+  "parameters": [
+    {
+      "name": "qkv",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_inv_rms",
+    "k_inv_rms"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "api_version": "v6.0",
+  "name": "scale_residual_rmsnorm_scale_shift",
+  "requires_triton_kernel": true,
+  "description": "Form residual_out=residual+gate*update in the input dtype. RMS-normalize that intermediate over the last dimension and apply weight in FP32, then round to the intermediate's dtype before multiplying by 1+scale and adding shift. Return the modulated output and residual_out as two new tensors.",
+  "parameters": [
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "update",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "shift",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out",
+    "residual_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

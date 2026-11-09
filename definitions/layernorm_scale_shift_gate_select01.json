@@ -1,0 +1,71 @@
+{
+  "api_version": "v6.0",
+  "name": "layernorm_scale_shift_gate_select01",
+  "requires_triton_kernel": true,
+  "description": "Normalize x [B,T,D] across D in FP32 and apply optional affine weight and bias, each of which can be None. The [B,T] index selects modulation set 0 or 1 per token. Return LayerNorm(x)*(1+selected_scale)+selected_shift and the selected gate as two new [B,T,D] tensors in x.dtype.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "bias",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale0",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "shift0",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate0",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "shift1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "index",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out",
+    "gate_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

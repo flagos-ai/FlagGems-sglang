@@ -1,0 +1,25 @@
+{
+  "api_version": "v6.0",
+  "name": "hadamard_transform",
+  "requires_triton_kernel": true,
+  "description": "Apply the unnormalized Walsh-Hadamard transform along the last dimension, then multiply by scale. The reference and test cases use power-of-two transform lengths. Return a new tensor with the same shape, dtype and device as x.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

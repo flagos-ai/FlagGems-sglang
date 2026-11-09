@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "rmsnorm_scale",
+  "requires_triton_kernel": true,
+  "description": "RMS-normalize rows of x over the last dimension in FP32, round the normalized values to x.dtype, multiply by weight, then multiply by scale. Flattened scale rows may cover equal contiguous groups of flattened x rows, so the number of x rows must be a multiple of the number of scale rows. Return a newly allocated tensor with x's shape.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

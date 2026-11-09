@@ -1,0 +1,71 @@
+{
+  "api_version": "v6.0",
+  "name": "chunk_gated_delta_rule_fwd",
+  "requires_triton_kernel": true,
+  "description": "Chunked gated delta-rule forward. q and k are [B,T,H,K], v is [B,T,H,V], and g and beta are [B,T,H]. q, k and v share a dtype, and the generic kernel rejects FP32 q/k/v. Per sequence and head, decay the state by exp(g), subtract the decayed state prediction from v, weight the correction by beta, and add its outer product with k to the state. Project the updated state with q scaled by scale (default K**-0.5). Optionally L2-normalize q and k before the recurrence. Return a new [B,T,H,V] tensor in the shared q/k/v dtype and, when requested, a new FP32 [num_sequences,H,K,V] final state; otherwise the second return is None. An initial state supplies the starting state without being modified. Packed inputs use B=1 and cu_seqlens to delimit independent sequences; the Torch reference exercises the unpacked path.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "g",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "beta",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "initial_state",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "output_final_state",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false
+    },
+    {
+      "name": "cu_seqlens",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": null
+    },
+    {
+      "name": "use_qk_l2norm_in_kernel",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false
+    }
+  ],
+  "outputs": [
+    "output",
+    "final_state"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

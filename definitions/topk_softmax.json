@@ -1,0 +1,43 @@
+{
+  "api_version": "v6.0",
+  "name": "topk_softmax",
+  "requires_triton_kernel": true,
+  "description": "Compute FP32 softmax over the expert axis of gating_output and select each row's top K experts, with K taken from topk_ids. Write selected weights and expert ids in descending weight order into the supplied buffers. With renormalize=True, divide selected weights by their row sum. Return both mutated buffers.",
+  "parameters": [
+    {
+      "name": "topk_weights",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gating_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "renormalize",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": false
+    }
+  ],
+  "outputs": [
+    "topk_weights",
+    "topk_ids"
+  ],
+  "effects": {
+    "mutates": [
+      "topk_weights",
+      "topk_ids"
+    ],
+    "returns_alias_of": {
+      "topk_weights": "topk_weights",
+      "topk_ids": "topk_ids"
+    }
+  }
+}

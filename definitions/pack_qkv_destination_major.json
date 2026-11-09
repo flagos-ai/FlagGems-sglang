@@ -1,0 +1,42 @@
+{
+  "api_version": "v6.0",
+  "name": "pack_qkv_destination_major",
+  "requires_triton_kernel": true,
+  "description": "Pack q, k and v from matching [rows,global_heads,head_size] tensors. Split the heads into world_size equal groups and concatenate each rank's q, k and v along the last dimension. The result is [world_size,rows,global_heads/world_size,3*head_size]. If out is a compatible contiguous tensor, write to it and return that same buffer. If out is None, allocate and return a new tensor. The alias is conditional on out being a tensor.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "v",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "world_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "out",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "packed"
+  ],
+  "effects": {
+    "mutates": [
+      "out"
+    ],
+    "returns_alias_of": {}
+  }
+}

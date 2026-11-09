@@ -1,0 +1,44 @@
+{
+  "api_version": "v6.0",
+  "name": "ep_gather",
+  "requires_triton_kernel": true,
+  "description": "Expert-parallel gather. For each token and hidden column, sum the rows of input_tensor selected by input_index, multiplying each by recv_topk_weight. Skip slots with negative recv_topk_ids. Accumulate in FP32 and write into the caller's [T,H] output_tensor, casting to its dtype. Return that buffer.",
+  "parameters": [
+    {
+      "name": "input_tensor",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "recv_topk_ids",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "recv_topk_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "input_index",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_tensor",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "output_tensor"
+  ],
+  "effects": {
+    "mutates": [
+      "output_tensor"
+    ],
+    "returns_alias_of": {
+      "output_tensor": "output_tensor"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "api_version": "v6.0",
+  "name": "ep_scatter",
+  "requires_triton_kernel": true,
+  "description": "Expert-parallel scatter. Use num_recv_tokens_per_expert to partition output into padded expert ranges. For every nonnegative recv_topk entry, copy the token row into its expert's range and record the destination in output_index. Copy the scale row when recv_x_scale is supplied. m_indices labels valid rows with their expert id and padding with -1; expert_start_loc ends at the next free row for each expert. Padding data and skipped index entries keep their prior values, and the order of dispatched rows within an expert is unspecified. Return the five supplied buffers in the declared order.",
+  "parameters": [
+    {
+      "name": "recv_x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "recv_x_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "recv_topk",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_recv_tokens_per_expert",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "num_valid_tokens_per_expert",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "expert_start_loc",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_tensor",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_tensor_scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "m_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "output_index",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "expert_start_loc",
+    "output_tensor",
+    "output_tensor_scale",
+    "m_indices",
+    "output_index"
+  ],
+  "effects": {
+    "mutates": [
+      "expert_start_loc",
+      "output_tensor",
+      "output_tensor_scale",
+      "m_indices",
+      "output_index"
+    ],
+    "returns_alias_of": {
+      "expert_start_loc": "expert_start_loc",
+      "output_tensor": "output_tensor",
+      "m_indices": "m_indices",
+      "output_index": "output_index",
+      "output_tensor_scale": "output_tensor_scale"
+    }
+  }
+}

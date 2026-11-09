@@ -1,0 +1,40 @@
+{
+  "api_version": "v6.0",
+  "name": "rmsnorm_tanh_residual",
+  "requires_triton_kernel": true,
+  "description": "RMS-normalize x over its last dimension, round to x.dtype and multiply by weight. Compute tanh(gate) in FP32, round it to x.dtype and broadcast each gate row over its contiguous group of x rows. Multiply the normalized tensor by the gate and add residual. Return a new tensor with the shape of x.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "gate",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

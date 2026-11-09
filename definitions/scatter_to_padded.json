@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "scatter_to_padded",
+  "requires_triton_kernel": true,
+  "description": "Rebuild a padded [batch_size,seqlen,H,D] tensor from out_unpad [N,H,D]. Each entry of inv_indices selects the source row for the corresponding flattened destination row; negative entries produce zeros. With no source rows, all destinations are zero. Return a newly allocated tensor in out_unpad.dtype.",
+  "parameters": [
+    {
+      "name": "out_unpad",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "inv_indices",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "batch_size",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "seqlen",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
