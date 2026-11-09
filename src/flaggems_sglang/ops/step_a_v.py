@@ -308,11 +308,14 @@ def _segment_kernel(X, A, OUT, SEG, WIDX, RANKS, META: tl.constexpr):
     )
     acc = tl.zeros((BM, BN), tl.float32)
     for k0 in range(0, K, BK):
+        # No eviction_policy hint here: FlagTree's Triton (3.6.0) emits an
+        # illegal GPU instruction when a block-pointer load with
+        # eviction_policy="evict_first" is software-pipelined (num_stages=3),
+        # which is exactly the config this nvidia segment path launches with.
         x = tl.load(
             xb,
             boundary_check=(0, 1),
             padding_option="zero",
-            eviction_policy="evict_first",
         )
         a = tl.load(ab, boundary_check=(0, 1), padding_option="zero")
         if X.dtype.element_ty == tl.float32:
