@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""High-performance Triton kernel for activation_norm/gemma_dual_rmsnorm_residual_scalar."""
+"""Triton kernel for gemma_dual_rmsnorm_residual_scalar."""
 
 from __future__ import annotations
 
@@ -23,7 +23,11 @@ import triton
 import triton.language as tl
 
 
-def _device_ctx(device: torch.device):
+def _maybe_device_ctx(device: torch.device):
+    if device.type == "cuda":
+        if device.index is None or device.index == torch.cuda.current_device():
+            return contextlib.nullcontext()
+        return torch.cuda.device(device)
     if device.type == "cpu":
         return contextlib.nullcontext()
     return torch.get_device_module(device).device(device)
@@ -39,28 +43,18 @@ def _as_2d_view(tensor: torch.Tensor) -> torch.Tensor:
         return tensor.contiguous().view(-1, d)
 
 
-def _select_config(num_rows: int, block_d: int) -> tuple[int, int]:
-    """Deterministic multi-row CTA & warp heuristic (reuses w1/w2/w3/scalar in registers)."""
-    if block_d <= 2048 and num_rows >= 64:
-        rows_per_cta = 4
-    elif block_d <= 4096 and num_rows >= 32:
-        rows_per_cta = 2
-    else:
-        rows_per_cta = 1
-
-    if block_d <= 256:
-        num_warps = 2
-    elif block_d <= 1024:
-        num_warps = 4
-    elif block_d <= 4096:
-        num_warps = 8
-    else:
-        num_warps = 16
-    return rows_per_cta, num_warps
+def _select_num_warps(block_d: int) -> int:
+    if block_d <= 512:
+        return 2
+    if block_d <= 2048:
+        return 4
+    if block_d <= 4096:
+        return 8
+    return 16
 
 
 @triton.jit
-def _gemma_dual_rmsnorm_residual_scalar_kernel(
+def _gemma_dual_rmsnorm_contig_kernel(
     out_ptr,
     x1_ptr,
     x2_ptr,
@@ -69,7 +63,92 @@ def _gemma_dual_rmsnorm_residual_scalar_kernel(
     weight2_ptr,
     weight3_ptr,
     scalar_ptr,
-    num_rows,
+    eps1,
+    eps2,
+    eps3,
+    D: tl.constexpr,
+    BLOCK_D: tl.constexpr,
+    EVEN_D: tl.constexpr,
+    USE_CG: tl.constexpr,
+    USE_CS: tl.constexpr,
+):
+    row = tl.program_id(0).to(tl.int64)
+    cols = tl.arange(0, BLOCK_D)
+    row_off = row * D
+    x1_row = x1_ptr + row_off
+    x2_row = x2_ptr + row_off
+    res_row = residual_ptr + row_off
+    out_row = out_ptr + row_off
+    inv_d = 1.0 / D
+
+    if EVEN_D:
+        if USE_CG:
+            x1 = tl.load(x1_row + cols, cache_modifier=".cg").to(tl.float32)
+            x2 = tl.load(x2_row + cols, cache_modifier=".cg").to(tl.float32)
+            res = tl.load(res_row + cols, cache_modifier=".cg").to(tl.float32)
+        else:
+            x1 = tl.load(x1_row + cols).to(tl.float32)
+            x2 = tl.load(x2_row + cols).to(tl.float32)
+            res = tl.load(res_row + cols).to(tl.float32)
+        w1 = tl.load(weight1_ptr + cols, cache_modifier=".ca").to(tl.float32)
+        w2 = tl.load(weight2_ptr + cols, cache_modifier=".ca").to(tl.float32)
+        w3 = tl.load(weight3_ptr + cols, cache_modifier=".ca").to(tl.float32)
+    else:
+        mask = cols < D
+        if USE_CG:
+            x1 = tl.load(
+                x1_row + cols, mask=mask, other=0.0, cache_modifier=".cg"
+            ).to(tl.float32)
+            x2 = tl.load(
+                x2_row + cols, mask=mask, other=0.0, cache_modifier=".cg"
+            ).to(tl.float32)
+            res = tl.load(
+                res_row + cols, mask=mask, other=0.0, cache_modifier=".cg"
+            ).to(tl.float32)
+        else:
+            x1 = tl.load(x1_row + cols, mask=mask, other=0.0).to(tl.float32)
+            x2 = tl.load(x2_row + cols, mask=mask, other=0.0).to(tl.float32)
+            res = tl.load(res_row + cols, mask=mask, other=0.0).to(tl.float32)
+        w1 = tl.load(
+            weight1_ptr + cols, mask=mask, other=0.0, cache_modifier=".ca"
+        ).to(tl.float32)
+        w2 = tl.load(
+            weight2_ptr + cols, mask=mask, other=0.0, cache_modifier=".ca"
+        ).to(tl.float32)
+        w3 = tl.load(
+            weight3_ptr + cols, mask=mask, other=0.0, cache_modifier=".ca"
+        ).to(tl.float32)
+
+    scalar = tl.load(scalar_ptr, cache_modifier=".ca").to(tl.float32)
+    n1 = x1 * tl.rsqrt(tl.sum(x1 * x1, axis=0) * inv_d + eps1) * w1
+    n2 = x2 * tl.rsqrt(tl.sum(x2 * x2, axis=0) * inv_d + eps2) * w2
+    comb = n1 + n2
+    n3 = comb * tl.rsqrt(tl.sum(comb * comb, axis=0) * inv_d + eps3) * w3
+    out = ((n3 + res) * scalar).to(out_ptr.dtype.element_ty)
+
+    if EVEN_D:
+        if USE_CS:
+            tl.store(out_row + cols, out, cache_modifier=".cs")
+        else:
+            tl.store(out_row + cols, out)
+    else:
+        mask = cols < D
+        if USE_CS:
+            tl.store(out_row + cols, out, mask=mask, cache_modifier=".cs")
+        else:
+            tl.store(out_row + cols, out, mask=mask)
+
+
+@triton.jit
+def _gemma_dual_rmsnorm_strided_kernel(
+    out_ptr,
+    x1_ptr,
+    x2_ptr,
+    residual_ptr,
+    weight1_ptr,
+    weight2_ptr,
+    weight3_ptr,
+    scalar_ptr,
     stride_x1m,
     stride_x1d,
     stride_x2m,
@@ -85,89 +164,49 @@ def _gemma_dual_rmsnorm_residual_scalar_kernel(
     eps3,
     D: tl.constexpr,
     BLOCK_D: tl.constexpr,
-    ROWS_PER_CTA: tl.constexpr,
-    CONTIGUOUS_INNER: tl.constexpr,
-    STREAM_INPUTS: tl.constexpr,
 ):
-    pid = tl.program_id(0)
+    row64 = tl.program_id(0).to(tl.int64)
     cols = tl.arange(0, BLOCK_D).to(tl.int64)
     mask = cols < D
     inv_d = 1.0 / D
 
+    x1 = tl.load(
+        x1_ptr + row64 * stride_x1m + cols * stride_x1d, mask=mask, other=0.0
+    ).to(tl.float32)
+    x2 = tl.load(
+        x2_ptr + row64 * stride_x2m + cols * stride_x2d, mask=mask, other=0.0
+    ).to(tl.float32)
+    res = tl.load(
+        residual_ptr + row64 * stride_rm + cols * stride_rd,
+        mask=mask,
+        other=0.0,
+    ).to(tl.float32)
     w1 = tl.load(
         weight1_ptr + cols * stride_w1,
         mask=mask,
         other=0.0,
-        eviction_policy="evict_last",
+        cache_modifier=".ca",
     ).to(tl.float32)
     w2 = tl.load(
         weight2_ptr + cols * stride_w2,
         mask=mask,
         other=0.0,
-        eviction_policy="evict_last",
+        cache_modifier=".ca",
     ).to(tl.float32)
     w3 = tl.load(
         weight3_ptr + cols * stride_w3,
         mask=mask,
         other=0.0,
-        eviction_policy="evict_last",
+        cache_modifier=".ca",
     ).to(tl.float32)
-    scalar = tl.load(scalar_ptr, eviction_policy="evict_last").to(tl.float32)
+    scalar = tl.load(scalar_ptr, cache_modifier=".ca").to(tl.float32)
 
-    stride_x1m64 = tl.full((), stride_x1m, tl.int64)
-    stride_x2m64 = tl.full((), stride_x2m, tl.int64)
-    stride_rm64 = tl.full((), stride_rm, tl.int64)
-    stride_om64 = tl.full((), stride_om, tl.int64)
-    stride_x1d64 = tl.full((), stride_x1d, tl.int64)
-    stride_x2d64 = tl.full((), stride_x2d, tl.int64)
-    stride_rd64 = tl.full((), stride_rd, tl.int64)
-
-    eps1_f = tl.full((), eps1, tl.float32)
-    eps2_f = tl.full((), eps2, tl.float32)
-    eps3_f = tl.full((), eps3, tl.float32)
-    out_ty = out_ptr.dtype.element_ty
-
-    base_row = pid * ROWS_PER_CTA
-    for r in tl.static_range(0, ROWS_PER_CTA):
-        row = base_row + r
-        if row < num_rows:
-            row64 = tl.full((), row, tl.int64)
-            if CONTIGUOUS_INNER:
-                p_x1 = x1_ptr + row64 * stride_x1m64 + cols
-                p_x2 = x2_ptr + row64 * stride_x2m64 + cols
-                p_res = residual_ptr + row64 * stride_rm64 + cols
-            else:
-                p_x1 = x1_ptr + row64 * stride_x1m64 + cols * stride_x1d64
-                p_x2 = x2_ptr + row64 * stride_x2m64 + cols * stride_x2d64
-                p_res = residual_ptr + row64 * stride_rm64 + cols * stride_rd64
-
-            if STREAM_INPUTS:
-                x1 = tl.load(
-                    p_x1, mask=mask, other=0.0, eviction_policy="evict_first"
-                ).to(tl.float32)
-                x2 = tl.load(
-                    p_x2, mask=mask, other=0.0, eviction_policy="evict_first"
-                ).to(tl.float32)
-                res = tl.load(
-                    p_res, mask=mask, other=0.0, eviction_policy="evict_first"
-                ).to(tl.float32)
-            else:
-                x1 = tl.load(p_x1, mask=mask, other=0.0).to(tl.float32)
-                x2 = tl.load(p_x2, mask=mask, other=0.0).to(tl.float32)
-                res = tl.load(p_res, mask=mask, other=0.0).to(tl.float32)
-
-            n1 = x1 * tl.rsqrt(tl.sum(x1 * x1, axis=0) * inv_d + eps1_f) * w1
-            n2 = x2 * tl.rsqrt(tl.sum(x2 * x2, axis=0) * inv_d + eps2_f) * w2
-            comb = n1 + n2
-            n3 = (
-                comb
-                * tl.rsqrt(tl.sum(comb * comb, axis=0) * inv_d + eps3_f)
-                * w3
-            )
-            out = (n3 + res) * scalar
-            tl.store(
-                out_ptr + row64 * stride_om64 + cols, out.to(out_ty), mask=mask
-            )
+    n1 = x1 * tl.rsqrt(tl.sum(x1 * x1, axis=0) * inv_d + eps1) * w1
+    n2 = x2 * tl.rsqrt(tl.sum(x2 * x2, axis=0) * inv_d + eps2) * w2
+    comb = n1 + n2
+    n3 = comb * tl.rsqrt(tl.sum(comb * comb, axis=0) * inv_d + eps3) * w3
+    out = ((n3 + res) * scalar).to(out_ptr.dtype.element_ty)
+    tl.store(out_ptr + row64 * stride_om + cols, out, mask=mask)
 
 
 @triton.jit
@@ -203,7 +242,7 @@ def _gemma_dual_rmsnorm_large_d_kernel(
     sum_sq1 = tl.zeros((), dtype=tl.float32)
     sum_sq2 = tl.zeros((), dtype=tl.float32)
     for start in range(0, D, BLOCK_D):
-        cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
+        cols = start + tl.arange(0, BLOCK_D).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
             x1_ptr + row64 * stride_x1m + cols * stride_x1d,
@@ -223,7 +262,7 @@ def _gemma_dual_rmsnorm_large_d_kernel(
 
     sum_sq3 = tl.zeros((), dtype=tl.float32)
     for start in range(0, D, BLOCK_D):
-        cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
+        cols = start + tl.arange(0, BLOCK_D).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
             x1_ptr + row64 * stride_x1m + cols * stride_x1d,
@@ -247,7 +286,7 @@ def _gemma_dual_rmsnorm_large_d_kernel(
     rstd3 = tl.rsqrt(sum_sq3 * inv_d + eps3)
     out_ty = out_ptr.dtype.element_ty
     for start in range(0, D, BLOCK_D):
-        cols = (start + tl.arange(0, BLOCK_D)).to(tl.int64)
+        cols = start + tl.arange(0, BLOCK_D).to(tl.int64)
         mask = cols < D
         x1 = tl.load(
             x1_ptr + row64 * stride_x1m + cols * stride_x1d,
@@ -297,60 +336,90 @@ def gemma_dual_rmsnorm_residual_scalar(
 
     orig_shape = x1.shape
     hidden_size = orig_shape[-1]
-    out = torch.empty(orig_shape, dtype=x1.dtype, device=x1.device)
+    out = torch.empty_like(x1)
     if x1.numel() == 0:
         return out
 
-    x1_2d = _as_2d_view(x1)
-    x2_2d = _as_2d_view(x2)
-    res_2d = _as_2d_view(residual)
-    out_2d = out.view(-1, hidden_size)
+    x1_2d = x1 if x1.ndim == 2 else _as_2d_view(x1)
+    x2_2d = x2 if x2.ndim == 2 else _as_2d_view(x2)
+    res_2d = residual if residual.ndim == 2 else _as_2d_view(residual)
+    out_2d = out if out.ndim == 2 else out.view(-1, hidden_size)
     num_rows = x1_2d.shape[0]
 
-    with _device_ctx(x1.device):
+    stride_x1m = x1_2d.stride(0)
+    stride_x1d = x1_2d.stride(1)
+    stride_x2m = x2_2d.stride(0)
+    stride_x2d = x2_2d.stride(1)
+    stride_rm = res_2d.stride(0)
+    stride_rd = res_2d.stride(1)
+    stride_w1 = weight1.stride(0)
+    stride_w2 = weight2.stride(0)
+    stride_w3 = weight3.stride(0)
+
+    with _maybe_device_ctx(x1.device):
         if hidden_size <= 16384:
-            block_d = triton.next_power_of_2(hidden_size)
-            rows_per_cta, num_warps = _select_config(num_rows, block_d)
-            contiguous_inner = (
-                x1_2d.stride(1) == 1
-                and x2_2d.stride(1) == 1
-                and res_2d.stride(1) == 1
+            block_d = 1 << (hidden_size - 1).bit_length()
+            num_warps = _select_num_warps(block_d)
+            contiguous = (
+                stride_x1d == 1
+                and stride_x2d == 1
+                and stride_rd == 1
+                and stride_w1 == 1
+                and stride_w2 == 1
+                and stride_w3 == 1
+                and stride_x1m == hidden_size
+                and stride_x2m == hidden_size
+                and stride_rm == hidden_size
             )
-            stream_inputs = (
-                hidden_size >= 1024
-                and x1.numel() * x1.element_size() >= 1048576
-            )
-            grid = (triton.cdiv(num_rows, rows_per_cta),)
-            _gemma_dual_rmsnorm_residual_scalar_kernel[grid](
-                out_2d,
-                x1_2d,
-                x2_2d,
-                res_2d,
-                weight1,
-                weight2,
-                weight3,
-                scalar,
-                num_rows,
-                x1_2d.stride(0),
-                x1_2d.stride(1),
-                x2_2d.stride(0),
-                x2_2d.stride(1),
-                res_2d.stride(0),
-                res_2d.stride(1),
-                weight1.stride(0),
-                weight2.stride(0),
-                weight3.stride(0),
-                out_2d.stride(0),
-                float(eps1),
-                float(eps2),
-                float(eps3),
-                D=hidden_size,
-                BLOCK_D=block_d,
-                ROWS_PER_CTA=rows_per_cta,
-                CONTIGUOUS_INNER=contiguous_inner,
-                STREAM_INPUTS=stream_inputs,
-                num_warps=num_warps,
-            )
+            if contiguous:
+                _gemma_dual_rmsnorm_contig_kernel[(num_rows,)](
+                    out_2d,
+                    x1_2d,
+                    x2_2d,
+                    res_2d,
+                    weight1,
+                    weight2,
+                    weight3,
+                    scalar,
+                    float(eps1),
+                    float(eps2),
+                    float(eps3),
+                    D=hidden_size,
+                    BLOCK_D=block_d,
+                    EVEN_D=(hidden_size == block_d),
+                    USE_CG=(num_rows >= 4),
+                    USE_CS=(
+                        num_rows * hidden_size * x1.element_size() >= 8388608
+                    ),
+                    num_warps=num_warps,
+                )
+            else:
+                _gemma_dual_rmsnorm_strided_kernel[(num_rows,)](
+                    out_2d,
+                    x1_2d,
+                    x2_2d,
+                    res_2d,
+                    weight1,
+                    weight2,
+                    weight3,
+                    scalar,
+                    stride_x1m,
+                    stride_x1d,
+                    stride_x2m,
+                    stride_x2d,
+                    stride_rm,
+                    stride_rd,
+                    stride_w1,
+                    stride_w2,
+                    stride_w3,
+                    out_2d.stride(0),
+                    float(eps1),
+                    float(eps2),
+                    float(eps3),
+                    D=hidden_size,
+                    BLOCK_D=block_d,
+                    num_warps=num_warps,
+                )
         else:
             _gemma_dual_rmsnorm_large_d_kernel[(num_rows,)](
                 out_2d,
@@ -361,15 +430,15 @@ def gemma_dual_rmsnorm_residual_scalar(
                 weight2,
                 weight3,
                 scalar,
-                x1_2d.stride(0),
-                x1_2d.stride(1),
-                x2_2d.stride(0),
-                x2_2d.stride(1),
-                res_2d.stride(0),
-                res_2d.stride(1),
-                weight1.stride(0),
-                weight2.stride(0),
-                weight3.stride(0),
+                stride_x1m,
+                stride_x1d,
+                stride_x2m,
+                stride_x2d,
+                stride_rm,
+                stride_rd,
+                stride_w1,
+                stride_w2,
+                stride_w3,
                 out_2d.stride(0),
                 float(eps1),
                 float(eps2),
