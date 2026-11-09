@@ -124,6 +124,7 @@ def _tiny_n_dot_splitk_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
+    EVEN_K: tl.constexpr,
     IEEE: tl.constexpr,
 ):
     """One program computes a [BLOCK_M, BLOCK_N] tile over one K-chunk."""
@@ -152,9 +153,14 @@ def _tiny_n_dot_splitk_kernel(
     w_ptrs = w_ptr + offs_n[:, None] * stride_wn + k_start + offs_k[None, :]
 
     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
-    for _ in range(k_start, k_end, BLOCK_K):
-        a = tl.load(x_ptrs, mask=m_mask, other=0.0)
-        b = tl.load(w_ptrs, mask=n_col, other=0.0)
+    for k0 in range(k_start, k_end, BLOCK_K):
+        if EVEN_K:
+            a = tl.load(x_ptrs, mask=m_mask, other=0.0)
+            b = tl.load(w_ptrs, mask=n_col, other=0.0)
+        else:
+            k_mask = (offs_k + k0)[None, :] < K
+            a = tl.load(x_ptrs, mask=m_mask & k_mask, other=0.0)
+            b = tl.load(w_ptrs, mask=n_col & k_mask, other=0.0)
         if IEEE:
             acc = tl.dot(a, tl.trans(b), acc, input_precision="ieee")
         else:
@@ -314,6 +320,7 @@ def tiny_n_gemm(x, w, out_dtype):
             BLOCK_M=_BLOCK_M,
             BLOCK_N=_DOT_BLOCK_N,
             BLOCK_K=block_k,
+            EVEN_K=(k % block_k == 0),
             IEEE=(out_dtype == torch.float32),
             num_warps=_DOT_WARPS,
             num_stages=_DOT_STAGES,
