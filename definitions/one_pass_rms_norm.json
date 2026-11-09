@@ -1,0 +1,30 @@
+{
+  "api_version": "v6.0",
+  "name": "one_pass_rms_norm",
+  "requires_triton_kernel": true,
+  "description": "RMS-normalize x over its last dimension in FP32, then multiply by the last-dimension weight w. Return a newly allocated tensor with the same shape and dtype as x. Pass eps explicitly for the generic interface and portability across backends.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

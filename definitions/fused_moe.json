@@ -1,0 +1,47 @@
+{
+  "api_version": "v6.0",
+  "name": "fused_moe",
+  "requires_triton_kernel": true,
+  "description": "Unquantized mixture of experts. For each token, take the expert ids and routing weights from topk_output=(topk_weights,topk_ids,router_aux); router_aux is unused. Each expert projects hidden_states with w1=[E,2*I,H], splits the gate and up halves, and feeds activation(gate) * up through w2=[E,H,I]. Sum the routed expert outputs with their weights and multiply by routed_scaling_factor. The supported activations are SiLU and GELU. Return a new [T,H] tensor with the dtype and device of hidden_states.",
+  "parameters": [
+    {
+      "name": "hidden_states",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w1",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "w2",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "topk_output",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "activation",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": "silu"
+    },
+    {
+      "name": "routed_scaling_factor",
+      "kind": "positional_or_keyword",
+      "required": false,
+      "default": 1.0
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

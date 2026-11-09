@@ -1,0 +1,35 @@
+{
+  "api_version": "v6.0",
+  "name": "layernorm_modulate",
+  "requires_triton_kernel": true,
+  "description": "Apply LayerNorm without learned affine parameters over the last dimension of x [B,T,D]. In FP32, multiply by 1+scale and add shift, broadcasting the [B,D] modulation vectors across tokens. Return a new tensor in x.dtype with the same shape as x.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "scale",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "shift",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

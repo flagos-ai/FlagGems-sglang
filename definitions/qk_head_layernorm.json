@@ -1,0 +1,31 @@
+{
+  "api_version": "v6.0",
+  "name": "qk_head_layernorm",
+  "requires_triton_kernel": true,
+  "description": "Apply independent LayerNorm without affine parameters to each query and key head over its last dimension. Compute the mean and variance in FP32 with epsilon eps and return two newly allocated tensors with the corresponding input shapes and dtypes.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

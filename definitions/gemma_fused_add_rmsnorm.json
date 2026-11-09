@@ -1,0 +1,36 @@
+{
+  "api_version": "v6.0",
+  "name": "gemma_fused_add_rmsnorm",
+  "requires_triton_kernel": true,
+  "description": "Add x and residual in FP32. Compute RMS normalization over the last dimension of the unrounded sum with epsilon eps and multiply by 1+weight. Return the normalized tensor and the pre-normalization sum as two new tensors in x.dtype; x and residual are read-only.",
+  "parameters": [
+    {
+      "name": "x",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "residual",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "out",
+    "residual_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}

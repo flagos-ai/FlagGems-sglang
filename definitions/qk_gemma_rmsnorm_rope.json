@@ -1,0 +1,66 @@
+{
+  "api_version": "v6.0",
+  "name": "qk_gemma_rmsnorm_rope",
+  "requires_triton_kernel": true,
+  "description": "Apply Gemma RMSNorm with weights 1+w to each head of q and k independently. Round the normalized values to their input dtype before rotating the first rotary_dim lanes using the cache at positions; retain the normalized tail. is_neox_style selects split-half or even/odd pairs. Return two new tensors with the corresponding q and k shapes and dtypes.",
+  "parameters": [
+    {
+      "name": "q",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "q_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "k_weight",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "positions",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "cos_sin_cache",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "eps",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "head_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "rotary_dim",
+      "kind": "positional_or_keyword",
+      "required": true
+    },
+    {
+      "name": "is_neox_style",
+      "kind": "positional_or_keyword",
+      "required": true
+    }
+  ],
+  "outputs": [
+    "q_out",
+    "k_out"
+  ],
+  "effects": {
+    "mutates": [],
+    "returns_alias_of": {}
+  }
+}
