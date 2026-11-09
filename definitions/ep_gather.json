@@ -2,7 +2,7 @@
   "api_version": "v6.0",
   "name": "ep_gather",
   "requires_triton_kernel": true,
-  "description": "Expert-parallel gather. For each token and hidden column, sum the rows of input_tensor selected by input_index, multiplying each by recv_topk_weight. Skip slots with negative recv_topk_ids. Accumulate in FP32 and write into the caller's [T,H] output_tensor, casting to its dtype. Return that buffer.",
+  "description": "Expert-parallel gather. For each token and hidden column, sum the rows of input_tensor selected by input_index, multiplying each by recv_topk_weight. Skip slots with negative recv_topk_ids. Accumulate in FP32 and write into the caller's [T,H] output_tensor, casting to its dtype. Return that buffer. For portable full-width results, H must be a multiple of 128. The generic implementation launches only complete hidden-column tiles and leaves any trailing columns unwritten.",
   "parameters": [
     {
       "name": "input_tensor",

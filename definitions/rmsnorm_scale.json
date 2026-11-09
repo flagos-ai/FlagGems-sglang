@@ -2,7 +2,7 @@
   "api_version": "v6.0",
   "name": "rmsnorm_scale",
   "requires_triton_kernel": true,
-  "description": "RMS-normalize rows of x over the last dimension in FP32, round the normalized values to x.dtype, multiply by weight, then multiply by scale. Flattened scale rows may cover equal contiguous groups of flattened x rows, so the number of x rows must be a multiple of the number of scale rows. Return a newly allocated tensor with x's shape.",
+  "description": "RMS-normalize rows of x over the last dimension in FP32, round the normalized values to x.dtype, multiply by weight, then multiply by scale. Flattened scale rows may cover equal contiguous groups of flattened x rows, so the number of x rows must be a multiple of the number of scale rows. Return a newly allocated tensor with x's shape. The kernel requires BF16 x, weight and scale on the same device. Use a shared last dimension D in [1,8192], a contiguous weight of shape [D], and x and scale layouts that can be addressed as strided rows. Scale must have at least one row. Unsupported inputs return None.",
   "parameters": [
     {
       "name": "x",
