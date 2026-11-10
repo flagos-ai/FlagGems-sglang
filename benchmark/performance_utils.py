@@ -18,6 +18,7 @@ import json
 import os
 import time
 from contextlib import nullcontext
+from statistics import median
 from typing import Any, Callable, Collection, Generator, List, Optional, Tuple
 
 import pytest
@@ -176,6 +177,7 @@ class Benchmark:
         dtypes=None,
         is_backward=False,
         is_inplace=False,
+        timing_reset_args=(),
         **kwargs,
     ):
         self.op_name = op_name
@@ -204,6 +206,7 @@ class Benchmark:
         self.is_backward = is_backward
         self._validate_reference_candidate()
         self.is_inplace = is_inplace
+        self.timing_reset_args = timing_reset_args
         self._input_iter = None
 
         # Theoretical supported dtypes, metrics for the operation.
@@ -446,7 +449,40 @@ class Benchmark:
 
     def get_latency(self, op, *args, **kwargs):
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
+        if self.timing_reset_args and Config.mode == BenchMode.KERNEL:
+            return self._time_with_input_reset(fn, args)
         return self._time_callable(fn, xs)
+
+    def _time_with_input_reset(self, fn, args):
+        # Match optest's native in-place protocol. Copies are outside the
+        # event interval, and each invocation sees the original input.
+        snapshots = [
+            (args[i], args[i].clone()) for i in self.timing_reset_args
+        ]
+
+        def restore():
+            for value, snapshot in snapshots:
+                value.copy_(snapshot)
+
+        start = torch_device_fn.Event(enable_timing=True)
+        end = torch_device_fn.Event(enable_timing=True)
+        samples = []
+        try:
+            for _ in range(5):
+                restore()
+                fn()
+            for _ in range(25):
+                restore()
+                torch_device_fn.synchronize()
+                start.record()
+                fn()
+                end.record()
+                torch_device_fn.synchronize()
+                samples.append(start.elapsed_time(end))
+        finally:
+            restore()
+            torch_device_fn.synchronize()
+        return median(samples)
 
     def _benchmark_callable(self, op, *args, **kwargs):
         """Build the callable to benchmark (plus the grad inputs for the

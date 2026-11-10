@@ -15,40 +15,28 @@
 """Benchmark for activation_norm/softcap_inplace_logits."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import softcap_inplace_logits as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SOFTCAP_CONST = 30.0
 
-# Shapes match kernel-comp-baseline/problems/activation_norm/
-# softcap_inplace_logits.
-SHAPES = [(m, n) for m in (1, 8, 64, 512) for n in (4096, 32000, 128256)]
-MORE_SHAPES = [(1, 17), (37, 1024), (4, 32000)]
-
-
-def _input_fn(shape, cur_dtype, device):
-    m, n = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    # Scaled up so the inputs reach the tanh saturation region.
-    x = (
-        torch.randn(m, n, generator=g, device=device, dtype=torch.float32) * 20
-    ).to(cur_dtype)
-    yield x, SOFTCAP_CONST
+def _build_inputs(plan, cur_dtype, device):
+    ((m, n),) = plan.builder_args
+    return workload.build_inputs({"m": m, "n": n}, cur_dtype, device)[0]
 
 
 def _case_fn(shape, cur_dtype):
-    (m, n) = shape
+    m, n = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, n)},
         params={
             "configuration": shape,
             "seed": 0,
-            "SOFTCAP_CONST": SOFTCAP_CONST,
+            "SOFTCAP_CONST": workload.SOFTCAP_CONST,
             "m": m,
             "n": n,
         },
@@ -58,19 +46,16 @@ def _case_fn(shape, cur_dtype):
 
 @pytest.mark.softcap_inplace_logits
 def test_perf_softcap_inplace_logits():
-    # The op caps in place, so each repeated timing call re-caps the buffer
-    # left by the previous one. Values shrink toward zero across repetitions
-    # but stay finite and in-range, and the work done (one read plus one
-    # write per element, which is what this bandwidth-bound op costs) is
-    # identical every call, so the measured latency is unaffected.
     bench = OpBenchmark(
         op_name="softcap_inplace_logits",
         torch_op=get_reference("softcap_inplace_logits"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        is_inplace=True,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, n",
     )
     bench.set_gems_from_module(flaggems_sglang)
