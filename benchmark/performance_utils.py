@@ -15,6 +15,7 @@
 import gc
 import importlib
 import json
+import math
 import os
 import time
 from contextlib import nullcontext
@@ -66,6 +67,7 @@ vendor_name = flaggems_sglang.vendor_name
 RESET_TIMING_PROTOCOL = (
     "no-graph-device-event-reset-outside-5warmup-25sample-median"
 )
+TRITON_TIMING_PROTOCOL = "triton-do-bench-no-graph-25ms-warmup-100ms-median"
 if device == "musa":
     torch.backends.mudnn.allow_tf32 = False
 elif device == "npu":
@@ -458,6 +460,16 @@ class Benchmark:
         fn, _ = self._benchmark_callable(op, *args, **kwargs)
         return self._time_with_input_reset(fn, args)
 
+    def _get_latency_with_triton_baseline(self, op, *args, **kwargs):
+        fn, xs = self._benchmark_callable(op, *args, **kwargs)
+        return triton.testing.do_bench(
+            fn,
+            warmup=25,
+            rep=100,
+            return_mode="median",
+            grad_to_none=xs if self.is_backward else None,
+        )
+
     def _time_with_input_reset(self, fn, args):
         # Match optest's native in-place protocol. Copies are outside the
         # event interval, and each invocation sees the original input.
@@ -715,6 +727,12 @@ class Benchmark:
                 )
                 if base_rec is not None and self.timing_reset_args:
                     get_latency = self._get_latency_with_input_reset
+                elif (
+                    base_rec
+                    and base_rec.get("timing_protocol")
+                    == TRITON_TIMING_PROTOCOL
+                ):
+                    get_latency = self._get_latency_with_triton_baseline
             if "latency_base" in self.to_bench_metrics:
                 metric.latency_base = get_latency(
                     self.torch_op, *args, **kwargs
@@ -768,26 +786,46 @@ class Benchmark:
         )
         if base_rec is None:
             return None, miss_reason
-        if base_rec.get("latency_ms") is None:
-            return None, "external baseline has no latency_ms"
-        protocol = base_rec.get("timing_protocol")
+        latency = base_rec.get("latency_ms")
         if (
-            protocol or self.timing_reset_args
-        ) and Config.mode != BenchMode.KERNEL:
+            not isinstance(latency, (int, float))
+            or not math.isfinite(latency)
+            or latency <= 0
+        ):
+            return None, "external baseline has no positive finite latency_ms"
+        protocol = base_rec.get("timing_protocol")
+        if protocol is None and not self.timing_reset_args:
+            return (
+                base_rec,
+                None,
+            )  # Legacy timing for untagged out-of-place records.
+        expected = (
+            RESET_TIMING_PROTOCOL
+            if self.timing_reset_args
+            else TRITON_TIMING_PROTOCOL
+        )
+        if protocol != expected:
+            return (
+                None,
+                f"incompatible external baseline timing protocol: {protocol!r}",
+            )
+        if Config.mode != BenchMode.KERNEL:
             return None, "external baseline requires kernel timing mode"
+        if Config.timing_overrides:
+            return (
+                None,
+                "external baseline timing requires default --warmup and --iter",
+            )
         if self.timing_reset_args:
-            if protocol != RESET_TIMING_PROTOCOL:
+            if not callable(getattr(torch_device_fn, "Event", None)):
                 return (
                     None,
-                    f"incompatible external baseline timing protocol: {protocol!r}",
+                    "this backend does not provide device event timing",
                 )
-            if Config.timing_overrides:
-                return (
-                    None,
-                    "external reset timing requires default --warmup and --iter",
-                )
-        elif protocol == RESET_TIMING_PROTOCOL:
-            return None, "external baseline requires input reset timing"
+        elif not callable(
+            getattr(getattr(triton, "testing", None), "do_bench", None)
+        ):
+            return None, "this backend does not provide Triton do_bench timing"
         return base_rec, None
 
     def _compare_against_base(self, metric, dtype, base_rec, miss_reason):

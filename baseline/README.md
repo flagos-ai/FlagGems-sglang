@@ -14,7 +14,10 @@ workload uses cap 30.0 and restores the logits outside the event interval in
 kernel mode (five warmups, median of 25 samples) when the supplied baseline
 record declares that protocol. Other softcap runs use the regular timer,
 including runs without base data and runs with explicit `--warmup` or `--iter`.
-Those runs report a local ratio when an external record is incompatible.
+SiLU uses Triton kernel timing with a 25 ms warmup and a 100 ms sampling
+budget when its external record declares that protocol. Both benchmarks
+report a local ratio when the requested mode, budget, or timer cannot match
+the external record.
 
 `optest-v1.json` declares that the checkout supports these timing protocols
 and lists the exact workload keys required for publication. Update it with
