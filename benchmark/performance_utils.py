@@ -63,6 +63,9 @@ torch_backend_device = flaggems_sglang.runtime.torch_backend_device
 torch_device_fn = flaggems_sglang.runtime.torch_device_fn
 device = flaggems_sglang.device
 vendor_name = flaggems_sglang.vendor_name
+RESET_TIMING_PROTOCOL = (
+    "no-graph-device-event-reset-outside-5warmup-25sample-median"
+)
 if device == "musa":
     torch.backends.mudnn.allow_tf32 = False
 elif device == "npu":
@@ -449,9 +452,11 @@ class Benchmark:
 
     def get_latency(self, op, *args, **kwargs):
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
-        if self.timing_reset_args and Config.mode == BenchMode.KERNEL:
-            return self._time_with_input_reset(fn, args)
         return self._time_callable(fn, xs)
+
+    def _get_latency_with_input_reset(self, op, *args, **kwargs):
+        fn, _ = self._benchmark_callable(op, *args, **kwargs)
+        return self._time_with_input_reset(fn, args)
 
     def _time_with_input_reset(self, fn, args):
         # Match optest's native in-place protocol. Copies are outside the
@@ -699,8 +704,19 @@ class Benchmark:
         try:
             args, kwargs = self.unpack_to_args_kwargs(input)
             metric.shape_detail = self.record_shapes(*args, **kwargs)
+            base_rec, miss_reason = None, None
+            get_latency = self.get_latency
+            if (
+                Config.base_data is not None
+                and "latency" in self.to_bench_metrics
+            ):
+                base_rec, miss_reason = self._external_base_record(
+                    metric, dtype
+                )
+                if base_rec is not None and self.timing_reset_args:
+                    get_latency = self._get_latency_with_input_reset
             if "latency_base" in self.to_bench_metrics:
-                metric.latency_base = self.get_latency(
+                metric.latency_base = get_latency(
                     self.torch_op, *args, **kwargs
                 )
             if "latency" in self.to_bench_metrics:
@@ -708,9 +724,7 @@ class Benchmark:
                 execution = reference_execution()
                 before = execution.candidate_calls if execution else 0
                 with dispatch:
-                    metric.latency = self.get_latency(
-                        candidate, *args, **kwargs
-                    )
+                    metric.latency = get_latency(candidate, *args, **kwargs)
                 if reference_mode_enabled():
                     if execution.candidate_calls <= before:
                         raise ReferenceContractError(
@@ -721,11 +735,10 @@ class Benchmark:
                     metric.candidate_source = "reference"
             if "speedup" in self.to_bench_metrics:
                 metric.speedup = metric.latency_base / metric.latency
-            if (
-                getattr(Config, "base_data", None) is not None
-                and metric.latency
-            ):
-                self._compare_against_base(metric, dtype)
+            if Config.base_data is not None and metric.latency:
+                self._compare_against_base(
+                    metric, dtype, base_rec, miss_reason
+                )
             if "gbps" in self.to_bench_metrics:
                 metric.gbps_base = self.get_gbps(
                     args, latency=metric.latency_base
@@ -746,16 +759,39 @@ class Benchmark:
             gc.collect()
         return metric
 
-    def _compare_against_base(self, metric, dtype):
-        """Fill in the optional 'vs Base' speedup from the --base-data
-        baseline. On a miss, record the precise reason. No-op unless
-        --base-data was supplied (see conftest._load_base_data)."""
+    def _external_base_record(self, metric, dtype):
         base_rec, miss_reason = lookup_base_record_ex(
             Config.base_data,
             self.op_name,
             dtype,
             metric.shape_detail,
         )
+        if base_rec is None:
+            return None, miss_reason
+        if base_rec.get("latency_ms") is None:
+            return None, "external baseline has no latency_ms"
+        protocol = base_rec.get("timing_protocol")
+        if (
+            protocol or self.timing_reset_args
+        ) and Config.mode != BenchMode.KERNEL:
+            return None, "external baseline requires kernel timing mode"
+        if self.timing_reset_args:
+            if protocol != RESET_TIMING_PROTOCOL:
+                return (
+                    None,
+                    f"incompatible external baseline timing protocol: {protocol!r}",
+                )
+            if Config.timing_overrides:
+                return (
+                    None,
+                    "external reset timing requires default --warmup and --iter",
+                )
+        elif protocol == RESET_TIMING_PROTOCOL:
+            return None, "external baseline requires input reset timing"
+        return base_rec, None
+
+    def _compare_against_base(self, metric, dtype, base_rec, miss_reason):
+        """Fill in the optional external speedup or record why it is absent."""
         base_ms = base_rec.get("latency_ms") if base_rec else None
         if base_ms is not None:
             # Both baseline (latency_ms) and metric.latency are in

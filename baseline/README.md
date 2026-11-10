@@ -11,8 +11,14 @@ Each module exposes `OP_NAME`, `DTYPES`, `IS_INPLACE`, `native()`, `grid()`,
 `config()` describes the exact workload and `MUTATED_INPUTS` identifies
 positional arguments that optest must restore before timing. The softcap
 workload uses cap 30.0 and restores the logits outside the event interval in
-kernel mode (five warmups, median of 25 samples). Operator and wrapper modes
-retain their existing timing behavior.
+kernel mode (five warmups, median of 25 samples) when the supplied baseline
+record declares that protocol. Other softcap runs use the regular timer,
+including runs without base data and runs with explicit `--warmup` or `--iter`.
+Those runs report a local ratio when an external record is incompatible.
+
+`optest-v1.json` declares that the checkout supports these timing protocols
+and lists the exact workload keys required for publication. Update it with
+the workload grid when adding or changing collection cases.
 
 In the optest repository, run the `nv-baseline` workflow with
 `repo=FlagGems-sglang` and `ref` set to the desired FlagGems-sglang commit.
@@ -26,8 +32,9 @@ python /path/to/optest/src/nv_baseline/collect_baseline_nvidia.py \
     --ops silu_and_mul,softcap_inplace_logits --output /tmp/sglang-nv.json
 ```
 
-Check that both operators and all requested case records completed before
-using the file. The target runner can then use the static H800 baseline:
+The workflow requires all declared shapes and dtypes to complete timing and
+profiling before it can replace the published file. The target runner can
+then use the static H800 baseline:
 
 ```sh
 flagos-optest /path/to/FlagGems-sglang --gpus 0 \
