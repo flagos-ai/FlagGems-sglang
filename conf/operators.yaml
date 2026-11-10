@@ -1770,6 +1770,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: sglang_fl_mrotary_embedding
+    description: |
+      SGLang multimodal in-place RoPE: each rotary lane takes its cos/sin pair from the temporal, height or width position selected by the axis quota, then rotates in neox or adjacent-pair form.
+      Lanes past rotary_dim pass through untouched.
+    for:
+      - sglang_fl_mrotary_embedding
+    labels:
+      - fused
+      - sglang
+      - PositionEmbedding
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: sglang_fl_rotary_embedding
     description: |
       SGLang fused in-place RoPE over packed query/key tensors.
