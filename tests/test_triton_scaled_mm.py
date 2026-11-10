@@ -151,7 +151,7 @@ def _build_normal_scale(case):
     return c
 
 
-_CORRECTNESS_CASES += [_build_normal_scale]
+_CORRECTNESS_CASES += [lambda: _build_normal_scale(_NORMAL_SCALE_CASES[0])]
 _CORRECTNESS_CASES += [
     (lambda m=m, k=k, n=n: _case(m, k, n, torch.float8_e4m3fn))
     for m in (1, 8, 64, 512, 4096)
@@ -201,9 +201,15 @@ def test_triton_scaled_mm_rejects_incorrect_scaling(case_idx):
     case = _NORMAL_SCALE_CASES[case_idx]()
     if callable(case):
         case = case()
+    # Pin both scales to 0.5 so swapping either for ones (1.0) is a
+    # deterministic 2x change. The reference is exact float32 math on shared
+    # fp8 inputs, so a strict checker reliably detects the scale swap that
+    # the fp8 quantization tolerance would otherwise absorb.
+    case["scale_a"].fill_(0.5)
+    case["scale_b"].fill_(0.5)
     kwargs = {key: value for key, value in case.items() if key != "check"}
     expected = get_reference("triton_scaled_mm")(**kwargs)
-    check = case["check"]
+    check = _checker(1e-5, 1e-5)
     for actual in (torch.zeros_like(expected), expected * 0.5):
         with pytest.raises(AssertionError):
             check(actual, expected)
