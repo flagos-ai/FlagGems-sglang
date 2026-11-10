@@ -1,10 +1,10 @@
-# Copyright 2026 FlagOS Contributors
+# Copyright 2026, The FlagOS Contributors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License")
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#       http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -12,11 +12,293 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Operator stub for awq_dequantize. Replace with Triton implementation."""
+import struct
+
+import torch
+import triton
+import triton.language as tl
 
 
-def awq_dequantize(*args, **kwargs):
-    raise NotImplementedError("awq_dequantize is not yet implemented")
+@triton.jit(do_not_specialize=["Q", "S", "Z", "Output"])
+def _flat(
+    Q: tl.float64,
+    S: tl.float64,
+    Z: tl.float64,
+    Output: tl.float64,
+    META: tl.constexpr,
+    ALIGN: tl.constexpr,
+):
+    Q = Q.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[0]:
+        Q = tl.multiple_of(Q, 16)
+    S = S.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[1]:
+        S = tl.multiple_of(S, 16)
+    Z = Z.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[2]:
+        Z = tl.multiple_of(Z, 16)
+    Output = Output.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[3]:
+        Output = tl.multiple_of(Output, 16)
+    K: tl.constexpr = META[0]
+    W: tl.constexpr = META[1]
+    G: tl.constexpr = META[2]
+    B: tl.constexpr = META[3]
+    Q0: tl.constexpr = META[4]
+    Q1: tl.constexpr = META[5]
+    S0: tl.constexpr = META[6]
+    S1: tl.constexpr = META[7]
+    Z0: tl.constexpr = META[8]
+    Z1: tl.constexpr = META[9]
+    i = (
+        tl.program_id(0).to(tl.int64)
+        if K * W * 8 + B * 8 >= 2147483648
+        or (K - 1) * Q0 + (W + B - 1) * Q1 >= 2147483648
+        or (K // G - 1) * S0 + (W * 8 + B * 8 - 1) * S1 >= 2147483648
+        or ((K // G - 1) * Z0 + (W + B - 1) * Z1 >= 2147483648)
+        else tl.program_id(0)
+    ) * B + tl.arange(0, B)
+    r = i // (W * 8)
+    c = i % (W * 8)
+    sh = (c & 1) * 16 + (c & 6) * 2
+    q = tl.load(
+        Q + r * Q0 + c // 8 * Q1, (K * W * 8 % B == 0) | (i < K * W * 8), 0
+    )
+    z = tl.load(
+        Z + r // G * Z0 + c // 8 * Z1,
+        (K * W * 8 % B == 0) | (i < K * W * 8),
+        0,
+    )
+    s = tl.load(
+        S + r // G * S0 + c * S1, (K * W * 8 % B == 0) | (i < K * W * 8), 0
+    )
+    v = ((q >> sh & 15) - (z >> sh & 15)).to(tl.float16) * s
+    tl.store(Output + i, v, (K * W * 8 % B == 0) | (i < K * W * 8))
+
+
+@triton.jit(do_not_specialize=["Q", "S", "Z", "Output"])
+def _words(
+    Q: tl.float64,
+    S: tl.float64,
+    Z: tl.float64,
+    Output: tl.float64,
+    META: tl.constexpr,
+    ALIGN: tl.constexpr,
+):
+    Q = Q.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[0]:
+        Q = tl.multiple_of(Q, 16)
+    S = S.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[1]:
+        S = tl.multiple_of(S, 16)
+    Z = Z.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[2]:
+        Z = tl.multiple_of(Z, 16)
+    Output = Output.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[3]:
+        Output = tl.multiple_of(Output, 16)
+    K: tl.constexpr = META[0]
+    W: tl.constexpr = META[1]
+    G: tl.constexpr = META[2]
+    B: tl.constexpr = META[3]
+    Q0: tl.constexpr = META[4]
+    Q1: tl.constexpr = META[5]
+    S0: tl.constexpr = META[6]
+    S1: tl.constexpr = META[7]
+    Z0: tl.constexpr = META[8]
+    Z1: tl.constexpr = META[9]
+    i = (
+        tl.program_id(0).to(tl.int64)
+        if K * W * 8 + B * 8 >= 2147483648
+        or (K - 1) * Q0 + (W + B - 1) * Q1 >= 2147483648
+        or (K // G - 1) * S0 + (W * 8 + B * 8 - 1) * S1 >= 2147483648
+        or ((K // G - 1) * Z0 + (W + B - 1) * Z1 >= 2147483648)
+        else tl.program_id(0)
+    ) * B + tl.arange(0, B)
+    r = i // W
+    c = i % W
+    j = tl.arange(0, 8)
+    sh = (j & 1) * 16 + (j & 6) * 2
+    q = tl.load(Q + r * Q0 + c * Q1, i < K * W, 0, cache_modifier=".cg")
+    z = tl.load(Z + r // G * Z0 + c * Z1, i < K * W, 0)
+    s = tl.load(
+        S + (r // G * S0)[:, None] + (c[:, None] * 8 + j[None, :]) * S1,
+        i[:, None] < K * W,
+        0,
+    )
+    v = (
+        (q[:, None] >> sh[None, :] & 15) - (z[:, None] >> sh[None, :] & 15)
+    ).to(tl.float16) * s
+    tl.store(
+        Output + i[:, None] * 8 + j[None, :],
+        v,
+        i[:, None] < K * W,
+        cache_modifier=".cs",
+    )
+
+
+@triton.jit(do_not_specialize=["Q", "S", "Z", "Output"])
+def _packed_flat(
+    Q: tl.float64,
+    S: tl.float64,
+    Z: tl.float64,
+    Output: tl.float64,
+    META: tl.constexpr,
+    ALIGN: tl.constexpr,
+):
+    Q = Q.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[0]:
+        Q = tl.multiple_of(Q, 16)
+    S = S.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[1]:
+        S = tl.multiple_of(S, 16)
+    Z = Z.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.int32))
+    if ALIGN[2]:
+        Z = tl.multiple_of(Z, 16)
+    Output = Output.to(tl.uint64, bitcast=True).to(tl.pointer_type(tl.float16))
+    if ALIGN[3]:
+        Output = tl.multiple_of(Output, 16)
+    K: tl.constexpr = META[0]
+    W: tl.constexpr = META[1]
+    G: tl.constexpr = META[2]
+    B: tl.constexpr = META[3]
+    Q0: tl.constexpr = META[4]
+    Q1: tl.constexpr = META[5]
+    S0: tl.constexpr = META[6]
+    S1: tl.constexpr = META[7]
+    Z0: tl.constexpr = META[8]
+    Z1: tl.constexpr = META[9]
+    i = (
+        tl.program_id(0).to(tl.int64)
+        if K * W * 8 + B * 8 >= 2147483648
+        or (K - 1) * Q0 + (W + B - 1) * Q1 >= 2147483648
+        or (K // G - 1) * S0 + (W * 8 + B * 8 - 1) * S1 >= 2147483648
+        or ((K // G - 1) * Z0 + (W + B - 1) * Z1 >= 2147483648)
+        else tl.program_id(0)
+    ) * B + tl.arange(0, B)
+    r = i // (W * 8)
+    c = i % (W * 8)
+    p = (
+        tl.program_id(0).to(tl.int64)
+        if K * W * 8 + B * 8 >= 2147483648
+        or (K - 1) * Q0 + (W + B - 1) * Q1 >= 2147483648
+        or (K // G - 1) * S0 + (W * 8 + B * 8 - 1) * S1 >= 2147483648
+        or ((K // G - 1) * Z0 + (W + B - 1) * Z1 >= 2147483648)
+        else tl.program_id(0)
+    ) * (B // 8) + tl.arange(0, B // 8)
+    wr = p // W
+    wc = p % W
+    q = tl.load(Q + wr * Q0 + wc * Q1, p < K * W, 0, cache_modifier=".cg")
+    z = tl.load(Z + wr // G * Z0 + wc * Z1, p < K * W, 0)
+    pair0, pair1, pair2, pair3, scratch = tl.inline_asm_elementwise(
+        (
+            "v_and_b32 $0, 0x000f000f, $5\n"
+            "v_and_b32 $4, 0x000f000f, $6\n"
+            "v_or_b32 $0, 0x64006400, $0\n"
+            "v_or_b32 $4, 0x64006400, $4\n"
+            "v_pk_add_f16 $0, $0, $4 op_sel:[0,0] op_sel_hi:[1,1] neg_lo:"
+            "[0,1] neg_hi:[0,1]\n"
+            "v_lshrrev_b32 $1, 4, $5\n"
+            "v_lshrrev_b32 $4, 4, $6\n"
+            "v_and_b32 $1, 0x000f000f, $1\n"
+            "v_and_b32 $4, 0x000f000f, $4\n"
+            "v_or_b32 $1, 0x64006400, $1\n"
+            "v_or_b32 $4, 0x64006400, $4\n"
+            "v_pk_add_f16 $1, $1, $4 op_sel:[0,0] op_sel_hi:[1,1] neg_lo:"
+            "[0,1] neg_hi:[0,1]\n"
+            "v_lshrrev_b32 $2, 8, $5\n"
+            "v_lshrrev_b32 $4, 8, $6\n"
+            "v_and_b32 $2, 0x000f000f, $2\n"
+            "v_and_b32 $4, 0x000f000f, $4\n"
+            "v_or_b32 $2, 0x64006400, $2\n"
+            "v_or_b32 $4, 0x64006400, $4\n"
+            "v_pk_add_f16 $2, $2, $4 op_sel:[0,0] op_sel_hi:[1,1] neg_lo:"
+            "[0,1] neg_hi:[0,1]\n"
+            "v_lshrrev_b32 $3, 12, $5\n"
+            "v_lshrrev_b32 $4, 12, $6\n"
+            "v_and_b32 $3, 0x000f000f, $3\n"
+            "v_and_b32 $4, 0x000f000f, $4\n"
+            "v_or_b32 $3, 0x64006400, $3\n"
+            "v_or_b32 $4, 0x64006400, $4\n"
+            "v_pk_add_f16 $3, $3, $4 op_sel:[0,0] op_sel_hi:[1,1] neg_lo:"
+            "[0,1] neg_hi:[0,1]"
+        ),
+        constraints="=&v,=&v,=&v,=&v,=&v,v,v",
+        args=[q, z],
+        dtype=(tl.uint32, tl.uint32, tl.uint32, tl.uint32, tl.uint32),
+        is_pure=True,
+        pack=1,
+    )
+    d0 = pair0.to(tl.uint16).to(tl.float16, bitcast=True)
+    d1 = pair1.to(tl.uint16).to(tl.float16, bitcast=True)
+    d2 = pair2.to(tl.uint16).to(tl.float16, bitcast=True)
+    d3 = pair3.to(tl.uint16).to(tl.float16, bitcast=True)
+    d4 = (pair0 >> 16).to(tl.uint16).to(tl.float16, bitcast=True)
+    d5 = (pair1 >> 16).to(tl.uint16).to(tl.float16, bitcast=True)
+    d6 = (pair2 >> 16).to(tl.uint16).to(tl.float16, bitcast=True)
+    d7 = (pair3 >> 16).to(tl.uint16).to(tl.float16, bitcast=True)
+    a = tl.interleave(d0, d2)
+    b = tl.interleave(d1, d3)
+    c0 = tl.interleave(d4, d6)
+    d = tl.interleave(d5, d7)
+    e = tl.interleave(a, b)
+    f = tl.interleave(c0, d)
+    value = tl.interleave(e, f)
+    s = tl.load(S + r // G * S0 + c * S1, i < K * W * 8, 0)
+    v = value * s
+    tl.store(Output + i, v, i < K * W * 8)
+
+
+def awq_dequantize(qweight, scales, zeros):
+    k, w = qweight.shape
+    g = k // scales.shape[0]
+    out = scales.new_empty((k, w * 8))
+    q_ptr = qweight.data_ptr()
+    s_ptr = scales.data_ptr()
+    z_ptr = zeros.data_ptr()
+    o_ptr = out.data_ptr()
+    align = (
+        q_ptr % 16 == 0,
+        s_ptr % 16 == 0,
+        z_ptr % 16 == 0,
+        o_ptr % 16 == 0,
+    )
+    strides = (*qweight.stride(), *scales.stride(), *zeros.stride())
+    q_arg, s_arg, z_arg, o_arg = struct.unpack(
+        "=4d", struct.pack("=4Q", q_ptr, s_ptr, z_ptr, o_ptr)
+    )
+    if k * w * 8 <= 1048576 or (
+        torch.version.hip is not None and k * w * 8 >= 33554432
+    ):
+        kernel = (
+            _packed_flat
+            if torch.version.hip is not None and k * w * 8 >= 33554432
+            else _flat
+        )
+        kernel.run(
+            q_arg,
+            s_arg,
+            z_arg,
+            o_arg,
+            (k, w, g, 1024, *strides),
+            align,
+            grid=((k * w * 8 + 1024 - 1) // 1024,),
+            warmup=False,
+        )
+    else:
+        block = 4096 if k * w * 8 >= 33554432 else 256
+        _words.run(
+            q_arg,
+            s_arg,
+            z_arg,
+            o_arg,
+            (k, w, g, block, *strides),
+            align,
+            num_warps=32 if block == 4096 else 4,
+            grid=((k * w + block - 1) // block,),
+            warmup=False,
+        )
+    return out
 
 
 __all__ = ["awq_dequantize"]
