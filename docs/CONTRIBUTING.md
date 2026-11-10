@@ -268,6 +268,16 @@ pytest -q benchmark/test_my_op.py --level core --iter 1 --warmup 1
 
 Correctness assertions live in `tests/`, not here; a benchmark only measures.
 
+### Add a native workload for optest
+
+For cross-machine performance, put the SGLang native callable, case grid,
+input builder, and result key under [`baseline/`](../baseline/README.md).
+Reuse the workload builder in the benchmark without changing its existing
+case plans. Specify scalar arguments and mutated inputs explicitly; different
+configurations with the same tensor shape must have distinct result keys.
+Collect on H800 and verify the target benchmark matches the intended record
+before publishing the baseline.
+
 ### Inject a candidate in correctness tests and benchmarks
 
 Both suites accept the same candidate file without modifying the test:

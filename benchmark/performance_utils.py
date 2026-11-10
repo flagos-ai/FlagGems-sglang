@@ -15,9 +15,11 @@
 import gc
 import importlib
 import json
+import math
 import os
 import time
 from contextlib import nullcontext
+from statistics import median
 from typing import Any, Callable, Collection, Generator, List, Optional, Tuple
 
 import pytest
@@ -62,6 +64,10 @@ torch_backend_device = flaggems_sglang.runtime.torch_backend_device
 torch_device_fn = flaggems_sglang.runtime.torch_device_fn
 device = flaggems_sglang.device
 vendor_name = flaggems_sglang.vendor_name
+RESET_TIMING_PROTOCOL = (
+    "no-graph-device-event-reset-outside-5warmup-25sample-median"
+)
+TRITON_TIMING_PROTOCOL = "triton-do-bench-no-graph-25ms-warmup-100ms-median"
 if device == "musa":
     torch.backends.mudnn.allow_tf32 = False
 elif device == "npu":
@@ -176,6 +182,7 @@ class Benchmark:
         dtypes=None,
         is_backward=False,
         is_inplace=False,
+        timing_reset_args=(),
         **kwargs,
     ):
         self.op_name = op_name
@@ -204,6 +211,7 @@ class Benchmark:
         self.is_backward = is_backward
         self._validate_reference_candidate()
         self.is_inplace = is_inplace
+        self.timing_reset_args = timing_reset_args
         self._input_iter = None
 
         # Theoretical supported dtypes, metrics for the operation.
@@ -448,6 +456,51 @@ class Benchmark:
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
         return self._time_callable(fn, xs)
 
+    def _get_latency_with_input_reset(self, op, *args, **kwargs):
+        fn, _ = self._benchmark_callable(op, *args, **kwargs)
+        return self._time_with_input_reset(fn, args)
+
+    def _get_latency_with_triton_baseline(self, op, *args, **kwargs):
+        fn, xs = self._benchmark_callable(op, *args, **kwargs)
+        return triton.testing.do_bench(
+            fn,
+            warmup=25,
+            rep=100,
+            return_mode="median",
+            grad_to_none=xs if self.is_backward else None,
+        )
+
+    def _time_with_input_reset(self, fn, args):
+        # Match optest's native in-place protocol. Copies are outside the
+        # event interval, and each invocation sees the original input.
+        snapshots = [
+            (args[i], args[i].clone()) for i in self.timing_reset_args
+        ]
+
+        def restore():
+            for value, snapshot in snapshots:
+                value.copy_(snapshot)
+
+        start = torch_device_fn.Event(enable_timing=True)
+        end = torch_device_fn.Event(enable_timing=True)
+        samples = []
+        try:
+            for _ in range(5):
+                restore()
+                fn()
+            for _ in range(25):
+                restore()
+                torch_device_fn.synchronize()
+                start.record()
+                fn()
+                end.record()
+                torch_device_fn.synchronize()
+                samples.append(start.elapsed_time(end))
+        finally:
+            restore()
+            torch_device_fn.synchronize()
+        return median(samples)
+
     def _benchmark_callable(self, op, *args, **kwargs):
         """Build the callable to benchmark (plus the grad inputs for the
         backward case). Split out from timing so the reference-only runner can
@@ -663,8 +716,25 @@ class Benchmark:
         try:
             args, kwargs = self.unpack_to_args_kwargs(input)
             metric.shape_detail = self.record_shapes(*args, **kwargs)
+            base_rec, miss_reason = None, None
+            get_latency = self.get_latency
+            if (
+                Config.base_data is not None
+                and "latency" in self.to_bench_metrics
+            ):
+                base_rec, miss_reason = self._external_base_record(
+                    metric, dtype
+                )
+                if base_rec is not None and self.timing_reset_args:
+                    get_latency = self._get_latency_with_input_reset
+                elif (
+                    base_rec
+                    and base_rec.get("timing_protocol")
+                    == TRITON_TIMING_PROTOCOL
+                ):
+                    get_latency = self._get_latency_with_triton_baseline
             if "latency_base" in self.to_bench_metrics:
-                metric.latency_base = self.get_latency(
+                metric.latency_base = get_latency(
                     self.torch_op, *args, **kwargs
                 )
             if "latency" in self.to_bench_metrics:
@@ -672,9 +742,7 @@ class Benchmark:
                 execution = reference_execution()
                 before = execution.candidate_calls if execution else 0
                 with dispatch:
-                    metric.latency = self.get_latency(
-                        candidate, *args, **kwargs
-                    )
+                    metric.latency = get_latency(candidate, *args, **kwargs)
                 if reference_mode_enabled():
                     if execution.candidate_calls <= before:
                         raise ReferenceContractError(
@@ -685,11 +753,10 @@ class Benchmark:
                     metric.candidate_source = "reference"
             if "speedup" in self.to_bench_metrics:
                 metric.speedup = metric.latency_base / metric.latency
-            if (
-                getattr(Config, "base_data", None) is not None
-                and metric.latency
-            ):
-                self._compare_against_base(metric, dtype)
+            if Config.base_data is not None and metric.latency:
+                self._compare_against_base(
+                    metric, dtype, base_rec, miss_reason
+                )
             if "gbps" in self.to_bench_metrics:
                 metric.gbps_base = self.get_gbps(
                     args, latency=metric.latency_base
@@ -710,16 +777,59 @@ class Benchmark:
             gc.collect()
         return metric
 
-    def _compare_against_base(self, metric, dtype):
-        """Fill in the optional 'vs Base' speedup from the --base-data
-        baseline. On a miss, record the precise reason. No-op unless
-        --base-data was supplied (see conftest._load_base_data)."""
+    def _external_base_record(self, metric, dtype):
         base_rec, miss_reason = lookup_base_record_ex(
             Config.base_data,
             self.op_name,
             dtype,
             metric.shape_detail,
         )
+        if base_rec is None:
+            return None, miss_reason
+        latency = base_rec.get("latency_ms")
+        if (
+            not isinstance(latency, (int, float))
+            or not math.isfinite(latency)
+            or latency <= 0
+        ):
+            return None, "external baseline has no positive finite latency_ms"
+        protocol = base_rec.get("timing_protocol")
+        if protocol is None and not self.timing_reset_args:
+            return (
+                base_rec,
+                None,
+            )  # Legacy timing for untagged out-of-place records.
+        expected = (
+            RESET_TIMING_PROTOCOL
+            if self.timing_reset_args
+            else TRITON_TIMING_PROTOCOL
+        )
+        if protocol != expected:
+            return (
+                None,
+                f"incompatible external baseline timing protocol: {protocol!r}",
+            )
+        if Config.mode != BenchMode.KERNEL:
+            return None, "external baseline requires kernel timing mode"
+        if Config.timing_overrides:
+            return (
+                None,
+                "external baseline timing requires default --warmup and --iter",
+            )
+        if self.timing_reset_args:
+            if not callable(getattr(torch_device_fn, "Event", None)):
+                return (
+                    None,
+                    "this backend does not provide device event timing",
+                )
+        elif not callable(
+            getattr(getattr(triton, "testing", None), "do_bench", None)
+        ):
+            return None, "this backend does not provide Triton do_bench timing"
+        return base_rec, None
+
+    def _compare_against_base(self, metric, dtype, base_rec, miss_reason):
+        """Fill in the optional external speedup or record why it is absent."""
         base_ms = base_rec.get("latency_ms") if base_rec else None
         if base_ms is not None:
             # Both baseline (latency_ms) and metric.latency are in
