@@ -111,7 +111,9 @@ def _qkv_lora_b_kernel(
         acc = tl.zeros((BLOCK_S, BLOCK_N), dtype=tl.float32)
         for r in range(0, R):
             x_vals = tl.load(
-                x_ptr + rows * STRIDE_X_ROW + (slice_id * R + r) * STRIDE_X_COL,
+                x_ptr
+                + rows * STRIDE_X_ROW
+                + (slice_id * R + r) * STRIDE_X_COL,
                 mask=live,
                 other=0.0,
             ).to(tl.float32)
@@ -136,9 +138,7 @@ def _qkv_lora_b_kernel(
         result = tl.fma(acc, scaling, base)
     else:
         result = base + acc * scaling
-    tl.store(
-        out_ptrs, result.to(out_ptr.dtype.element_ty), mask=store_mask
-    )
+    tl.store(out_ptrs, result.to(out_ptr.dtype.element_ty), mask=store_mask)
 
 
 def _as_index(tensor):
