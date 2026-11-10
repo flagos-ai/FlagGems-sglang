@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -51,14 +55,18 @@ def _check(actual, expected):
     a_deq = aq.to(torch.float32) * asc.float().repeat_interleave(rep, dim=-1)
     e_deq = eq.to(torch.float32) * esc.float().repeat_interleave(rep, dim=-1)
     mismatch = (a_deq - e_deq).abs() > (2e-2 + 2e-2 * e_deq.abs())
-    assert mismatch.float().mean() < 1e-2, "too many fp8 rounding-boundary mismatches"
+    assert (
+        mismatch.float().mean() < 1e-2
+    ), "too many fp8 rounding-boundary mismatches"
 
 
 def _case(m, k, group_size=128, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    x = torch.randn(
-        m, k, device=flaggems_sglang.device, generator=g
-    ).to(torch.bfloat16).contiguous()
+    x = (
+        torch.randn(m, k, device=flaggems_sglang.device, generator=g)
+        .to(torch.bfloat16)
+        .contiguous()
+    )
     fp8_max = torch.finfo(torch.float8_e4m3fn).max
     return dict(
         input=x,
@@ -66,7 +74,10 @@ def _case(m, k, group_size=128, seed=0):
             m, k, dtype=torch.float8_e4m3fn, device=flaggems_sglang.device
         ),
         output_s=torch.zeros(
-            m, k // group_size, dtype=torch.float32, device=flaggems_sglang.device
+            m,
+            k // group_size,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
         ),
         group_size=group_size,
         eps=1e-10,
@@ -93,7 +104,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.per_token_group_quant_8bit_v2
 def test_per_token_group_quant_8bit_v2(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("per_token_group_quant_8bit_v2")(**kwargs)
@@ -103,13 +118,17 @@ def test_per_token_group_quant_8bit_v2(case_idx):
             per_token_group_quant_8bit_v2,
         )
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_token_group_quant_8bit_v2 ops module not found")
+        pytest.skip(
+            "quantization/per_token_group_quant_8bit_v2 ops module not found"
+        )
         return
 
     try:
         actual = per_token_group_quant_8bit_v2(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_token_group_quant_8bit_v2 not yet implemented")
+        pytest.skip(
+            "quantization/per_token_group_quant_8bit_v2 not yet implemented"
+        )
         return
 
     if check is not None:

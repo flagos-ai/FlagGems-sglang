@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -48,7 +52,11 @@ def _case(n, dtype=torch.bfloat16, seed=0, scale=1.0):
     x = (
         scale
         * torch.randn(
-            n, 128, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+            n,
+            128,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
+            generator=g,
         )
     ).to(dtype)
     return dict(x=x.contiguous(), check=_check)
@@ -68,20 +76,28 @@ _CORRECTNESS_CASES = [
     lambda: _case(256, scale=0.01),
     lambda: _case(128, dtype=torch.float16),
 ]
-_CORRECTNESS_CASES += [(lambda n=n: _case(n)) for n in (16, 128, 1024, 8192, 65536)]
+_CORRECTNESS_CASES += [
+    (lambda n=n: _case(n)) for n in (16, 128, 1024, 8192, 65536)
+]
 
 
 @pytest.mark.parametrize("case_idx", range(len(_CORRECTNESS_CASES)))
 @pytest.mark.quantize_fp4_indexer
 def test_quantize_fp4_indexer(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("quantize_fp4_indexer")(**kwargs)
 
     try:
-        from flaggems_sglang.ops.quantize_fp4_indexer import quantize_fp4_indexer
+        from flaggems_sglang.ops.quantize_fp4_indexer import (
+            quantize_fp4_indexer,
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/quantize_fp4_indexer ops module not found")
         return

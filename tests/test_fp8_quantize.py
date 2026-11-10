@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -88,7 +92,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.fp8_quantize
 def test_fp8_quantize(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("fp8_quantize")(**kwargs)

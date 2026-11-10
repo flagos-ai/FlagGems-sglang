@@ -37,27 +37,47 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
 
 
-def _case(m, k, n, in_dtype, out_dtype=torch.float16, seed=0, *, scale_range=None):
+def _case(
+    m, k, n, in_dtype, out_dtype=torch.float16, seed=0, *, scale_range=None
+):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     if in_dtype == torch.int8:
         a = torch.randint(
-            -8, 8, (m, k), dtype=in_dtype, device=flaggems_sglang.device, generator=g
+            -8,
+            8,
+            (m, k),
+            dtype=in_dtype,
+            device=flaggems_sglang.device,
+            generator=g,
         )
         b = torch.randint(
-            -8, 8, (k, n), dtype=in_dtype, device=flaggems_sglang.device, generator=g
+            -8,
+            8,
+            (k, n),
+            dtype=in_dtype,
+            device=flaggems_sglang.device,
+            generator=g,
         )
         rtol, atol = 0.15, 0.1
     else:
         a = torch.clamp(
             0.1
             * torch.randn(
-                m, k, dtype=torch.float16, device=flaggems_sglang.device, generator=g
+                m,
+                k,
+                dtype=torch.float16,
+                device=flaggems_sglang.device,
+                generator=g,
             ),
             -0.3,
             0.3,
@@ -65,7 +85,11 @@ def _case(m, k, n, in_dtype, out_dtype=torch.float16, seed=0, *, scale_range=Non
         b = torch.clamp(
             0.1
             * torch.randn(
-                k, n, dtype=torch.float16, device=flaggems_sglang.device, generator=g
+                k,
+                n,
+                dtype=torch.float16,
+                device=flaggems_sglang.device,
+                generator=g,
             ),
             -0.3,
             0.3,
@@ -108,9 +132,15 @@ _CORRECTNESS_CASES = [
 # Exercise FP8 scaling with outputs above the absolute tolerance, including
 # a single row and a non-aligned row count. Benchmark inputs stay unchanged.
 _NORMAL_SCALE_CASES = [
-    lambda: _case(1, 4096, 256, torch.float8_e4m3fn, seed=11, scale_range=(0.5, 1.5)),
-    lambda: _case(17, 1024, 96, torch.float8_e4m3fn, seed=12, scale_range=(0.5, 1.5)),
-    lambda: _case(64, 4096, 256, torch.float8_e4m3fn, seed=13, scale_range=(0.5, 1.5)),
+    lambda: _case(
+        1, 4096, 256, torch.float8_e4m3fn, seed=11, scale_range=(0.5, 1.5)
+    ),
+    lambda: _case(
+        17, 1024, 96, torch.float8_e4m3fn, seed=12, scale_range=(0.5, 1.5)
+    ),
+    lambda: _case(
+        64, 4096, 256, torch.float8_e4m3fn, seed=13, scale_range=(0.5, 1.5)
+    ),
 ]
 
 
@@ -133,7 +163,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.triton_scaled_mm
 def test_triton_scaled_mm(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("triton_scaled_mm")(**kwargs)

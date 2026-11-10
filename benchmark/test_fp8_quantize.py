@@ -29,7 +29,8 @@ MORE_SHAPES = [(7, 128), (83, 512), (256, 4096)]
 def _input_fn(shape, cur_dtype, device):
     g = torch.Generator(device=device).manual_seed(0)
     x = (
-        1.0 * torch.randn(*shape, generator=g, device=device, dtype=torch.float32)
+        1.0
+        * torch.randn(*shape, generator=g, device=device, dtype=torch.float32)
     ).to(cur_dtype)
     yield dict(x=x, scale_inv=1.0, fp8_dtype=torch.float8_e4m3fn)
 

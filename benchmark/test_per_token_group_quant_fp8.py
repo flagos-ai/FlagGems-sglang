@@ -22,7 +22,9 @@ from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(m, k, 128) for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)]
+SHAPES = [
+    (m, k, 128) for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)
+]
 MORE_SHAPES = [(7, 128, 128), (83, 512, 128), (3, 256, 64)]
 
 
@@ -30,7 +32,11 @@ def _input_fn(shape, cur_dtype, device):
     m, k, group_size = shape
     g = torch.Generator(device=device).manual_seed(0)
     x = (
-        (torch.rand(m, k, generator=g, device=device, dtype=torch.float32) * 2 - 1)
+        (
+            torch.rand(m, k, generator=g, device=device, dtype=torch.float32)
+            * 2
+            - 1
+        )
         .to(cur_dtype)
         .contiguous()
     )
@@ -41,7 +47,9 @@ def _input_fn(shape, cur_dtype, device):
 def test_perf_per_token_group_quant_fp8():
     gems_op = flaggems_sglang.get_op("per_token_group_quant_fp8")
     if gems_op is None:
-        pytest.skip("quantization/per_token_group_quant_fp8 not implemented yet")
+        pytest.skip(
+            "quantization/per_token_group_quant_fp8 not implemented yet"
+        )
     bench = OpBenchmark(
         op_name="per_token_group_quant_fp8",
         torch_op=get_reference("per_token_group_quant_fp8"),

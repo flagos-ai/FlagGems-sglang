@@ -33,18 +33,32 @@ def _input_fn(shape, cur_dtype, device):
     d = 128
     num_pages = max(2, t // _PAGE + 1)
     g = torch.Generator(device=device).manual_seed(0)
-    k = torch.randn(t, nkv, d, dtype=torch.float32, device=device, generator=g).to(cur_dtype)
-    v = torch.randn(t, nkv, d, dtype=torch.float32, device=device, generator=g).to(cur_dtype)
+    k = torch.randn(
+        t, nkv, d, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
+    v = torch.randn(
+        t, nkv, d, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
     slots = torch.randperm(num_pages * _PAGE, generator=g, device=device)[:t]
     loc = slots.to(torch.int32)
     sf = d // 32
-    k_cache = torch.zeros((num_pages * _PAGE, nkv, d), dtype=torch.float8_e4m3fn, device=device)
+    k_cache = torch.zeros(
+        (num_pages * _PAGE, nkv, d), dtype=torch.float8_e4m3fn, device=device
+    )
     v_cache = torch.zeros_like(k_cache)
-    sfk = torch.zeros((num_pages, nkv, 32, _PAGE // 32, sf), dtype=torch.uint8, device=device)
+    sfk = torch.zeros(
+        (num_pages, nkv, 32, _PAGE // 32, sf), dtype=torch.uint8, device=device
+    )
     sfv = torch.zeros_like(sfk)
     yield dict(
-        k=k.contiguous(), v=v.contiguous(), loc=loc,
-        k_cache=k_cache, v_cache=v_cache, sfk=sfk, sfv=sfv, page_size=_PAGE,
+        k=k.contiguous(),
+        v=v.contiguous(),
+        loc=loc,
+        k_cache=k_cache,
+        v_cache=v_cache,
+        sfk=sfk,
+        sfv=sfv,
+        page_size=_PAGE,
     )
 
 

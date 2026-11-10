@@ -48,8 +48,16 @@ def _input_fn(shape, cur_dtype, device):
         device=device,
         generator=g,
     )
-    scales = torch.rand(k // group_size, n, dtype=torch.float32, device=device, generator=g)
-    yield dict(input=x, qweight=qweight, scales=scales, qzeros=qzeros, split_k_iters=split_k)
+    scales = torch.rand(
+        k // group_size, n, dtype=torch.float32, device=device, generator=g
+    )
+    yield dict(
+        input=x,
+        qweight=qweight,
+        scales=scales,
+        qzeros=qzeros,
+        split_k_iters=split_k,
+    )
 
 
 @pytest.mark.awq_gemm

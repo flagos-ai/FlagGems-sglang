@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -84,14 +88,20 @@ _CORRECTNESS_CASES = [
     lambda: _case(2, 1024, 16),
     lambda: _case(1, 128, 8, from_qkv=True),
 ]
-_CORRECTNESS_CASES += [(lambda s=s: _case(1, s, 32)) for s in (128, 1024, 4360, 16384)]
+_CORRECTNESS_CASES += [
+    (lambda s=s: _case(1, s, 32)) for s in (128, 1024, 4360, 16384)
+]
 
 
 @pytest.mark.parametrize("case_idx", range(len(_CORRECTNESS_CASES)))
 @pytest.mark.zimage_qk_rmsnorm
 def test_zimage_qk_rmsnorm(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("zimage_qk_rmsnorm")(**kwargs)

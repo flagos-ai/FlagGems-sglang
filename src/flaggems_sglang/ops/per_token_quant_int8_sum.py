@@ -16,7 +16,9 @@
 
 
 def per_token_quant_int8_sum(*args, **kwargs):
-    raise NotImplementedError("per_token_quant_int8_sum is not yet implemented")
+    raise NotImplementedError(
+        "per_token_quant_int8_sum is not yet implemented"
+    )
 
 
 __all__ = ["per_token_quant_int8_sum"]

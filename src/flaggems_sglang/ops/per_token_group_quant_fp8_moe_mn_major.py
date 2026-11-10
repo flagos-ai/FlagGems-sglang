@@ -16,7 +16,9 @@
 
 
 def per_token_group_quant_fp8_moe_mn_major(*args, **kwargs):
-    raise NotImplementedError("per_token_group_quant_fp8_moe_mn_major is not yet implemented")
+    raise NotImplementedError(
+        "per_token_group_quant_fp8_moe_mn_major is not yet implemented"
+    )
 
 
 __all__ = ["per_token_group_quant_fp8_moe_mn_major"]

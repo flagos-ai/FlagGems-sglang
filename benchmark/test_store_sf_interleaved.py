@@ -35,8 +35,12 @@ def _input_fn(shape, cur_dtype, device):
     sf_in = torch.randint(
         0, 256, (t, nheads, 4), dtype=torch.uint8, device=device, generator=g
     )
-    sf_out = torch.zeros(_PAGES, nheads, 32, 4, 4, dtype=torch.uint8, device=device)
-    loc = torch.randperm(_PAGES * _PAGE, device=device, generator=g)[:t].to(torch.int64)
+    sf_out = torch.zeros(
+        _PAGES, nheads, 32, 4, 4, dtype=torch.uint8, device=device
+    )
+    loc = torch.randperm(_PAGES * _PAGE, device=device, generator=g)[:t].to(
+        torch.int64
+    )
     yield dict(sf_in=sf_in, sf_out=sf_out, loc=loc, page_size=_PAGE)
 
 

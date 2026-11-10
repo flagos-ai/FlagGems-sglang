@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -49,10 +53,20 @@ _PAGE = 128
 def _case(t, nkv, d, num_pages, seed=0, dtype=torch.bfloat16):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     k = torch.randn(
-        t, nkv, d, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+        t,
+        nkv,
+        d,
+        dtype=torch.float32,
+        device=flaggems_sglang.device,
+        generator=g,
     ).to(dtype)
     v = torch.randn(
-        t, nkv, d, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+        t,
+        nkv,
+        d,
+        dtype=torch.float32,
+        device=flaggems_sglang.device,
+        generator=g,
     ).to(dtype)
     slots = torch.randperm(
         num_pages * _PAGE, generator=g, device=flaggems_sglang.device
@@ -90,8 +104,12 @@ def _check(actual, expected):
     e_kc, e_vc, e_sk, e_sv = expected
     assert_close(a_sk, e_sk)
     assert_close(a_sv, e_sv)
-    assert_close(a_kc.to(torch.float32), e_kc.to(torch.float32), atol=0, rtol=0)
-    assert_close(a_vc.to(torch.float32), e_vc.to(torch.float32), atol=0, rtol=0)
+    assert_close(
+        a_kc.to(torch.float32), e_kc.to(torch.float32), atol=0, rtol=0
+    )
+    assert_close(
+        a_vc.to(torch.float32), e_vc.to(torch.float32), atol=0, rtol=0
+    )
 
 
 _CORRECTNESS_CASES = [
@@ -110,13 +128,19 @@ _CORRECTNESS_CASES += [
 @pytest.mark.quant_store_kv_mxfp8
 def test_quant_store_kv_mxfp8(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("quant_store_kv_mxfp8")(**kwargs)
 
     try:
-        from flaggems_sglang.ops.quant_store_kv_mxfp8 import quant_store_kv_mxfp8
+        from flaggems_sglang.ops.quant_store_kv_mxfp8 import (
+            quant_store_kv_mxfp8,
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/quant_store_kv_mxfp8 ops module not found")
         return

@@ -55,5 +55,7 @@ def reference(A, expert_offsets, problem_sizes, group_size):
         + gi[None, :] * count[:, None]
         + (row - off)[:, None]
     )
-    sfa.view(-1)[dest[valid].reshape(-1)] = (amax[valid] / _FP8_MAX).reshape(-1)
+    sfa.view(-1)[dest[valid].reshape(-1)] = (amax[valid] / _FP8_MAX).reshape(
+        -1
+    )
     return a_q, sfa

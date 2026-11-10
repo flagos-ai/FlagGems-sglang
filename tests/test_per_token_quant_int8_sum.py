@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -49,7 +53,9 @@ def _check(actual, expected):
     diff = (a - e).abs()
     assert int(diff.max()) <= 1, f"int8 code off by {int(diff.max())}"
     off = (diff > 0).float().mean()
-    assert off < 1e-3, f"{off:.4%} of codes differ (rounding ties only expected)"
+    assert (
+        off < 1e-3
+    ), f"{off:.4%} of codes differ (rounding ties only expected)"
     assert_close(actual[1], expected[1], dtype=torch.float32)
     if len(expected) > 2:
         assert_close(actual[2], expected[2])
@@ -57,9 +63,11 @@ def _check(actual, expected):
 
 def _case(m, n, cal_sum=True, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    x = torch.randn(
-        m, n, device=flaggems_sglang.device, generator=g
-    ).to(torch.bfloat16).contiguous()
+    x = (
+        torch.randn(m, n, device=flaggems_sglang.device, generator=g)
+        .to(torch.bfloat16)
+        .contiguous()
+    )
     return dict(x=x, scale_dtype=torch.float32, cal_sum=cal_sum, check=_check)
 
 
@@ -80,7 +88,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.per_token_quant_int8_sum
 def test_per_token_quant_int8_sum(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("per_token_quant_int8_sum")(**kwargs)
@@ -90,13 +102,17 @@ def test_per_token_quant_int8_sum(case_idx):
             per_token_quant_int8_sum,
         )
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_token_quant_int8_sum ops module not found")
+        pytest.skip(
+            "quantization/per_token_quant_int8_sum ops module not found"
+        )
         return
 
     try:
         actual = per_token_quant_int8_sum(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_token_quant_int8_sum not yet implemented")
+        pytest.skip(
+            "quantization/per_token_quant_int8_sum not yet implemented"
+        )
         return
 
     if check is not None:

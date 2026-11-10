@@ -23,17 +23,20 @@ from flaggems_sglang.reference import get_reference
 from .op_benchmark import OpBenchmark
 
 # (n_per_expert, n_experts, k)
-SHAPES = [(n, e, k) for e, n in ((8, 256), (32, 128)) for k in (2048, 4096, 7168)]
+SHAPES = [
+    (n, e, k) for e, n in ((8, 256), (32, 128)) for k in (2048, 4096, 7168)
+]
 MORE_SHAPES = [(128, 1, 512), (256, 4, 1024)]
 _GROUP = 128
 
 
 def _input_fn(shape, cur_dtype, device):
     n, e, k = shape
-    rows_per_expert = [n] * e
     m_total = n * e
     g = torch.Generator(device=device).manual_seed(0)
-    A = torch.randn(m_total, k, dtype=torch.float32, device=device, generator=g).to(cur_dtype)
+    A = torch.randn(
+        m_total, k, dtype=torch.float32, device=device, generator=g
+    ).to(cur_dtype)
     offs = torch.tensor(
         [i * n for i in range(e + 1)], dtype=torch.int32, device=device
     )

@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -89,13 +93,19 @@ _CORRECTNESS_CASES += [
 @pytest.mark.store_sf_interleaved
 def test_store_sf_interleaved(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("store_sf_interleaved")(**kwargs)
 
     try:
-        from flaggems_sglang.ops.store_sf_interleaved import store_sf_interleaved
+        from flaggems_sglang.ops.store_sf_interleaved import (
+            store_sf_interleaved,
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/store_sf_interleaved ops module not found")
         return

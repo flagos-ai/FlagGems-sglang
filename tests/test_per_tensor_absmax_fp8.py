@@ -37,16 +37,20 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         **tol,
     )
 
 
 def _case(m, k, seed=0):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
-    x = torch.randn(
-        m, k, device=flaggems_sglang.device, generator=g
-    ).to(torch.bfloat16)
+    x = torch.randn(m, k, device=flaggems_sglang.device, generator=g).to(
+        torch.bfloat16
+    )
     return dict(
         input=x,
         output_s=torch.zeros(
@@ -73,7 +77,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.per_tensor_absmax_fp8
 def test_per_tensor_absmax_fp8(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("per_tensor_absmax_fp8")(**kwargs)

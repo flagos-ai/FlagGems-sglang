@@ -20,5 +20,7 @@ import torch
 def reference(x, scale_inv, fp8_dtype):
     fp8_max = torch.finfo(fp8_dtype).max
     return (
-        (x.to(torch.float32) * scale_inv).clamp(-fp8_max, fp8_max).to(fp8_dtype)
+        (x.to(torch.float32) * scale_inv)
+        .clamp(-fp8_max, fp8_max)
+        .to(fp8_dtype)
     )

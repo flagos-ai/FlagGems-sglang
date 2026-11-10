@@ -29,7 +29,11 @@ MORE_SHAPES = [(1, 1024), (37, 4096), (512, 2048)]
 def _input_fn(shape, cur_dtype, device):
     m, n = shape
     g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(m, n, device=device, generator=g).to(cur_dtype).contiguous()
+    x = (
+        torch.randn(m, n, device=device, generator=g)
+        .to(cur_dtype)
+        .contiguous()
+    )
     yield dict(x=x, scale_dtype=torch.float32, cal_sum=True)
 
 
@@ -37,7 +41,9 @@ def _input_fn(shape, cur_dtype, device):
 def test_perf_per_token_quant_int8_sum():
     gems_op = flaggems_sglang.get_op("per_token_quant_int8_sum")
     if gems_op is None:
-        pytest.skip("quantization/per_token_quant_int8_sum not implemented yet")
+        pytest.skip(
+            "quantization/per_token_quant_int8_sum not implemented yet"
+        )
     bench = OpBenchmark(
         op_name="per_token_quant_int8_sum",
         torch_op=get_reference("per_token_quant_int8_sum"),

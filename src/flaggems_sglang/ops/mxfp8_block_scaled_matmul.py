@@ -16,7 +16,9 @@
 
 
 def mxfp8_block_scaled_matmul(*args, **kwargs):
-    raise NotImplementedError("mxfp8_block_scaled_matmul is not yet implemented")
+    raise NotImplementedError(
+        "mxfp8_block_scaled_matmul is not yet implemented"
+    )
 
 
 __all__ = ["mxfp8_block_scaled_matmul"]

@@ -34,9 +34,11 @@ def _input_fn(shape, cur_dtype, device):
     x = torch.randn(
         1, s, heads, _HEAD_DIM, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
-    weight = torch.randn(_HEAD_DIM, dtype=torch.float32, device=device, generator=g).to(
-        cur_dtype
-    ).contiguous()
+    weight = (
+        torch.randn(_HEAD_DIM, dtype=torch.float32, device=device, generator=g)
+        .to(cur_dtype)
+        .contiguous()
+    )
     yield dict(x=x, weight=weight, eps=1e-6)
 
 

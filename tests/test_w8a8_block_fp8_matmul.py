@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -51,28 +55,60 @@ def _case(m, n, k, dtype=torch.bfloat16, seed=0, *, scale_range=(0.0, 1e-2)):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     block_n, block_k = _BLOCK
     fp8_max = torch.finfo(_FP8_DTYPE).max
-    A = torch.randn(
-        m, k, dtype=torch.float32, device=flaggems_sglang.device, generator=g
-    ).clamp(-fp8_max, fp8_max).to(_FP8_DTYPE)
-    B = torch.randn(
-        n, k, dtype=torch.float32, device=flaggems_sglang.device, generator=g
-    ).clamp(-fp8_max, fp8_max).to(_FP8_DTYPE)
+    A = (
+        torch.randn(
+            m,
+            k,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
+            generator=g,
+        )
+        .clamp(-fp8_max, fp8_max)
+        .to(_FP8_DTYPE)
+    )
+    B = (
+        torch.randn(
+            n,
+            k,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
+            generator=g,
+        )
+        .clamp(-fp8_max, fp8_max)
+        .to(_FP8_DTYPE)
+    )
     scale_min, scale_max = scale_range
     As = (
         scale_min
         + (scale_max - scale_min)
         * torch.rand(
-            m, k // block_k, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+            m,
+            k // block_k,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
+            generator=g,
         )
     ).contiguous()
     Bs = (
         scale_min
         + (scale_max - scale_min)
         * torch.rand(
-            n // block_n, k // block_k, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+            n // block_n,
+            k // block_k,
+            dtype=torch.float32,
+            device=flaggems_sglang.device,
+            generator=g,
         )
     ).contiguous()
-    return dict(A=A, B=B, As=As, Bs=Bs, block_size=_BLOCK, output_dtype=dtype, check=_check)
+    return dict(
+        A=A,
+        B=B,
+        As=As,
+        Bs=Bs,
+        block_size=_BLOCK,
+        output_dtype=dtype,
+        check=_check,
+    )
 
 
 def _check(actual, expected):
@@ -101,13 +137,19 @@ _CORRECTNESS_CASES += [
 @pytest.mark.w8a8_block_fp8_matmul
 def test_w8a8_block_fp8_matmul(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("w8a8_block_fp8_matmul")(**kwargs)
 
     try:
-        from flaggems_sglang.ops.w8a8_block_fp8_matmul import w8a8_block_fp8_matmul
+        from flaggems_sglang.ops.w8a8_block_fp8_matmul import (
+            w8a8_block_fp8_matmul,
+        )
     except (ImportError, ModuleNotFoundError):
         pytest.skip("quantization/w8a8_block_fp8_matmul ops module not found")
         return

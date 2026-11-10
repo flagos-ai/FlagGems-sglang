@@ -16,7 +16,9 @@
 
 
 def per_token_group_quant_8bit_v2(*args, **kwargs):
-    raise NotImplementedError("per_token_group_quant_8bit_v2 is not yet implemented")
+    raise NotImplementedError(
+        "per_token_group_quant_8bit_v2 is not yet implemented"
+    )
 
 
 __all__ = ["per_token_group_quant_8bit_v2"]

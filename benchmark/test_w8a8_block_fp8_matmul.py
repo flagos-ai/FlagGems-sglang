@@ -37,19 +37,35 @@ def _input_fn(shape, cur_dtype, device):
     block_n, block_k = _BLOCK
     fp8_max = torch.finfo(_FP8_DTYPE).max
     g = torch.Generator(device=device).manual_seed(0)
-    A = torch.randn(m, k, dtype=torch.float32, device=device, generator=g).clamp(
-        -fp8_max, fp8_max
-    ).to(_FP8_DTYPE)
-    B = torch.randn(n, k, dtype=torch.float32, device=device, generator=g).clamp(
-        -fp8_max, fp8_max
-    ).to(_FP8_DTYPE)
+    A = (
+        torch.randn(m, k, dtype=torch.float32, device=device, generator=g)
+        .clamp(-fp8_max, fp8_max)
+        .to(_FP8_DTYPE)
+    )
+    B = (
+        torch.randn(n, k, dtype=torch.float32, device=device, generator=g)
+        .clamp(-fp8_max, fp8_max)
+        .to(_FP8_DTYPE)
+    )
     As = (
-        1e-2 * torch.rand(m, k // block_k, dtype=torch.float32, device=device, generator=g)
+        1e-2
+        * torch.rand(
+            m, k // block_k, dtype=torch.float32, device=device, generator=g
+        )
     ).contiguous()
     Bs = (
-        1e-2 * torch.rand(n // block_n, k // block_k, dtype=torch.float32, device=device, generator=g)
+        1e-2
+        * torch.rand(
+            n // block_n,
+            k // block_k,
+            dtype=torch.float32,
+            device=device,
+            generator=g,
+        )
     ).contiguous()
-    yield dict(A=A, B=B, As=As, Bs=Bs, block_size=_BLOCK, output_dtype=cur_dtype)
+    yield dict(
+        A=A, B=B, As=As, Bs=Bs, block_size=_BLOCK, output_dtype=cur_dtype
+    )
 
 
 @pytest.mark.w8a8_block_fp8_matmul

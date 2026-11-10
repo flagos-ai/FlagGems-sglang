@@ -32,8 +32,10 @@ def _quantize_mx(x):
     xg = x.reshape(m, k // 32, 32).to(torch.float32)
     amax = xg.abs().amax(-1).clamp(min=1e-12)
     exp = torch.ceil(torch.log2(amax / _FP8_MAX)).clamp(-127, 127)
-    xq = (xg / torch.exp2(exp).unsqueeze(-1)).clamp(-_FP8_MAX, _FP8_MAX).to(
-        torch.float8_e4m3fn
+    xq = (
+        (xg / torch.exp2(exp).unsqueeze(-1))
+        .clamp(-_FP8_MAX, _FP8_MAX)
+        .to(torch.float8_e4m3fn)
     )
     return xq.reshape(m, k), (exp + 127).to(torch.uint8)
 
@@ -45,14 +47,18 @@ def _input_fn(shape, cur_dtype, device):
     b_f = torch.randn(n, k, dtype=torch.float32, device=device, generator=g)
     a, a_scale = _quantize_mx(a_f)
     b, b_scale = _quantize_mx(b_f)
-    yield dict(a=a, a_scale=a_scale, b=b, b_scale=b_scale, output_dtype=torch.bfloat16)
+    yield dict(
+        a=a, a_scale=a_scale, b=b, b_scale=b_scale, output_dtype=torch.bfloat16
+    )
 
 
 @pytest.mark.mxfp8_block_scaled_matmul
 def test_perf_mxfp8_block_scaled_matmul():
     gems_op = flaggems_sglang.get_op("mxfp8_block_scaled_matmul")
     if gems_op is None:
-        pytest.skip("quantization/mxfp8_block_scaled_matmul not implemented yet")
+        pytest.skip(
+            "quantization/mxfp8_block_scaled_matmul not implemented yet"
+        )
     bench = OpBenchmark(
         op_name="mxfp8_block_scaled_matmul",
         torch_op=get_reference("mxfp8_block_scaled_matmul"),

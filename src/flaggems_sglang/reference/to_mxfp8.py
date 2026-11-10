@@ -24,12 +24,14 @@ def reference(x):
     x2d = x.contiguous().reshape(-1, orig[-1]).float()
     blocks = x2d.reshape(x2d.shape[0], -1, _BLOCK)
     amax = blocks.abs().amax(dim=-1).clamp(min=1e-30)
-    scale_biased = (
-        torch.ceil(torch.log2(amax / 448.0)) + 127.0
-    ).clamp(0.0, 254.0)
+    scale_biased = (torch.ceil(torch.log2(amax / 448.0)) + 127.0).clamp(
+        0.0, 254.0
+    )
     descale = torch.exp2(scale_biased - 127.0)
-    xq = (blocks / descale[..., None]).clamp(-448.0, 448.0).to(
-        torch.float8_e4m3fn
+    xq = (
+        (blocks / descale[..., None])
+        .clamp(-448.0, 448.0)
+        .to(torch.float8_e4m3fn)
     )
     return (
         xq.reshape(orig),

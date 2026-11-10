@@ -23,11 +23,7 @@ from flaggems_sglang.reference import get_reference
 from .op_benchmark import OpBenchmark
 
 # (rows, cols) — group_size fixed at 128.
-SHAPES = [
-    (rows, cols)
-    for rows in (3584, 18944)
-    for cols in (448, 4736)
-]
+SHAPES = [(rows, cols) for rows in (3584, 18944) for cols in (448, 4736)]
 MORE_SHAPES = [(3584, 448, -1), (128, 16, 32), (256, 32, 64)]
 
 

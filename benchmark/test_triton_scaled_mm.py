@@ -34,16 +34,30 @@ def _input_fn(shape, cur_dtype, device):
     m, k, n = shape
     g = torch.Generator(device=device).manual_seed(0)
     a = torch.clamp(
-        0.1 * torch.randn(m, k, dtype=torch.float16, device=device, generator=g),
-        -0.3, 0.3,
+        0.1
+        * torch.randn(m, k, dtype=torch.float16, device=device, generator=g),
+        -0.3,
+        0.3,
     ).to(torch.float8_e4m3fn)
     b = torch.clamp(
-        0.1 * torch.randn(k, n, dtype=torch.float16, device=device, generator=g),
-        -0.3, 0.3,
+        0.1
+        * torch.randn(k, n, dtype=torch.float16, device=device, generator=g),
+        -0.3,
+        0.3,
     ).to(torch.float8_e4m3fn)
-    scale_a = 0.1 + 0.05 * torch.rand(m, 1, dtype=torch.float32, device=device, generator=g)
-    scale_b = 0.1 + 0.05 * torch.rand(n, 1, dtype=torch.float32, device=device, generator=g)
-    yield dict(input=a, weight=b, scale_a=scale_a, scale_b=scale_b, out_dtype=torch.float16)
+    scale_a = 0.1 + 0.05 * torch.rand(
+        m, 1, dtype=torch.float32, device=device, generator=g
+    )
+    scale_b = 0.1 + 0.05 * torch.rand(
+        n, 1, dtype=torch.float32, device=device, generator=g
+    )
+    yield dict(
+        input=a,
+        weight=b,
+        scale_a=scale_a,
+        scale_b=scale_b,
+        out_dtype=torch.float16,
+    )
 
 
 @pytest.mark.triton_scaled_mm

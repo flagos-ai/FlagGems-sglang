@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -48,7 +52,11 @@ def _x(m, k, dtype=torch.bfloat16, seed=0):
     return (
         (
             torch.rand(
-                m, k, generator=g, device=flaggems_sglang.device, dtype=torch.float32
+                m,
+                k,
+                generator=g,
+                device=flaggems_sglang.device,
+                dtype=torch.float32,
             )
             * 2
             - 1
@@ -70,7 +78,9 @@ def _check(actual, expected):
     )
     atol, rtol = 2e-2, 2e-2
     mismatch = (a_deq - e_deq).abs() > (atol + rtol * e_deq.abs())
-    assert mismatch.float().mean() < 1e-2, "too many fp8 rounding-boundary mismatches"
+    assert (
+        mismatch.float().mean() < 1e-2
+    ), "too many fp8 rounding-boundary mismatches"
 
 
 _CORRECTNESS_CASES = [
@@ -90,7 +100,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.per_token_group_quant_fp8
 def test_per_token_group_quant_fp8(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("per_token_group_quant_fp8")(**kwargs)
@@ -100,13 +114,17 @@ def test_per_token_group_quant_fp8(case_idx):
             per_token_group_quant_fp8,
         )
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/per_token_group_quant_fp8 ops module not found")
+        pytest.skip(
+            "quantization/per_token_group_quant_fp8 ops module not found"
+        )
         return
 
     try:
         actual = per_token_group_quant_fp8(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/per_token_group_quant_fp8 not yet implemented")
+        pytest.skip(
+            "quantization/per_token_group_quant_fp8 not yet implemented"
+        )
         return
 
     if check is not None:

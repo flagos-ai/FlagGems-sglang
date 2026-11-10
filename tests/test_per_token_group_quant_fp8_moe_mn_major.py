@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -50,7 +54,11 @@ def _case(rows_per_expert, k, seed=0, dtype=torch.bfloat16):
     g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
     m_total = sum(rows_per_expert)
     A = torch.randn(
-        m_total, k, dtype=torch.float32, device=flaggems_sglang.device, generator=g
+        m_total,
+        k,
+        dtype=torch.float32,
+        device=flaggems_sglang.device,
+        generator=g,
     ).to(dtype)
     offs = torch.tensor(
         [0] + list(torch.tensor(rows_per_expert).cumsum(0).tolist()),
@@ -58,7 +66,9 @@ def _case(rows_per_expert, k, seed=0, dtype=torch.bfloat16):
         device=flaggems_sglang.device,
     )
     problem_sizes = torch.zeros(
-        (len(rows_per_expert), 3), dtype=torch.int32, device=flaggems_sglang.device
+        (len(rows_per_expert), 3),
+        dtype=torch.int32,
+        device=flaggems_sglang.device,
     )
     problem_sizes[:, 0] = torch.tensor(
         rows_per_expert, dtype=torch.int32, device=flaggems_sglang.device
@@ -82,7 +92,9 @@ def _check(actual, expected):
     e_deq = eq.to(torch.float32)
     atol, rtol = 2e-2, 2e-2
     mismatch = (a_deq - e_deq).abs() > (atol + rtol * e_deq.abs())
-    assert mismatch.float().mean() < 1e-2, "too many fp8 rounding-boundary mismatches"
+    assert (
+        mismatch.float().mean() < 1e-2
+    ), "too many fp8 rounding-boundary mismatches"
 
 
 _CORRECTNESS_CASES = [
@@ -101,10 +113,16 @@ _CORRECTNESS_CASES += [
 @pytest.mark.per_token_group_quant_fp8_moe_mn_major
 def test_per_token_group_quant_fp8_moe_mn_major(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
-    expected = get_reference("per_token_group_quant_fp8_moe_mn_major")(**kwargs)
+    expected = get_reference("per_token_group_quant_fp8_moe_mn_major")(
+        **kwargs
+    )
 
     try:
         from flaggems_sglang.ops.per_token_group_quant_fp8_moe_mn_major import (

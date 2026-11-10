@@ -26,9 +26,9 @@ def _quant_one(src):
     sf = d // _BLOCK
     x = src.to(torch.float32).reshape(t, nkv, sf, _BLOCK)
     amax = x.abs().amax(dim=-1).clamp(min=1e-30)
-    scale_biased = (
-        torch.ceil(torch.log2(amax / _FP8_MAX)) + 127.0
-    ).clamp(0.0, 254.0)
+    scale_biased = (torch.ceil(torch.log2(amax / _FP8_MAX)) + 127.0).clamp(
+        0.0, 254.0
+    )
     descale = torch.exp2(scale_biased - 127.0)
     xq = (x / descale[..., None]).clamp(-_FP8_MAX, _FP8_MAX).to(_FP8_DTYPE)
     return xq.reshape(t, nkv, d), scale_biased.to(torch.uint8)
@@ -51,11 +51,14 @@ def reference(k, v, loc, k_cache, v_cache, sfk, sfv, page_size):
         pg = loc // page_size
         h = torch.arange(nkv, device=k.device)
         base = (
-            (pg[:, None] * nkv + h[None, :]) * (32 * (page_size // _BLOCK) * sf)
+            (pg[:, None] * nkv + h[None, :])
+            * (32 * (page_size // _BLOCK) * sf)
             + (po % 32)[:, None] * ((page_size // _BLOCK) * sf)
             + (po // 32)[:, None] * sf
         )
-        idx = base[:, :, None] + torch.arange(sf, device=k.device)[None, None, :]
+        idx = (
+            base[:, :, None] + torch.arange(sf, device=k.device)[None, None, :]
+        )
         scales.view(torch.uint8).view(-1)[idx.reshape(-1)] = sb.reshape(-1)
 
         out.append(cache)

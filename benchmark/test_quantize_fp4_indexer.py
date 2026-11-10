@@ -29,9 +29,11 @@ MORE_SHAPES = [(7,), (333,), (256,)]
 def _input_fn(shape, cur_dtype, device):
     (n,) = shape
     g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(n, 128, dtype=torch.float32, device=device, generator=g).to(
-        cur_dtype
-    ).contiguous()
+    x = (
+        torch.randn(n, 128, dtype=torch.float32, device=device, generator=g)
+        .to(cur_dtype)
+        .contiguous()
+    )
     yield dict(x=x)
 
 

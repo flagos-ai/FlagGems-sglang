@@ -14,8 +14,6 @@
 
 """Reference implementation for quantization/per_token_group_quant_8bit_v2."""
 
-import torch
-
 
 def reference(input, output_q, output_s, group_size, eps, min_8bit, max_8bit):
     x = input.float().reshape(-1, group_size)

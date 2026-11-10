@@ -30,12 +30,18 @@ _GROUP = 128
 def _input_fn(shape, cur_dtype, device):
     m, k = shape
     g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(m, k, device=device, generator=g).to(cur_dtype).contiguous()
+    x = (
+        torch.randn(m, k, device=device, generator=g)
+        .to(cur_dtype)
+        .contiguous()
+    )
     fp8_max = torch.finfo(torch.float8_e4m3fn).max
     yield dict(
         input=x,
         output_q=torch.zeros(m, k, dtype=torch.float8_e4m3fn, device=device),
-        output_s=torch.zeros(m, k // _GROUP, dtype=torch.float32, device=device),
+        output_s=torch.zeros(
+            m, k // _GROUP, dtype=torch.float32, device=device
+        ),
         group_size=_GROUP,
         eps=1e-10,
         min_8bit=-fp8_max,
@@ -47,7 +53,9 @@ def _input_fn(shape, cur_dtype, device):
 def test_perf_per_token_group_quant_8bit_v2():
     gems_op = flaggems_sglang.get_op("per_token_group_quant_8bit_v2")
     if gems_op is None:
-        pytest.skip("quantization/per_token_group_quant_8bit_v2 not implemented yet")
+        pytest.skip(
+            "quantization/per_token_group_quant_8bit_v2 not implemented yet"
+        )
     bench = OpBenchmark(
         op_name="per_token_group_quant_8bit_v2",
         torch_op=get_reference("per_token_group_quant_8bit_v2"),

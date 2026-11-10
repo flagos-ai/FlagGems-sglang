@@ -37,7 +37,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
     tol.update(overrides)
     torch.testing.assert_close(
         actual.to(torch.float32) if actual.dtype.is_floating_point else actual,
-        expected.to(torch.float32) if expected.dtype.is_floating_point else expected,
+        (
+            expected.to(torch.float32)
+            if expected.dtype.is_floating_point
+            else expected
+        ),
         equal_nan=True,
         **tol,
     )
@@ -52,8 +56,10 @@ def _quantize_mx(x):
     amax = xg.abs().amax(-1).clamp(min=1e-12)
     exp = torch.ceil(torch.log2(amax / _FP8_MAX)).clamp(-127, 127)
     scale = torch.exp2(exp)
-    xq = (xg / scale.unsqueeze(-1)).clamp(-_FP8_MAX, _FP8_MAX).to(
-        torch.float8_e4m3fn
+    xq = (
+        (xg / scale.unsqueeze(-1))
+        .clamp(-_FP8_MAX, _FP8_MAX)
+        .to(torch.float8_e4m3fn)
     )
     scale_u8 = (exp + 127).to(torch.uint8)
     return xq.reshape(m, k), scale_u8
@@ -99,7 +105,11 @@ _CORRECTNESS_CASES += [
 @pytest.mark.mxfp8_block_scaled_matmul
 def test_mxfp8_block_scaled_matmul(case_idx):
     case = _CORRECTNESS_CASES[case_idx]()
-    check = case.pop("check", None) if isinstance(case, dict) and "check" in case else None
+    check = (
+        case.pop("check", None)
+        if isinstance(case, dict) and "check" in case
+        else None
+    )
     kwargs = case if isinstance(case, dict) else {}
 
     expected = get_reference("mxfp8_block_scaled_matmul")(**kwargs)
@@ -109,13 +119,17 @@ def test_mxfp8_block_scaled_matmul(case_idx):
             mxfp8_block_scaled_matmul,
         )
     except (ImportError, ModuleNotFoundError):
-        pytest.skip("quantization/mxfp8_block_scaled_matmul ops module not found")
+        pytest.skip(
+            "quantization/mxfp8_block_scaled_matmul ops module not found"
+        )
         return
 
     try:
         actual = mxfp8_block_scaled_matmul(**kwargs)
     except NotImplementedError:
-        pytest.skip("quantization/mxfp8_block_scaled_matmul not yet implemented")
+        pytest.skip(
+            "quantization/mxfp8_block_scaled_matmul not yet implemented"
+        )
         return
 
     if check is not None:
