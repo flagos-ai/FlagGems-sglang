@@ -1009,5 +1009,63 @@
       [2, 48, 4, 32], "[2, 48, 4, 32]_reverse", [3, 64, 4, 64],
       "[3, 64, 4, 64]_reverse"
     ]
+  },
+  "compute_src2dst": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [8], [512], [8192],
+      [131072], [1048576]
+    ]
+  },
+  "draft_topk1": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 151936, 1, 0], [8, 151936, 1, 0], [64, 151936, 1, 0],
+      [512, 151936, 1, 0], [1, 32000, 0, 0], [37, 12000, 1, 2],
+      [129, 8692, 0, 0]
+    ]
+  },
+  "ep_scatter": {
+    "dtype": "torch.float8_e4m3fn",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t64_topk8_h2048_E8", "t512_topk8_h2048_E8", "t4096_topk8_h2048_E8"
+    ]
+  },
+  "moe_sum_reduce": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 8, 7168], [8, 8, 7168], [64, 8, 7168],
+      [512, 8, 7168], [4096, 8, 7168], [7, 2, 128],
+      [83, 4, 512], [3, 8, 2048]
+    ]
+  },
+  "selective_state_update": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "b64_nh32_dim128_ds128_ng8_z1_d1_bias1_sp1", "b256_nh64_dim64_ds128_ng8_z1_d1_bias1_sp1", "b1_nh4_dim16_ds8_ng1_z1_d1_bias1_sp1",
+      "b5_nh8_dim64_ds16_ng2_z1_d1_bias1_sp1", "b3_nh16_dim128_ds32_ng4_z0_d1_bias1_sp0", "b2_nh8_dim32_ds16_ng2_z0_d0_bias0_sp0"
+    ]
+  },
+  "sigmoid_gate_topk_renorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 131, 5], [8, 131, 5], [64, 131, 5],
+      [512, 131, 5], [4096, 131, 5], [1, 33, 3],
+      [83, 65, 6], [9, 260, 12]
+    ]
+  },
+  "silu_and_mul_masked": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [4, 256, 4096, 256, 256, 256, 256], [8, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256], [32, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256],
+      [4, 16, 32, 0, 3, 16, 9], [8, 128, 256, 128, 0, 64, 1, 17, 128, 5, 90]
+    ]
   }
 }

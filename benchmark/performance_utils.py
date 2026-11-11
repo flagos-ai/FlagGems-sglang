@@ -182,7 +182,7 @@ class Benchmark:
         dtypes=None,
         is_backward=False,
         is_inplace=False,
-        timing_reset_args=(),
+        timing_reset_args=None,
         **kwargs,
     ):
         self.op_name = op_name
@@ -477,7 +477,9 @@ class Benchmark:
             args[location] if isinstance(location, int) else kwargs[location]
             for location in self.timing_reset_args
         ]
-        snapshots = [(value, value.clone()) for value in values]
+        snapshots = [
+            (value, value.clone()) for value in values if value is not None
+        ]
 
         def restore():
             for value, snapshot in snapshots:
@@ -730,7 +732,7 @@ class Benchmark:
                 base_rec, miss_reason = self._external_base_record(
                     metric, dtype, baseline_key
                 )
-                if base_rec is not None and self.timing_reset_args:
+                if base_rec is not None and self.timing_reset_args is not None:
                     get_latency = self._get_latency_with_input_reset
                 elif (
                     base_rec
@@ -800,14 +802,14 @@ class Benchmark:
         ):
             return None, "external baseline has no positive finite latency_ms"
         protocol = base_rec.get("timing_protocol")
-        if protocol is None and not self.timing_reset_args:
+        if protocol is None and self.timing_reset_args is None:
             return (
                 base_rec,
                 None,
             )  # Legacy timing for untagged out-of-place records.
         expected = (
             RESET_TIMING_PROTOCOL
-            if self.timing_reset_args
+            if self.timing_reset_args is not None
             else TRITON_TIMING_PROTOCOL
         )
         if protocol != expected:
@@ -822,7 +824,7 @@ class Benchmark:
                 None,
                 "external baseline timing requires default --warmup and --iter",
             )
-        if self.timing_reset_args:
+        if self.timing_reset_args is not None:
             if not callable(getattr(torch_device_fn, "Event", None)):
                 return (
                     None,
