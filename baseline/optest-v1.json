@@ -1067,5 +1067,74 @@
       [4, 256, 4096, 256, 256, 256, 256], [8, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256], [32, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256],
       [4, 16, 32, 0, 3, 16, 9], [8, 128, 256, 128, 0, 64, 1, 17, 128, 5, 90]
     ]
+  },
+  "causal_conv1d_fn": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nseq8_len2048_dim4096_w4", "nseq32_len512_dim2048_w4", "nseq1_len7_dim16_w4",
+      "nseq4_len1_dim8_w3"
+    ]
+  },
+  "chunk_state": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_nh32_ng8_hd64_ds128", "b32_nc4_cs256_nh64_ng8_hd64_ds128", "b1_nc1_cs8_nh4_ng2_hd16_ds8",
+      "b2_nc3_cs16_nh8_ng2_hd32_ds16", "b3_nc2_cs32_nh16_ng4_hd64_ds32"
+    ]
+  },
+  "chunk_state_varlen": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "nseq8_len256x256x256x256x256x256x256x256_cs256_nh32_ng8_hd64_ds128", "nseq32_len256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256_cs256_nh64_ng8_hd64_ds128", "nseq2_len3x5_cs8_nh4_ng2_hd16_ds8",
+      "nseq4_len10x6x4x12_cs16_nh8_ng2_hd32_ds16", "nseq5_len20x12x5x27x32_cs32_nh16_ng4_hd64_ds32"
+    ]
+  },
+  "context_attention": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_sl128_h32_d128", "bs1_sl2048_h32_d128", "bs8_sl128_h32_d128",
+      "bs8_sl2048_h32_d128", "bs64_sl128_h32_d128", "bs64_sl2048_h32_d128",
+      "bs2_sl8_h4_d128", "bs3_sl30_h4_d96", "bs1_sl20_h4_d80",
+      "bs1_sl9_h4_d13"
+    ]
+  },
+  "decode_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_sl2048_hq32_hkv8_d128", "B8_sl2048_hq32_hkv8_d128", "B64_sl512_hq32_hkv8_d128",
+      "B512_sl128_hq32_hkv8_d128", "B4096_sl128_hq32_hkv8_d128", "B2_sl10_hq4_hkv4_d64",
+      "B2_sl10_hq4_hkv2_d64", "B2_sl10_hq4_hkv4_d80", "B2_sl128_hq16_hkv1_d512"
+    ]
+  },
+  "decode_grouped_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_sl2048_hq128_hkv1_d128", "B8_sl2048_hq128_hkv1_d128", "B64_sl512_hq128_hkv1_d128",
+      "B512_sl128_hq128_hkv1_d128", "B4096_sl128_hq128_hkv1_d128", "B2_sl10_hq32_hkv1_d64",
+      "B2_sl10_hq128_hkv1_d64", "B2_sl10_hq32_hkv4_d80", "B2_sl128_hq128_hkv8_d512"
+    ]
+  },
+  "extend_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_nctx2048_hq32_hkv8_d128", "B8_nctx2048_hq32_hkv8_d128", "B64_nctx512_hq32_hkv8_d128",
+      "B256_nctx256_hq32_hkv8_d128", "B4_nctx256_hq12_hkv4_d128", "B4_nctx256_hq12_hkv4_d80",
+      "B2_nctx128_hq8_hkv8_d64"
+    ]
+  },
+  "state_passing": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_nh32_dim8192", "b32_nc4_cs256_nh64_dim8192", "b1_nc1_cs8_nh4_dim16",
+      "b2_nc3_cs16_nh8_dim32", "b3_nc5_cs32_nh16_dim64"
+    ]
   }
 }
