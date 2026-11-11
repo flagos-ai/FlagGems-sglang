@@ -1433,6 +1433,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: per_tensor_quant_mla_fp8
+    description: |
+      Quantize the absorbed MLA operand to FP8 with one scale for the whole tensor.
+      The scale is the largest magnitude anywhere in the tensor, floored at eps, divided by the finite FP8 maximum; every element is divided by that scale, saturated and encoded, and the payload is returned head-major and contiguous.
+    for:
+      - per_tensor_quant_mla_fp8
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: per_token_group_quant_int8
     description: |
       Per-token, per-group symmetric INT8 quantization.
