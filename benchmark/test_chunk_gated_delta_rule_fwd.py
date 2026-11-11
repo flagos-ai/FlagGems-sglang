@@ -15,38 +15,20 @@
 """Benchmark for linear-attn/chunk_gated_delta_rule_fwd."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import chunk_gated_delta_rule_fwd as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # (B, T, H, K, V).
-SHAPES = [
-    (1, 512, 16, 128, 128),
-    (1, 2048, 16, 128, 128),
-    (2, 2048, 16, 128, 128),
-    (1, 4096, 16, 128, 128),
-]
-MORE_SHAPES = [(4, 4096, 16, 128, 128)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    B, T, H, K, V = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    q = torch.randn(B, T, H, K, device=device, generator=g).to(cur_dtype)
-    k = torch.randn(B, T, H, K, device=device, generator=g).to(cur_dtype)
-    v = torch.randn(B, T, H, V, device=device, generator=g).to(cur_dtype)
-    # g = logsigmoid(u), matching the operator's own data generation.
-    u = torch.rand(B, T, H, device=device, generator=g)
-    gate = torch.nn.functional.logsigmoid(u)
-    beta = torch.rand(B, T, H, device=device, generator=g)
-    scale = K**-0.5
-    yield q, k, v, gate, beta, scale, None, False, None, {
-        "use_qk_l2norm_in_kernel": True
-    }
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -67,6 +49,7 @@ def _case_fn(shape, cur_dtype):
             "V": V,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -76,10 +59,10 @@ def test_perf_chunk_gated_delta_rule_fwd():
         op_name="chunk_gated_delta_rule_fwd",
         torch_op=get_reference("chunk_gated_delta_rule_fwd"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="B, T, H, K, V",
     )
     bench.set_gems_from_module(flaggems_sglang)

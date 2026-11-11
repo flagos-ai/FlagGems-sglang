@@ -458,7 +458,9 @@ def _match_by_signature(base_data, op_name, dtype, shape_detail):
     return None, None
 
 
-def lookup_base_record_ex(base_data, op_name, dtype, shape_detail):
+def lookup_base_record_ex(
+    base_data, op_name, dtype, shape_detail, *, baseline_key=None
+):
     """Look up the NVIDIA baseline record, three levels deep:
     op_name -> shape -> dtype. Returns a (record, miss_reason) tuple:
 
@@ -469,14 +471,29 @@ def lookup_base_record_ex(base_data, op_name, dtype, shape_detail):
 
     Never raises: an unmatched entry just yields a reason. Baseline layout:
         base_data[op_name]["shapes"][str([d0, d1, ...])][str(dtype)]
-    The shape key is the string of the first tensor's dimensions for simple
-    ops; complex ops fall back to the tensor-signature match.
+    A benchmark may supply its collection key explicitly for cases whose
+    tensor shapes cannot uniquely identify the workload. The legacy SGLang
+    collector recorded its repo in environment.run and used older case keys.
+    Its compatible records can still use the original shape lookup.
     """
     try:
         op_entry = base_data.get(op_name)
         if not op_entry:
             return None, f"baseline 中没有算子 '{op_name}'"
         shapes = op_entry.get("shapes", {})
+        if baseline_key is not None:
+            run = base_data.get("_environment", {}).get("run", {})
+            legacy_sglang = run.get("repo") == "sglang"
+            if legacy_sglang and op_name == "chunk_scaled_dot_kkt":
+                return None, "legacy baseline measured the KDA operator"
+            record = shapes.get(str(baseline_key), {}).get(str(dtype))
+            if record is not None:
+                return record, None
+            if not legacy_sglang:
+                return (
+                    None,
+                    f"baseline has no case {baseline_key!r} for {op_name} ({dtype})",
+                )
         first_shape = _first_tensor_shape(shape_detail)
         if first_shape is None:
             return None, (

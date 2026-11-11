@@ -15,41 +15,26 @@
 """Benchmark for moe/silu_and_mul_masked."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import silu_and_mul_masked as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/silu_and_mul_masked. The
 # last entry is the per-expert valid token count; the benchmark shapes run
 # every expert full so the timing covers the whole padded buffer.
-SHAPES = [(e, 256, 4096, (256,) * e) for e in (4, 8, 32)]
-MORE_SHAPES = [
-    (4, 16, 32, (0, 3, 16, 9)),
-    (8, 128, 256, (128, 0, 64, 1, 17, 128, 5, 90)),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    expert_num, token_num_padded, hidden_dim, counts = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    input = torch.randn(
-        expert_num,
-        token_num_padded,
-        hidden_dim,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    masked_m = torch.tensor(list(counts), dtype=torch.int32, device=device)
-    yield input, masked_m
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (expert_num, token_num_padded, hidden_dim, counts) = shape
+    expert_num, token_num_padded, hidden_dim, counts = shape
     yield BenchmarkCasePlan(
         shape={
             "input": (expert_num, token_num_padded, hidden_dim),
@@ -63,6 +48,14 @@ def _case_fn(shape, cur_dtype):
             "hidden_dim": hidden_dim,
             "counts": counts,
         },
+        baseline_key=workload.key_shape(
+            {
+                "E": expert_num,
+                "T": token_num_padded,
+                "H": hidden_dim,
+                "counts": counts,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -73,10 +66,11 @@ def test_perf_silu_and_mul_masked():
         op_name="silu_and_mul_masked",
         torch_op=get_reference("silu_and_mul_masked"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="expert_num, token_num_padded, hidden_dim, masked_m",
     )
     bench.set_gems_from_module(flaggems_sglang)

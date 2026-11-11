@@ -15,51 +15,22 @@
 """Benchmark for diffusion/scatter_to_padded."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import scatter_to_padded as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(b, 1024, 16, 128) for b in (1, 4, 16)]
-MORE_SHAPES = [(64, 1024, 16, 128)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    batch, seqlen, heads, head_dim = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    lens = torch.randint(
-        1,
-        seqlen + 1,
-        (batch,),
-        device=device,
-        generator=g,
-        dtype=torch.int64,
-    )
-    total = int(lens.sum())
-    inv = torch.full((batch * seqlen,), -1, dtype=torch.int32, device=device)
-    cursor = 0
-    for b in range(batch):
-        n = int(lens[b])
-        inv[b * seqlen : b * seqlen + n] = torch.arange(
-            cursor, cursor + n, dtype=torch.int32, device=device
-        )
-        cursor += n
-    out_unpad = torch.randn(
-        total,
-        heads,
-        head_dim,
-        dtype=torch.float32,
-        device=device,
-        generator=g,
-    ).to(cur_dtype)
-    yield out_unpad, inv, batch, seqlen
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, seqlen, heads, head_dim) = shape
+    batch, seqlen, heads, head_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "src": (batch, seqlen, heads, head_dim),
@@ -72,6 +43,14 @@ def _case_fn(shape, cur_dtype):
             "heads": heads,
             "head_dim": head_dim,
         },
+        baseline_key=workload.key_shape(
+            {
+                "batch": batch,
+                "seqlen": seqlen,
+                "heads": heads,
+                "head_dim": head_dim,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -82,10 +61,10 @@ def test_perf_scatter_to_padded():
         op_name="scatter_to_padded",
         torch_op=get_reference("scatter_to_padded"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, seqlen, heads, head_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

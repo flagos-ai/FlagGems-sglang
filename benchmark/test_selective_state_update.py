@@ -15,96 +15,22 @@
 """Benchmark for mamba/selective_state_update."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import selective_state_update as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/selective_state_update.
 # The trailing entries are ngroups, then the has_z / has_d / has_dt_bias /
 # dt_softplus switches.
-SHAPES = [
-    (64, 32, 128, 128, 8, True, True, True, True),
-    (256, 64, 64, 128, 8, True, True, True, True),
-]
-MORE_SHAPES = [
-    (1, 4, 16, 8, 1, True, True, True, True),
-    (5, 8, 64, 16, 2, True, True, True, True),
-    (3, 16, 128, 32, 4, False, True, True, False),
-    # D / z / dt_bias all absent, exercising the kernel's None guards.
-    (2, 8, 32, 16, 2, False, False, False, False),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    (
-        batch,
-        nheads,
-        dim,
-        dstate,
-        ngroups,
-        has_z,
-        has_d,
-        has_dt_bias,
-        dt_softplus,
-    ) = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    state = torch.randn(
-        batch,
-        nheads,
-        dim,
-        dstate,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    x = torch.randn(
-        batch, nheads, dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    dt = torch.randn(
-        batch, nheads, dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    # A must stay negative for the decay to be stable.
-    a = (
-        -torch.rand(
-            nheads,
-            dim,
-            dstate,
-            generator=g,
-            device=device,
-            dtype=torch.float32,
-        )
-        - 0.1
-    )
-    b = torch.randn(
-        batch, ngroups, dstate, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    c = torch.randn(
-        batch, ngroups, dstate, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    # D / z / dt_bias are all optional per the signature; the kernel guards
-    # them with USE_D / USE_Z / USE_DT_BIAS.
-    d = None
-    if has_d:
-        d = torch.randn(
-            nheads, dim, generator=g, device=device, dtype=torch.float32
-        )
-    z = None
-    if has_z:
-        z = torch.randn(
-            batch, nheads, dim, generator=g, device=device, dtype=torch.float32
-        ).to(cur_dtype)
-    dt_bias = None
-    if has_dt_bias:
-        dt_bias = torch.randn(
-            nheads, dim, generator=g, device=device, dtype=torch.float32
-        )
-    yield state, x, dt, a, b, c, dict(
-        D=d, z=z, dt_bias=dt_bias, dt_softplus=dt_softplus
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -144,6 +70,19 @@ def _case_fn(shape, cur_dtype):
             "has_dt_bias": has_dt_bias,
             "dt_softplus": dt_softplus,
         },
+        baseline_key=workload.key_shape(
+            {
+                "batch": batch,
+                "nheads": nheads,
+                "dim": dim,
+                "dstate": dstate,
+                "ngroups": ngroups,
+                "has_z": has_z,
+                "has_d": has_d,
+                "has_dt_bias": has_dt_bias,
+                "dt_softplus": dt_softplus,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -154,10 +93,11 @@ def test_perf_selective_state_update():
         op_name="selective_state_update",
         torch_op=get_reference("selective_state_update"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(0,),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc=(
             "batch, nheads, dim, dstate, ngroups, "
             "has_z, has_d, has_dt_bias, dt_softplus"

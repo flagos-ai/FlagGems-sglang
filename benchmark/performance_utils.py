@@ -182,7 +182,7 @@ class Benchmark:
         dtypes=None,
         is_backward=False,
         is_inplace=False,
-        timing_reset_args=(),
+        timing_reset_args=None,
         **kwargs,
     ):
         self.op_name = op_name
@@ -458,7 +458,7 @@ class Benchmark:
 
     def _get_latency_with_input_reset(self, op, *args, **kwargs):
         fn, _ = self._benchmark_callable(op, *args, **kwargs)
-        return self._time_with_input_reset(fn, args)
+        return self._time_with_input_reset(fn, args, kwargs)
 
     def _get_latency_with_triton_baseline(self, op, *args, **kwargs):
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
@@ -470,11 +470,15 @@ class Benchmark:
             grad_to_none=xs if self.is_backward else None,
         )
 
-    def _time_with_input_reset(self, fn, args):
+    def _time_with_input_reset(self, fn, args, kwargs):
         # Match optest's native in-place protocol. Copies are outside the
         # event interval, and each invocation sees the original input.
+        values = [
+            args[location] if isinstance(location, int) else kwargs[location]
+            for location in self.timing_reset_args
+        ]
         snapshots = [
-            (args[i], args[i].clone()) for i in self.timing_reset_args
+            (value, value.clone()) for value in values if value is not None
         ]
 
         def restore():
@@ -652,6 +656,7 @@ class Benchmark:
             shape=plan.shape,
             params=plan.params,
             builder_args=(plan,),
+            baseline_key=plan.baseline_key,
         )
 
     def get_case_iter(self, dtype) -> Generator:
@@ -711,7 +716,9 @@ class Benchmark:
         update_result(self.op_name, json.loads(result_json))
         return result
 
-    def _measure_input(self, input, case_id=None, dtype=None):
+    def _measure_input(
+        self, input, case_id=None, dtype=None, baseline_key=None
+    ):
         metric = BenchmarkMetrics(case_id=case_id)
         try:
             args, kwargs = self.unpack_to_args_kwargs(input)
@@ -723,9 +730,9 @@ class Benchmark:
                 and "latency" in self.to_bench_metrics
             ):
                 base_rec, miss_reason = self._external_base_record(
-                    metric, dtype
+                    metric, dtype, baseline_key
                 )
-                if base_rec is not None and self.timing_reset_args:
+                if base_rec is not None and self.timing_reset_args is not None:
                     get_latency = self._get_latency_with_input_reset
                 elif (
                     base_rec
@@ -777,12 +784,13 @@ class Benchmark:
             gc.collect()
         return metric
 
-    def _external_base_record(self, metric, dtype):
+    def _external_base_record(self, metric, dtype, baseline_key=None):
         base_rec, miss_reason = lookup_base_record_ex(
             Config.base_data,
             self.op_name,
             dtype,
             metric.shape_detail,
+            baseline_key=baseline_key,
         )
         if base_rec is None:
             return None, miss_reason
@@ -794,14 +802,14 @@ class Benchmark:
         ):
             return None, "external baseline has no positive finite latency_ms"
         protocol = base_rec.get("timing_protocol")
-        if protocol is None and not self.timing_reset_args:
+        if protocol is None and self.timing_reset_args is None:
             return (
                 base_rec,
                 None,
             )  # Legacy timing for untagged out-of-place records.
         expected = (
             RESET_TIMING_PROTOCOL
-            if self.timing_reset_args
+            if self.timing_reset_args is not None
             else TRITON_TIMING_PROTOCOL
         )
         if protocol != expected:
@@ -816,7 +824,7 @@ class Benchmark:
                 None,
                 "external baseline timing requires default --warmup and --iter",
             )
-        if self.timing_reset_args:
+        if self.timing_reset_args is not None:
             if not callable(getattr(torch_device_fn, "Event", None)):
                 return (
                     None,
@@ -901,7 +909,10 @@ class Benchmark:
                     pytest.fail(str(e))
                 metrics.append(
                     self._measure_input(
-                        input, case_id=case.case_id, dtype=dtype
+                        input,
+                        case_id=case.case_id,
+                        dtype=dtype,
+                        baseline_key=case.baseline_key,
                     )
                 )
                 executed.append(case.case_id)
