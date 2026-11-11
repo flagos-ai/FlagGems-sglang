@@ -15,55 +15,25 @@
 """Benchmark for sampling_grammar/chain_speculative_sampling."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import chain_speculative_sampling as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match
 # kernel-comp-baseline/problems/sampling_grammar/chain_speculative_sampling.
-SHAPES = [(b, 4, 32000) for b in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(4, 5, 32), (8, 8, 128), (2, 3, 16)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    B, S, V = shape
-    g = torch.Generator(device=device).manual_seed(0)
-
-    candidates = torch.randint(
-        0, V, (B, S), dtype=torch.int32, device=device, generator=g
-    )
-    retrive_index = torch.arange(
-        B * S, dtype=torch.int64, device=device
-    ).reshape(B, S)
-    uniform_samples = torch.rand(B, S - 1, generator=g, device=device)
-    uniform_samples_for_final_sampling = torch.rand(
-        B, generator=g, device=device
-    )
-    target_logits = torch.randn(B, S, V, generator=g, device=device)
-    target_probs = torch.softmax(target_logits, dim=-1)
-    draft_logits = torch.randn(B, S - 1, V, generator=g, device=device)
-    draft_probs = torch.softmax(draft_logits, dim=-1)
-
-    # num_slots is precomputed rather than derived via .item() inside the
-    # timed function: retrive_index = arange(B*S) makes it exact, and a host
-    # sync inside the measured region would perturb the timing.
-    yield (
-        candidates,
-        retrive_index,
-        uniform_samples,
-        uniform_samples_for_final_sampling,
-        target_probs,
-        draft_probs,
-        B * S,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (B, S, V) = shape
+    B, S, V = shape
     yield BenchmarkCasePlan(
         shape={
             "candidates": (B, S),
@@ -75,6 +45,7 @@ def _case_fn(shape, cur_dtype):
         },
         params={"configuration": shape, "seed": 0, "B": B, "S": S, "V": V},
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -84,10 +55,11 @@ def test_perf_chain_speculative_sampling():
         op_name="chain_speculative_sampling",
         torch_op=get_reference("chain_speculative_sampling"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="B, S, V",
     )
     bench.set_gems_from_module(flaggems_sglang)

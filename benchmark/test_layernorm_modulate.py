@@ -15,34 +15,22 @@
 """Benchmark for diffusion/layernorm_modulate."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import layernorm_modulate as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(b, s, 2240) for b in (1, 2) for s in (77, 1024, 4096)]
-MORE_SHAPES = [(8, s, 2240) for s in (77, 1024, 4096)]
 
-_EPS = 1e-6
-
-
-def _input_fn(shape, cur_dtype, device):
-    batch, seq, hidden = shape
-    g = torch.Generator(device=device).manual_seed(9)
-
-    def _t(*s):
-        return torch.randn(
-            *s, dtype=torch.float32, device=device, generator=g
-        ).to(cur_dtype)
-
-    yield _t(batch, seq, hidden), _t(batch, hidden), _t(batch, hidden), _EPS
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, seq, hidden) = shape
+    batch, seq, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (batch, seq, hidden),
@@ -55,6 +43,7 @@ def _case_fn(shape, cur_dtype):
             "hidden": hidden,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -64,10 +53,10 @@ def test_perf_layernorm_modulate():
         op_name="layernorm_modulate",
         torch_op=get_reference("layernorm_modulate"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, seq, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

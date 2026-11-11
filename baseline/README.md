@@ -4,15 +4,13 @@ FlagGems-sglang owns the workload, baseline artifact, and target test run.
 Use a pinned FlagOS optest checkout as the H800 collector. The supported
 workloads are listed in `optest-v1.json`. Their benchmark case plans reuse the
 collection input builders and preserve the existing core and comprehensive grids.
-The manifest lists only the cases selected for collection. For example,
-`log_scaling_tau` collects the four existing 3-D core cases, while its
-comprehensive benchmark also runs the three additional local cases.
+The manifest lists the collection keys for each workload.
 
 Each module exposes `OP_NAME`, `DTYPES`, `IS_INPLACE`, `native()`, `grid()`,
 `build_inputs()`, and `key_shape()`. Use the actual SGLang CUDA callable;
 `native()` returns `None` if that implementation cannot be loaded.
 `config()` describes the exact workload and `MUTATED_INPUTS` identifies
-positional arguments that optest must restore before timing.
+arguments that optest must restore before timing.
 `softcap_inplace_logits` uses cap 30.0 and restores the logits outside the event
 interval in kernel mode (five warmups, median of 25 samples) when the supplied
 baseline record declares that protocol. The out-of-place workloads use Triton
@@ -31,11 +29,17 @@ discovery). Set `--output` to a fresh local artifact path:
 
 ```sh
 WORKLOADS=/path/to/FlagGems-sglang/baseline/optest-v1.json
-OPS=$(python -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))))' "$WORKLOADS")
+OPS=$(python -c 'import json, sys; print(",".join(op for op in json.load(open(sys.argv[1])) if op != "chunk_scaled_dot_kkt"))' "$WORKLOADS")
 python /path/to/optest/src/nv_baseline/collect_baseline_multi_gpu.py \
     --ops-dir /path/to/FlagGems-sglang/baseline --devices 0 \
     --ops "$OPS" --output /tmp/sglang-nv.json
 ```
+
+Run the command above with SGLang v0.5.21. For standalone KKT, use SGLang
+v0.5.11 and run the same collector with `--ops chunk_scaled_dot_kkt` and
+`--output /tmp/sglang-kkt-nv.json`. Later releases fuse KKT with the triangular
+solve. Add the `chunk_scaled_dot_kkt` entry to a copy of the primary JSON
+before replay and retain the two original files for provenance.
 
 Before publishing a versioned artifact, check the collector's
 `/tmp/sglang-nv.json.work/status.json` and confirm every selected key listed in

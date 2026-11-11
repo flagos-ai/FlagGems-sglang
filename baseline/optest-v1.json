@@ -193,7 +193,8 @@
     "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
     "shapes": [
       [1, 16, 128], [128, 16, 128], [2048, 16, 128],
-      [8192, 16, 128]
+      [8192, 16, 128],
+      [1, 1, 128], [37, 8, 64], [129, 1, 512]
     ]
   },
   "ltx2_split_rotary": {
@@ -1135,6 +1136,161 @@
     "shapes": [
       "b8_nc16_cs256_nh32_dim8192", "b32_nc4_cs256_nh64_dim8192", "b1_nc1_cs8_nh4_dim16",
       "b2_nc3_cs16_nh8_dim32", "b3_nc5_cs32_nh16_dim64"
+    ]
+  },
+  "fused_moe_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "T1_E8_N4096_K4096_tk2", "T8_E8_N4096_K4096_tk2", "T64_E8_N4096_K4096_tk2",
+      "T512_E8_N4096_K4096_tk2", "T4096_E8_N4096_K4096_tk2", "T8_E4_N64_K128_tk2",
+      "T17_E8_N128_K256_tk2", "T5_E4_N64_K128_tk1"
+    ]
+  },
+  "moe_fused_gate": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "case_1_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_8_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_64_256_8_sigmoid_1_True_1.0_False_0.0_8_4",
+      "case_512_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_4096_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_1_8_2_sigmoid_0_True_1.0_False_0.0_1_1",
+      "case_37_256_8_sigmoid_1_True_2.5_False_0.0_8_4", "case_83_64_6_sqrtsoftplus_0_True_1.0_False_0.0_1_1", "case_17_32_4_softmax_0_False_1.0_False_30.0_1_1",
+      "case_9_128_6_sigmoid_0_True_1.7_True_0.0_1_1"
+    ]
+  },
+  "moe_fused_mul_sum": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "case_1_8_4096_False_False_8_None", "case_8_8_4096_False_False_8_None", "case_64_8_4096_False_False_8_None",
+      "case_512_8_4096_False_False_8_None", "case_4096_8_4096_False_False_8_None", "case_1_2_128_False_False_8_None",
+      "case_37_4_256_False_False_8_2.5", "case_83_6_512_True_False_16_None", "case_64_4_256_False_True_16_None"
+    ]
+  },
+  "layernorm_modulate": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2240], [1, 1024, 2240], [1, 4096, 2240],
+      [2, 77, 2240], [2, 1024, 2240], [2, 4096, 2240],
+      [8, 77, 2240], [8, 1024, 2240], [8, 4096, 2240]
+    ]
+  },
+  "pack_topk_ids": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 8, 256], [8, 8, 256], [64, 8, 256],
+      [512, 8, 256], [4096, 8, 256], [16384, 8, 256]
+    ]
+  },
+  "qk_head_layernorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 32, 128], [1, 1024, 32, 128], [1, 4360, 32, 128],
+      [1, 16384, 32, 128]
+    ]
+  },
+  "residual_gate_add": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 3072, 0], [1, 3072, 1], [64, 3072, 0],
+      [64, 3072, 1], [1024, 3072, 0], [1024, 3072, 1],
+      [16384, 3072, 0], [16384, 3072, 1]
+    ]
+  },
+  "sglang_fl_rotary_embedding": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32, 8, 128], [8, 32, 8, 128], [64, 32, 8, 128],
+      [512, 32, 8, 128], [4096, 32, 8, 128]
+    ]
+  },
+  "store_cache_4d": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 8, 128], [8, 8, 128], [64, 8, 128],
+      [512, 8, 128], [4096, 8, 128]
+    ]
+  },
+  "tiny_k_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1536, 128], [1, 3072, 128], [2, 1536, 128],
+      [2, 3072, 128], [4, 1536, 128], [4, 3072, 128],
+      [8, 1536, 128], [8, 3072, 128], [16, 1536, 128],
+      [16, 3072, 128]
+    ]
+  },
+  "tiny_n_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 512, 7168], [1, 1536, 7168], [2, 512, 7168],
+      [2, 1536, 7168], [4, 512, 7168], [4, 1536, 7168],
+      [8, 512, 7168], [8, 1536, 7168], [16, 512, 7168],
+      [16, 1536, 7168]
+    ]
+  },
+  "topk_softmax": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 256, 8], [8, 256, 8], [64, 256, 8],
+      [512, 256, 8], [4096, 256, 8]
+    ]
+  },
+  "chain_speculative_sampling": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 4, 32000], [8, 4, 32000], [64, 4, 32000],
+      [512, 4, 32000], [4096, 4, 32000], [4, 5, 32],
+      [8, 8, 128], [2, 3, 16]
+    ]
+  },
+  "chunk_gated_delta_rule_fwd": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 512, 16, 128, 128], [1, 2048, 16, 128, 128], [2, 2048, 16, 128, 128],
+      [1, 4096, 16, 128, 128], [4, 4096, 16, 128, 128]
+    ]
+  },
+  "chunk_scaled_dot_kkt": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 16, 64, 8, 32, 128, 1], [32, 4, 64, 8, 32, 128, 1], [1, 1, 16, 2, 2, 32, 1],
+      [2, 3, 16, 2, 4, 32, 0], [3, 2, 32, 4, 8, 64, 1]
+    ]
+  },
+  "fused_moe": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048, 1408, 64, 8], [8, 2048, 1408, 64, 8], [64, 2048, 1408, 64, 8],
+      [512, 2048, 1408, 64, 8], [4096, 2048, 1408, 64, 8]
+    ]
+  },
+  "fused_recurrent_gated_delta_rule": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1, 16, 32, 128, 128], [8, 1, 16, 32, 128, 128], [64, 1, 16, 32, 128, 128],
+      [1, 2048, 16, 32, 128, 128], [256, 1, 16, 32, 128, 128]
+    ]
+  },
+  "fused_recurrent_gated_delta_rule_packed_decode": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32, 16, 128, 128], [8, 32, 16, 128, 128], [64, 32, 16, 128, 128],
+      [256, 32, 16, 128, 128], [512, 32, 16, 128, 128]
     ]
   }
 }

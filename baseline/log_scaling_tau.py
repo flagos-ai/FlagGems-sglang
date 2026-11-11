@@ -23,9 +23,6 @@ IS_INPLACE = False
 SHAPES = [(t, 16, 128) for t in (1, 128, 2048, 8192)]
 MORE_SHAPES = [(1, 1, 128), (37, 8, 64), (129, 1, 512)]
 
-# The old native workload covers the 3-D core cases.
-# Keep the comprehensive cases available to the local benchmark.
-
 
 def native():
     """解析 sglang.kernels.ops.attention.log_scaling_tau.apply_log_scaling_tau。"""
@@ -39,7 +36,10 @@ def native():
 
 
 def grid():
-    return [{"t": t, "heads": heads, "d": d} for (t, heads, d) in SHAPES]
+    return [
+        {"t": t, "heads": heads, "d": d}
+        for (t, heads, d) in (*SHAPES, *MORE_SHAPES)
+    ]
 
 
 def build_inputs(binding, dtype, device):
