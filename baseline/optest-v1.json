@@ -714,5 +714,88 @@
     "shapes": [
       "L8_c512_r8_d4_ss16x128", "L8_c512_r64_d4_ss16x128", "L8_c512_r256_d4_ss16x128"
     ]
+  },
+  "create_chunked_prefix_cache_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_chunk2048_mb256_mc16384", "bs8_chunk2048_mb256_mc16384", "bs32_chunk2048_mb256_mc16384",
+      "bs128_chunk2048_mb256_mc16384"
+    ]
+  },
+  "create_flashinfer_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_ml4096_mb256_mc8192", "bs8_ml4096_mb256_mc8192", "bs32_ml4096_mb256_mc8192",
+      "bs128_ml4096_mb256_mc8192"
+    ]
+  },
+  "create_flashmla_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_ml16384_ps64_mb256_mc131072", "bs8_ml16384_ps64_mb256_mc131072", "bs32_ml16384_ps64_mb256_mc131072",
+      "bs128_ml16384_ps64_mb256_mc131072"
+    ]
+  },
+  "deepep_permute": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168", "t8_topk8_h7168", "t64_topk8_h7168",
+      "t512_topk8_h7168", "t2048_topk8_h7168"
+    ]
+  },
+  "deepep_post_reorder": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168", "t8_topk8_h7168", "t64_topk8_h7168",
+      "t512_topk8_h7168", "t2048_topk8_h7168"
+    ]
+  },
+  "fused_gate_sigmoid_mul_add": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 7168],
+      [8, 2048], [8, 4096], [8, 7168],
+      [64, 2048], [64, 4096], [64, 7168],
+      [512, 2048], [512, 4096], [512, 7168],
+      [4096, 2048], [4096, 4096], [4096, 7168]
+    ]
+  },
+  "post_reorder_cutlass": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "post_reorder_deepgemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "pre_reorder_cutlass": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "topk_sigmoid": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 256, 8], [8, 256, 8], [64, 256, 8],
+      [512, 256, 8], [4096, 256, 8]
+    ]
   }
 }
