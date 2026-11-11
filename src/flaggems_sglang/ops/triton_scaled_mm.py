@@ -691,7 +691,9 @@ def triton_scaled_mm(input, weight, scale_a, scale_b, out_dtype, bias=None):
         if M <= 128:
             BM, BN, BK, GM, nw = 64, 64, 64, 16, 8
         else:
-            BM, BN, BK, GM, nw = 128, 128, 32, 8, 8
+            # BK=32 with num_warps=8 miscompiles on Hopper (sm_90) and reads
+            # out of bounds; BK=64/num_warps=4 is correct and also faster here.
+            BM, BN, BK, GM, nw = 128, 128, 64, 8, 4
         grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)
         _gemm_kernel[grid](
             a,
