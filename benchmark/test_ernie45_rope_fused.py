@@ -15,86 +15,53 @@
 """Benchmark for rope/ernie45_rope_fused."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import ernie45_rope_fused as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/rope/ernie45_rope_fused.
 # mrope_section is [section_h, section_w, section_t] with
 # section_h == section_w and the three summing to rotary_dim // 2
 # (Ernie4.5 layout), so it is derived from rotary_dim rather than listed.
-SHAPES = [(t, 8, 2, 128, 128) for t in (1, 128, 2048, 8192)]
-MORE_SHAPES = [(1, 4, 1, 64, 64), (37, 8, 2, 128, 128), (129, 16, 2, 128, 64)]
-
-_MAX_POS = 4096
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    # section_h == section_w == rotary_dim // 8, section_t takes the rest of
-    # rotary_dim // 2.
-    section_h = rotary_dim // 8
-    mrope_section = [
-        section_h,
-        section_h,
-        rotary_dim // 2 - 2 * section_h,
-    ]
-    q = torch.randn(
-        num_tokens,
-        n_qh * head_size,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    k = torch.randn(
-        num_tokens,
-        n_kh * head_size,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    cos_sin_cache = torch.randn(
-        _MAX_POS,
-        rotary_dim,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    positions = torch.randint(
-        0,
-        _MAX_POS,
-        (3, num_tokens),
-        generator=g,
-        device=device,
-        dtype=torch.int64,
-    )
-    yield q, k, cos_sin_cache, positions, mrope_section, head_size, rotary_dim
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, n_qh, n_kh, head_size, rotary_dim) = shape
+    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "q": (num_tokens, n_qh * head_size),
             "k": (num_tokens, n_kh * head_size),
-            "cos_sin_cache": (_MAX_POS, rotary_dim),
+            "cos_sin_cache": (workload._MAX_POS, rotary_dim),
             "positions": (3, num_tokens),
         },
         params={
             "configuration": shape,
             "seed": 0,
-            "_MAX_POS": _MAX_POS,
+            "_MAX_POS": workload._MAX_POS,
             "num_tokens": num_tokens,
             "n_qh": n_qh,
             "n_kh": n_kh,
             "head_size": head_size,
             "rotary_dim": rotary_dim,
         },
+        baseline_key=workload.key_shape(
+            {
+                "num_tokens": num_tokens,
+                "n_qh": n_qh,
+                "n_kh": n_kh,
+                "head_size": head_size,
+                "rotary_dim": rotary_dim,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -105,10 +72,11 @@ def test_perf_ernie45_rope_fused():
         op_name="ernie45_rope_fused",
         torch_op=get_reference("ernie45_rope_fused"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, n_qh, n_kh, head_size, rotary_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

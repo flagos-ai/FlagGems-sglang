@@ -15,34 +15,22 @@
 """Benchmark for moe/fused_moe_dispatch_index."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_moe_dispatch_index as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(t, 8, 32, 8192) for t in (1, 8, 64, 512)]
-MORE_SHAPES = [(t, 8, 32, 8192) for t in (4096,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    total_tokens, topk, num_local_experts, m_max = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    topk_ids = torch.randint(
-        0,
-        num_local_experts,
-        (total_tokens, topk),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    yield topk_ids, num_local_experts, m_max
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (total_tokens, topk, num_experts, hidden) = shape
+    total_tokens, topk, num_experts, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "expert_ids": (total_tokens, topk),
@@ -66,10 +54,10 @@ def test_perf_fused_moe_dispatch_index():
         op_name="fused_moe_dispatch_index",
         torch_op=get_reference("fused_moe_dispatch_index"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="total_tokens, topk, num_local_experts, m_max",
     )
     bench.set_gems_from_module(flaggems_sglang)

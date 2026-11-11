@@ -15,30 +15,24 @@
 """Benchmark for moe/moe_align_single_token."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import moe_align_single_token as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/moe_align_single_token.
-SHAPES = [(k, 256, block) for k in (1, 4, 8) for block in (16, 64)]
-MORE_SHAPES = [(k, 256, 128) for k in (1, 4, 8)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    top_k, num_experts, block_size = shape
-    # The experts of the single token are distinct, which randperm guarantees.
-    # torch_gcu randperm hangs on-device; generate on CPU then move.
-    g = torch.Generator(device="cpu").manual_seed(0)
-    experts = torch.randperm(num_experts, generator=g)[:top_k].to(device)
-    yield experts.reshape(1, top_k).to(torch.int32), block_size
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (top_k, num_experts, block_size) = shape
+    top_k, num_experts, block_size = shape
     yield BenchmarkCasePlan(
         shape={"experts": (1, top_k)},
         params={
@@ -48,6 +42,13 @@ def _case_fn(shape, cur_dtype):
             "num_experts": num_experts,
             "block_size": block_size,
         },
+        baseline_key=workload.key_shape(
+            {
+                "top_k": top_k,
+                "num_experts": num_experts,
+                "block_size": block_size,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -58,10 +59,10 @@ def test_perf_moe_align_single_token():
         op_name="moe_align_single_token",
         torch_op=get_reference("moe_align_single_token"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="top_k, num_experts, block_size",
     )
     bench.set_gems_from_module(flaggems_sglang)

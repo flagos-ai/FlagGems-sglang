@@ -15,36 +15,22 @@
 """Benchmark for norm/group_norm_silu."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import group_norm_silu as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(n, c, s, 32) for n in (1, 2) for c, s in ((128, 64), (256, 32))]
-MORE_SHAPES = [(n, c, s, 32) for n in (1, 2) for c, s in ((512, 16),)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    n, c, spatial, num_groups = shape
-    eps = 1e-5
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(
-        n, c, spatial, spatial, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    w = torch.randn(c, dtype=torch.float32, device=device, generator=g).to(
-        cur_dtype
-    )
-    b = torch.randn(c, dtype=torch.float32, device=device, generator=g).to(
-        cur_dtype
-    )
-    yield x, w, b, {"num_groups": num_groups, "eps": eps}
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (n, c, spatial, num_groups) = shape
+    n, c, spatial, num_groups = shape
     yield BenchmarkCasePlan(
         shape={"x": (n, c, spatial, spatial), "w": (c,), "b": (c,)},
         params={
@@ -65,10 +51,10 @@ def test_perf_group_norm_silu():
         op_name="group_norm_silu",
         torch_op=get_reference("group_norm_silu"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n, c, spatial, num_groups",
     )
     bench.set_gems_from_module(flaggems_sglang)

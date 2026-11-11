@@ -15,31 +15,23 @@
 """Benchmark for activation_norm/gelu_and_mul."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import gelu_and_mul as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
-# Shapes match kernel-comp-baseline/problems/activation_norm/gelu_and_mul.
-SHAPES = [(bs, d) for bs in (1, 8, 64, 512, 4096) for d in (1024, 4096, 8192)]
-MORE_SHAPES = [(7, 16), (83, 1024), (48, 3072), (1, 8192)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    bs, d = shape
-    # The op reads x1/x3 from a single [bs, 2 * d] tensor.
-    g = torch.Generator(device=device).manual_seed(0)
-    hidden_states = torch.randn(
-        bs, 2 * d, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    yield (hidden_states,)
+def _build_inputs(plan, cur_dtype, device):
+    bs, d = plan.builder_args[0]
+    args, kwargs = workload.build_inputs({"bs": bs, "d": d}, cur_dtype, device)
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, d) = shape
+    bs, d = shape
     yield BenchmarkCasePlan(
         shape={"hidden_states": (bs, 2 * d)},
         params={"configuration": shape, "seed": 0, "bs": bs, "d": d},
@@ -59,10 +51,10 @@ def test_perf_gelu_and_mul():
         op_name="gelu_and_mul",
         torch_op=get_reference("gelu_and_mul"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, d",
     )
     bench.set_gems(gems_op)

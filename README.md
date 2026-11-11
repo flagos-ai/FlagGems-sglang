@@ -63,7 +63,7 @@ pytest -q benchmark/test_silu_and_mul.py --level core --iter 1 --warmup 1
 
 Use [FlagOS optest](https://github.com/flagos-ai/optest) for H800 native
 baseline collection and target-device benchmark scheduling. See
-[`baseline/`](baseline/README.md) for the first two supported workloads,
+[`baseline/`](baseline/README.md) for the supported workloads,
 collection commands, and how to check which baseline the report used.
 
 ### Notes

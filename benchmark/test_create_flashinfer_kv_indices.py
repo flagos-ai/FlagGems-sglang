@@ -15,59 +15,22 @@
 """Benchmark for attention/create_flashinfer_kv_indices."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import create_flashinfer_kv_indices as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(bs, 16, 4096) for bs in (1, 8, 32)]
-MORE_SHAPES = [(bs, 16, 4096) for bs in (128,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    bs, page_size, max_len = shape
-    max_batch, max_context = 256, 8192
-    g = torch.Generator(device=device).manual_seed(0)
-    req_to_token = torch.randint(
-        0,
-        1 << 20,
-        (max_batch, max_context),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    # torch_gcu randperm hangs on-device; generate on CPU then move.
-    req_pool_indices = (
-        torch.randperm(
-            max_batch, generator=torch.Generator(device="cpu").manual_seed(0)
-        )[:bs]
-        .to(torch.int32)
-        .to(device)
-    )
-    lens = torch.randint(
-        1, max_len + 1, (bs,), dtype=torch.int32, device=device, generator=g
-    )
-    kv_indptr = torch.zeros(bs + 1, dtype=torch.int32, device=device)
-    kv_indptr[1:] = torch.cumsum(lens, dim=0)
-    kv_start_idx = None
-    kv_indices = torch.zeros(
-        int(kv_indptr[-1]), dtype=torch.int32, device=device
-    )
-    yield (
-        req_to_token,
-        req_pool_indices,
-        lens,
-        kv_indptr,
-        kv_start_idx,
-        kv_indices,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, page_size, max_len) = shape
+    bs, page_size, max_len = shape
     yield BenchmarkCasePlan(
         shape={
             "kv_indptr": (bs + 1,),
@@ -81,6 +44,14 @@ def _case_fn(shape, cur_dtype):
             "page_size": page_size,
             "max_len": max_len,
         },
+        baseline_key=workload.key_shape(
+            {
+                "bs": bs,
+                "page_size": page_size,
+                "max_len": max_len,
+                **{"max_batch": 256, "max_context": 8192},
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -91,10 +62,11 @@ def test_perf_create_flashinfer_kv_indices():
         op_name="create_flashinfer_kv_indices",
         torch_op=get_reference("create_flashinfer_kv_indices"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, page_size, max_len",
     )
     bench.set_gems_from_module(flaggems_sglang)

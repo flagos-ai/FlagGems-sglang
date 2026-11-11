@@ -15,68 +15,25 @@
 """Benchmark for lora/qkv_lora_b."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import qkv_lora_b as workload
 from flaggems_sglang.reference import get_reference
-from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/lora/qkv_lora_b. The first entry
 # is the per-segment token count.
-SHAPES = [
-    ((64,) * 8, 4, 32, 4096, 1024),
-    ((256,) * 4, 2, 64, 4096, 1024),
-]
-MORE_SHAPES = [
-    ((5,), 1, 16, 64, 32),
-    ((3, 7, 0, 12), 2, 16, 128, 64),
-    ((9, 4), 2, 32, 256, 128),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    seg_lens, num_lora, r, dq, dkv = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    s = sum(seg_lens)
-    output_dim = dq + 2 * dkv
-    x = torch.randn(
-        s, 3 * r, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    weights = torch.randn(
-        num_lora,
-        output_dim,
-        r,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    base_output = torch.randn(
-        s, output_dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    output_offset = torch.tensor(
-        [0, dq, dq + dkv, output_dim], dtype=torch.int32, device=device
-    )
-    batch_info = make_batch_info(
-        list(seg_lens),
-        [i % num_lora for i in range(len(seg_lens))],
-        lora_ranks=[r] * num_lora,
-        scalings=[0.5 + 0.25 * i for i in range(num_lora)],
-    )
-    # ``batch_info`` is a dataclass, which unpack_to_args_kwargs would drop
-    # from the positional args, so route it (and the tail) through kwargs.
-    yield x, weights, dict(
-        batch_info=batch_info,
-        output_offset=output_offset,
-        max_qkv_out_dim=max(dq, dkv),
-        base_output=base_output,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (seg_lens, num_lora, r, dq, dkv) = shape
+    seg_lens, num_lora, r, dq, dkv = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (sum(seg_lens), 3 * r),
@@ -102,6 +59,7 @@ def _case_fn(shape, cur_dtype):
             "dkv": dkv,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -111,10 +69,11 @@ def test_perf_qkv_lora_b():
         op_name="qkv_lora_b",
         torch_op=get_reference("qkv_lora_b"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=("base_output",),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="seg_lens, num_lora, r, dq, dkv",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,39 +15,29 @@
 """Benchmark for activation_norm/softcap_out."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import softcap_out as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SOFTCAP_CONST = 30.0
 
-# Shapes match kernel-comp-baseline/problems/activation_norm/softcap_out.
-SHAPES = [(m, n) for m in (1, 8, 64, 512) for n in (4096, 32000, 128256)]
-MORE_SHAPES = [(1, 17), (37, 1024), (4, 32000)]
-
-
-def _input_fn(shape, cur_dtype, device):
-    m, n = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    # Scaled up so the inputs reach the tanh saturation region.
-    x = (
-        torch.randn(m, n, generator=g, device=device, dtype=torch.float32) * 20
-    ).to(cur_dtype)
-    yield x, SOFTCAP_CONST
+def _build_inputs(plan, cur_dtype, device):
+    m, n = plan.builder_args[0]
+    args, _ = workload.build_inputs({"m": m, "n": n}, cur_dtype, device)
+    return args
 
 
 def _case_fn(shape, cur_dtype):
-    (m, n) = shape
+    m, n = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, n)},
         params={
             "configuration": shape,
             "seed": 0,
-            "SOFTCAP_CONST": SOFTCAP_CONST,
+            "SOFTCAP_CONST": workload.SOFTCAP_CONST,
             "m": m,
             "n": n,
         },
@@ -61,10 +51,10 @@ def test_perf_softcap_out():
         op_name="softcap_out",
         torch_op=get_reference("softcap_out"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, n",
     )
     bench.set_gems_from_module(flaggems_sglang)

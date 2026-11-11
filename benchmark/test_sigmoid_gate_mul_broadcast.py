@@ -15,36 +15,28 @@
 """Benchmark for elementwise/sigmoid_gate_mul_broadcast."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import sigmoid_gate_mul_broadcast as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/elementwise/
 # sigmoid_gate_mul_broadcast.
-SHAPES = [
-    (bs, hidden) for bs in (1, 8, 64, 512) for hidden in (1024, 4096, 8192)
-]
-MORE_SHAPES = [(bs, hidden) for bs in (4096,) for hidden in (1024, 4096, 8192)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, hidden = shape
-
-    def _rand(*size, seed):
-        g = torch.Generator(device=device).manual_seed(seed)
-        return torch.randn(
-            *size, dtype=torch.float32, device=device, generator=g
-        ).to(cur_dtype)
-
-    yield _rand(num_tokens, hidden, seed=0), _rand(num_tokens, 1, seed=1)
+def _build_inputs(plan, cur_dtype, device):
+    bs, hidden = plan.builder_args[0]
+    args, kwargs = workload.build_inputs(
+        {"bs": bs, "hidden": hidden}, cur_dtype, device
+    )
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, hidden) = shape
+    num_tokens, hidden = shape
     yield BenchmarkCasePlan(
         shape={"gate": (num_tokens, hidden), "up": (num_tokens, 1)},
         params={
@@ -63,10 +55,10 @@ def test_perf_sigmoid_gate_mul_broadcast():
         op_name="sigmoid_gate_mul_broadcast",
         torch_op=get_reference("sigmoid_gate_mul_broadcast"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

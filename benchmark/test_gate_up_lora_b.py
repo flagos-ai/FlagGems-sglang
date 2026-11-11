@@ -15,65 +15,25 @@
 """Benchmark for lora/gate_up_lora_b."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import gate_up_lora_b as workload
 from flaggems_sglang.reference import get_reference
-from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
 # Shapes match kernel-comp-baseline/problems/lora/gate_up_lora_b. The first
 # entry is the per-segment token count.
-SHAPES = [
-    ((64,) * 8, 4, 32, 4096, "none"),
-    ((256,) * 4, 2, 64, 4096, "none"),
-]
-MORE_SHAPES = [
-    ((5,), 1, 16, 64, "none"),
-    ((3, 7, 0, 12), 2, 16, 128, "none"),
-    ((9, 4), 2, 32, 256, "shuffled"),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    seg_lens, num_lora, r, output_dim, permutation = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    s = sum(seg_lens)
-
-    x = torch.randn(
-        s, 2 * r, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    weights = torch.randn(
-        num_lora,
-        2 * output_dim,
-        r,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    base_output = torch.randn(
-        s, 2 * output_dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    batch_info = make_batch_info(
-        list(seg_lens),
-        [i % num_lora for i in range(len(seg_lens))],
-        lora_ranks=[r] * num_lora,
-        scalings=[0.5 + 0.25 * i for i in range(num_lora)],
-        permutation=permutation,
-    )
-    # ``batch_info`` is a dataclass, which unpack_to_args_kwargs would drop
-    # from the positional args, so route it (and the tail) through kwargs.
-    yield x, weights, dict(
-        batch_info=batch_info,
-        output_dim=output_dim,
-        base_output=base_output,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (seg_lens, num_lora, r, output_dim, permutation) = shape
+    seg_lens, num_lora, r, output_dim, permutation = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (sum(seg_lens), 2 * r),
@@ -101,6 +61,7 @@ def _case_fn(shape, cur_dtype):
             "permutation": permutation,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -116,10 +77,11 @@ def test_perf_gate_up_lora_b():
         op_name="gate_up_lora_b",
         torch_op=get_reference("gate_up_lora_b"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=("base_output",),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="seg_lens, num_lora, r, output_dim, permutation",
     )
     bench.set_gems(gems_op)

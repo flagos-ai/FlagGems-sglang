@@ -20,5 +20,1277 @@
       [512, 4096], [512, 32000], [512, 128256],
       [1, 17], [37, 1024], [4, 32000]
     ]
+  },
+  "softcap_out": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096], [1, 32000], [1, 128256],
+      [8, 4096], [8, 32000], [8, 128256],
+      [64, 4096], [64, 32000], [64, 128256],
+      [512, 4096], [512, 32000], [512, 128256],
+      [1, 17], [37, 1024], [4, 32000]
+    ]
+  },
+  "fused_rmsnorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192],
+      [7, 16], [83, 1024], [48, 3072]
+    ]
+  },
+  "l2norm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 64], [1, 128], [1, 256],
+      [32, 64], [32, 128], [32, 256],
+      [512, 64], [512, 128], [512, 256],
+      [4096, 64], [4096, 128], [4096, 256],
+      [83, 128], [256, 256], [3, 1024]
+    ]
+  },
+  "add3": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 7168],
+      [8, 2048], [8, 4096], [8, 7168],
+      [64, 2048], [64, 4096], [64, 7168],
+      [512, 2048], [512, 4096], [512, 7168],
+      [4096, 2048], [4096, 4096], [4096, 7168]
+    ]
+  },
+  "gelu_and_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 8192], [1, 16384],
+      [8, 2048], [8, 8192], [8, 16384],
+      [64, 2048], [64, 8192], [64, 16384],
+      [512, 2048], [512, 8192], [512, 16384],
+      [4096, 2048], [4096, 8192], [4096, 16384],
+      [7, 32], [83, 2048], [48, 6144]
+    ]
+  },
+  "gelu_tanh_and_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 8192], [1, 16384],
+      [8, 2048], [8, 8192], [8, 16384],
+      [64, 2048], [64, 8192], [64, 16384],
+      [512, 2048], [512, 8192], [512, 16384],
+      [4096, 2048], [4096, 8192], [4096, 16384]
+    ]
+  },
+  "hadamard_transform": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128], [1, 512], [1, 2048],
+      [8, 128], [8, 512], [8, 2048],
+      [64, 128], [64, 512], [64, 2048],
+      [512, 128], [512, 512], [512, 2048],
+      [4096, 128], [4096, 512], [4096, 2048]
+    ]
+  },
+  "hc_head": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4, 7168], [128, 4, 7168], [2048, 4, 7168],
+      [8192, 4, 7168], [1, 2, 128], [37, 4, 256],
+      [129, 2, 512]
+    ]
+  },
+  "merge_state": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 32, 128], [8, 32, 128], [64, 32, 128],
+      [512, 32, 128], [4096, 32, 128], [7, 4, 64],
+      [83, 16, 128], [3, 32, 512]
+    ]
+  },
+  "one_pass_rms_norm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1536], [1, 3072], [64, 1536],
+      [64, 3072], [1024, 1536], [1024, 3072],
+      [16384, 1536], [16384, 3072]
+    ]
+  },
+  "per_token_quant_int8": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 8192],
+      [8, 2048], [8, 4096], [8, 8192],
+      [64, 2048], [64, 4096], [64, 8192],
+      [512, 2048], [512, 4096], [512, 8192],
+      [4096, 2048], [4096, 4096], [4096, 8192],
+      [7, 128], [83, 512], [256, 4096],
+      [3, 4736]
+    ]
+  },
+  "relu2": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 8192],
+      [8, 2048], [8, 4096], [8, 8192],
+      [64, 2048], [64, 4096], [64, 8192],
+      [512, 2048], [512, 4096], [512, 8192],
+      [4096, 2048], [4096, 4096], [4096, 8192]
+    ]
+  },
+  "rotary_embedding": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 16, 128], [64, 16, 128], [1024, 16, 128],
+      [8192, 16, 128], [32768, 16, 128], [37, 16, 128],
+      [1024, 8, 128], [4096, 16, 64]
+    ]
+  },
+  "sigmoid_gate_mul_broadcast": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192]
+    ]
+  },
+  "add_constant": {
+    "dtype": "torch.int32",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [4096], [65536], [1048576],
+      [16777216]
+    ]
+  },
+  "fused_norm_rope_stacked": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_L8_kvh8_hd128_rd128", "t128_L8_kvh8_hd128_rd128", "t2048_L8_kvh8_hd128_rd128",
+      "t8192_L8_kvh8_hd128_rd128", "t1_L2_kvh2_hd64_rd64", "t37_L3_kvh4_hd128_rd128",
+      "t129_L2_kvh2_hd128_rd64"
+    ]
+  },
+  "log_scaling_tau": {
+    "dtype": "torch.float16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 16, 128], [128, 16, 128], [2048, 16, 128],
+      [8192, 16, 128],
+      [1, 1, 128], [37, 8, 64], [129, 1, 512]
+    ]
+  },
+  "ltx2_split_rotary": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1, 16, 128], [1, 64, 16, 128], [1, 1024, 16, 128],
+      [1, 8192, 16, 128]
+    ]
+  },
+  "per_token_group_quant_int8": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 8192],
+      [8, 2048], [8, 4096], [8, 8192],
+      [64, 2048], [64, 4096], [64, 8192],
+      [512, 2048], [512, 4096], [512, 8192],
+      [4096, 2048], [4096, 4096], [4096, 8192],
+      [7, 128], [83, 512], [256, 4096],
+      [3, 256]
+    ]
+  },
+  "recompute_w_u": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b1_t64_h16_hg4_k128_v128_bt64", "b1_t256_h16_hg4_k128_v128_bt64", "b1_t1024_h16_hg4_k128_v128_bt64",
+      "b1_t4096_h16_hg4_k128_v128_bt64"
+    ]
+  },
+  "rmsnorm_hf": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128], [1, 4096], [1, 7168],
+      [8, 128], [8, 4096], [8, 7168],
+      [64, 128], [64, 4096], [64, 7168],
+      [512, 128], [512, 4096], [512, 7168],
+      [4096, 128], [4096, 4096], [4096, 7168]
+    ]
+  },
+  "concat_mla_absorb_q": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 512, 64], [8, 128, 512, 64], [64, 128, 512, 64],
+      [512, 128, 512, 64], [4096, 128, 512, 64]
+    ]
+  },
+  "dsv3_fused_a_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 7168, 2112], [2, 7168, 2112], [4, 7168, 2112],
+      [8, 7168, 2112], [16, 7168, 2112]
+    ]
+  },
+  "fused_pack_qkv": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_seq8_h16_d128", "bs1_seq128_h16_d128", "bs1_seq1024_h16_d128",
+      "bs1_seq8192_h16_d128"
+    ]
+  },
+  "pack_qkv_destination_major": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "r64_gh32_hs128_ws8", "r1024_gh32_hs128_ws8", "r4096_gh32_hs128_ws8",
+      "r16384_gh32_hs128_ws8"
+    ]
+  },
+  "rmsnorm_scale": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 2048], [8, 4096], [64, 2048],
+      [64, 4096], [1024, 2048], [1024, 4096],
+      [8192, 2048], [8192, 4096]
+    ]
+  },
+  "rmsnorm_scale_shift": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2048], [1, 1024, 2048], [1, 4096, 2048],
+      [2, 77, 2048], [2, 1024, 2048], [2, 4096, 2048],
+      [8, 77, 2048], [8, 1024, 2048], [8, 4096, 2048]
+    ]
+  },
+  "rmsnorm_tanh_residual": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 2048], [8, 4096], [64, 2048],
+      [64, 4096], [1024, 2048], [1024, 4096],
+      [8192, 2048], [8192, 4096]
+    ]
+  },
+  "bmm_chunk": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_ng8_k64_causal1", "b32_nc4_cs256_ng8_k64_causal1", "b1_nc1_cs8_ng2_k16_causal1",
+      "b2_nc3_cs16_ng2_k32_causal1", "b3_nc2_cs32_ng4_k64_causal1"
+    ]
+  },
+  "chunk_cumsum": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_nh32", "b32_nc4_cs256_nh64", "b1_nc1_cs8_nh4",
+      "b2_nc3_cs16_nh8", "b3_nc2_cs32_nh16"
+    ]
+  },
+  "dcp_lse_combine": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [2, 1, 16, 128], [2, 64, 16, 128], [4, 1, 16, 128],
+      [4, 64, 16, 128], [8, 1, 16, 128], [8, 64, 16, 128],
+      [2, 1024, 16, 128], [4, 1024, 16, 128], [8, 1024, 16, 128]
+    ]
+  },
+  "fused_dual_residual_rmsnorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192],
+      [7, 16], [83, 1024], [48, 3072]
+    ]
+  },
+  "fused_eh_norm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 7168],
+      [8, 2048], [8, 4096], [8, 7168],
+      [64, 2048], [64, 4096], [64, 7168],
+      [512, 2048], [512, 4096], [512, 7168],
+      [4096, 2048], [4096, 4096], [4096, 7168]
+    ]
+  },
+  "fused_gdn_gating": {
+    "dtype": "torch.float32",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 64], [8, 64], [64, 64],
+      [512, 64], [4096, 64], [1, 4],
+      [37, 32], [256, 8]
+    ]
+  },
+  "fused_qk_inv_rms": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 64, 3, 16, 128], [1, 512, 3, 16, 128], [1, 4096, 3, 16, 128],
+      [1, 16384, 3, 16, 128]
+    ]
+  },
+  "fused_qkvzba_split_reshape_cat": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b1_nqk16_nv32_hqk128_hv128", "b8_nqk16_nv32_hqk128_hv128", "b64_nqk16_nv32_hqk128_hv128",
+      "b512_nqk16_nv32_hqk128_hv128", "b4096_nqk16_nv32_hqk128_hv128"
+    ]
+  },
+  "fused_softmax_pool": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4, 256], [1, 16, 256], [1, 64, 256],
+      [64, 4, 256], [64, 16, 256], [64, 64, 256],
+      [1024, 4, 256], [1024, 16, 256], [1024, 64, 256],
+      [4096, 4, 256], [4096, 16, 256], [4096, 64, 256]
+    ]
+  },
+  "layernorm_scale_shift_gate_select01": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2240], [1, 1024, 2240], [1, 4096, 2240],
+      [2, 77, 2240], [2, 1024, 2240], [2, 4096, 2240],
+      [8, 77, 2240], [8, 1024, 2240], [8, 4096, 2240]
+    ]
+  },
+  "scale_residual_rmsnorm_scale_shift": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2048], [1, 1024, 2048], [1, 4096, 2048],
+      [2, 77, 2048], [2, 1024, 2048], [2, 4096, 2048],
+      [8, 77, 2048], [8, 1024, 2048], [8, 4096, 2048]
+    ]
+  },
+  "top_p_renorm": {
+    "dtype": "torch.float32",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 32000], [1, 131072], [8, 32000],
+      [8, 131072], [64, 32000], [64, 131072],
+      [256, 32000], [256, 131072]
+    ]
+  },
+  "w8a8_block_int8_matmul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024, 4096], [1, 4096, 4096], [1, 7168, 4096],
+      [8, 1024, 4096], [8, 4096, 4096], [8, 7168, 4096],
+      [64, 1024, 4096], [64, 4096, 4096], [64, 7168, 4096],
+      [512, 1024, 4096], [512, 4096, 4096], [512, 7168, 4096],
+      [4096, 1024, 4096], [4096, 4096, 4096], [4096, 7168, 4096],
+      [7, 256, 512], [64, 1024, 512], [256, 1024, 4096]
+    ]
+  },
+  "clamp_position": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [512], [4096], [16384]
+    ]
+  },
+  "compute_position": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [256], [1024]
+    ]
+  },
+  "fused_moe_dispatch_index": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_topk8_E32_mmax8192", "t8_topk8_E32_mmax8192", "t64_topk8_E32_mmax8192",
+      "t512_topk8_E32_mmax8192", "t4096_topk8_E32_mmax8192"
+    ]
+  },
+  "fused_sigmoid_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "strided_bs1_h32_d128", "strided_bs8_h32_d128", "strided_bs64_h32_d128",
+      "strided_bs512_h32_d128", "strided_bs1024_h32_d128", "strided_bs4096_h32_d128"
+    ]
+  },
+  "gather_spec_extras": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "m1_pool4096_topk8_h7168", "m8_pool4096_topk8_h7168", "m64_pool4096_topk8_h7168",
+      "m512_pool4096_topk8_h7168", "m2048_pool4096_topk8_h7168"
+    ]
+  },
+  "group_norm_silu": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 64, 64], [1, 256, 32, 32], [2, 128, 64, 64],
+      [2, 256, 32, 32], [1, 512, 16, 16], [2, 512, 16, 16]
+    ]
+  },
+  "interleaved_rope": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [3, 1, 128], [3, 128, 128], [3, 2048, 128],
+      [3, 8192, 128], [3, 1, 48], [3, 37, 96],
+      [3, 257, 128]
+    ]
+  },
+  "sigmoid_gate_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192]
+    ]
+  },
+  "tma_align_input_scale": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 56], [8, 56], [64, 56],
+      [512, 56], [4096, 56], [16384, 56]
+    ]
+  },
+  "unpad_draft_extend_output": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_tpb8_nh16_hd128", "bs8_tpb8_nh16_hd128", "bs64_tpb8_nh16_hd128",
+      "bs256_tpb8_nh16_hd128", "bs1024_tpb8_nh16_hd128"
+    ]
+  },
+  "vocab_parallel_embedding": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 7168], [8, 2048],
+      [8, 7168], [64, 2048], [64, 7168],
+      [512, 2048], [512, 7168], [4096, 2048],
+      [4096, 7168]
+    ]
+  },
+  "gate_topk": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 256, 4], [1, 256, 8], [8, 256, 4],
+      [8, 256, 8], [64, 256, 4], [64, 256, 8],
+      [512, 256, 4], [512, 256, 8], [4096, 256, 4],
+      [4096, 256, 8]
+    ]
+  },
+  "get_target_cache_loc": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_nvt8", "bs8_nvt8", "bs64_nvt8",
+      "bs256_nvt8", "bs1024_nvt8"
+    ]
+  },
+  "moe_align_single_token": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "tk1_E256_blk16", "tk1_E256_blk64", "tk4_E256_blk16",
+      "tk4_E256_blk64", "tk8_E256_blk16", "tk8_E256_blk64",
+      "tk1_E256_blk128", "tk4_E256_blk128", "tk8_E256_blk128"
+    ]
+  },
+  "scatter_to_padded": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b1_sl1024_h16_d128", "b4_sl1024_h16_d128", "b16_sl1024_h16_d128",
+      "b64_sl1024_h16_d128"
+    ]
+  },
+  "seqlens_expand": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [512], [4096]
+    ]
+  },
+  "apply_token_bitmask": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 152064], [8, 152064], [64, 152064],
+      [512, 152064], [4096, 152064], [3, 100],
+      [7, 1000], [1, 32000]
+    ]
+  },
+  "build_trtllm_mha_page_table": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_ml16384_ps64_mb256_mc131072", "bs8_ml16384_ps64_mb256_mc131072", "bs32_ml16384_ps64_mb256_mc131072",
+      "bs128_ml16384_ps64_mb256_mc131072"
+    ]
+  },
+  "concat_mla_k": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 128, 128, 64], [8, 128, 128, 64], [64, 128, 128, 64],
+      [512, 128, 128, 64], [4096, 128, 128, 64]
+    ]
+  },
+  "fill_bonus_tokens": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 8], [8, 8], [64, 8],
+      [512, 8], [4096, 8]
+    ]
+  },
+  "fill_padded_rows": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [8, 8], [64, 8], [512, 8],
+      [4096, 8], [16384, 8]
+    ]
+  },
+  "indexed_scale_shift": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 3072], [64, 3072], [1024, 3072],
+      [8192, 3072], [32768, 3072]
+    ]
+  },
+  "memcpy_triton": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "rows8_h4096_sz4_off0", "rows64_h4096_sz32_off0", "rows512_h4096_sz256_off0",
+      "rows4096_h4096_sz2048_off0", "rows16384_h4096_sz8192_off0"
+    ]
+  },
+  "moe_topk_sum": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 4, 7168], [1, 8, 7168], [8, 4, 7168],
+      [8, 8, 7168], [64, 4, 7168], [64, 8, 7168],
+      [512, 4, 7168], [512, 8, 7168], [4096, 4, 7168],
+      [4096, 8, 7168]
+    ]
+  },
+  "set_token_filter": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "b16_V32768_nt16", "b16_V32768_nt1024", "b16_V152064_nt16",
+      "b16_V152064_nt1024"
+    ]
+  },
+  "wide_row_softmax": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32000], [1, 131072], [4, 32000],
+      [4, 131072], [32, 32000], [32, 131072]
+    ]
+  },
+  "assign_draft_cache_locs_contiguous": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_topk8_steps5_mb256_pl8192", "bs8_topk8_steps5_mb256_pl8192", "bs64_topk8_steps5_mb256_pl8192",
+      "bs512_topk8_steps5_mb256_pl8192", "bs2048_topk8_steps5_mb256_pl8192"
+    ]
+  },
+  "concat_and_cast_mha_k": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32, 192], [8, 32, 192], [64, 32, 192],
+      [512, 32, 192], [4096, 32, 192]
+    ]
+  },
+  "conv_window_scatter_with_mask": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "L8_c512_r8_d4_dim128_k4", "L8_c512_r64_d4_dim128_k4", "L8_c512_r256_d4_dim128_k4"
+    ]
+  },
+  "ep_gather": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_h4096_topk8_src16", "t8_h4096_topk8_src64", "t64_h4096_topk8_src512",
+      "t512_h4096_topk8_src4096", "t4096_h4096_topk8_src32768"
+    ]
+  },
+  "fill_accept_out_cache_loc": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [8], [64], [512],
+      [4096]
+    ]
+  },
+  "fixup_zero_kv": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_nh16_vhd128_mq4", "bs8_nh16_vhd128_mq4", "bs64_nh16_vhd128_mq4",
+      "bs512_nh16_vhd128_mq4", "bs2048_nh16_vhd128_mq4"
+    ]
+  },
+  "get_mla_kv_buffer": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nloc1_slots65536_nope512_rope64", "nloc8_slots65536_nope512_rope64", "nloc64_slots65536_nope512_rope64",
+      "nloc512_slots65536_nope512_rope64", "nloc4096_slots65536_nope512_rope64", "nloc16384_slots65536_nope512_rope64"
+    ]
+  },
+  "pad_draft_extend_query": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_msl8_nh16_hd128", "bs8_msl8_nh16_hd128", "bs64_msl8_nh16_hd128",
+      "bs256_msl8_nh16_hd128", "bs1024_msl8_nh16_hd128"
+    ]
+  },
+  "set_mla_kv_buffer": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nloc1_slots65536_nope512_rope64", "nloc8_slots65536_nope512_rope64", "nloc64_slots65536_nope512_rope64",
+      "nloc512_slots65536_nope512_rope64", "nloc4096_slots65536_nope512_rope64", "nloc16384_slots65536_nope512_rope64"
+    ]
+  },
+  "state_scatter_with_mask": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "L8_c512_r8_d4_ss16x128", "L8_c512_r64_d4_ss16x128", "L8_c512_r256_d4_ss16x128"
+    ]
+  },
+  "create_chunked_prefix_cache_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_chunk2048_mb256_mc16384", "bs8_chunk2048_mb256_mc16384", "bs32_chunk2048_mb256_mc16384",
+      "bs128_chunk2048_mb256_mc16384"
+    ]
+  },
+  "create_flashinfer_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_ml4096_mb256_mc8192", "bs8_ml4096_mb256_mc8192", "bs32_ml4096_mb256_mc8192",
+      "bs128_ml4096_mb256_mc8192"
+    ]
+  },
+  "create_flashmla_kv_indices": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_ml16384_ps64_mb256_mc131072", "bs8_ml16384_ps64_mb256_mc131072", "bs32_ml16384_ps64_mb256_mc131072",
+      "bs128_ml16384_ps64_mb256_mc131072"
+    ]
+  },
+  "deepep_permute": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168", "t8_topk8_h7168", "t64_topk8_h7168",
+      "t512_topk8_h7168", "t2048_topk8_h7168"
+    ]
+  },
+  "deepep_post_reorder": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168", "t8_topk8_h7168", "t64_topk8_h7168",
+      "t512_topk8_h7168", "t2048_topk8_h7168"
+    ]
+  },
+  "fused_gate_sigmoid_mul_add": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 7168],
+      [8, 2048], [8, 4096], [8, 7168],
+      [64, 2048], [64, 4096], [64, 7168],
+      [512, 2048], [512, 4096], [512, 7168],
+      [4096, 2048], [4096, 4096], [4096, 7168]
+    ]
+  },
+  "post_reorder_cutlass": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "post_reorder_deepgemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "pre_reorder_cutlass": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_topk8_h7168_E32", "t8_topk8_h7168_E32", "t64_topk8_h7168_E32",
+      "t512_topk8_h7168_E32", "t2048_topk8_h7168_E32"
+    ]
+  },
+  "topk_sigmoid": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 256, 8], [8, 256, 8], [64, 256, 8],
+      [512, 256, 8], [4096, 256, 8]
+    ]
+  },
+  "causal_conv1d_update": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "b64_dim4096_w4_sq1", "b256_dim2048_w4_sq1", "b2_dim16_w4_sq1",
+      "b5_dim64_w4_sq1", "b3_dim32_w3_sq4"
+    ]
+  },
+  "ernie45_rope_fused": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nt1_qh8_kh2_hs128_rd128", "nt128_qh8_kh2_hs128_rd128", "nt2048_qh8_kh2_hs128_rd128",
+      "nt8192_qh8_kh2_hs128_rd128", "nt1_qh4_kh1_hs64_rd64", "nt37_qh8_kh2_hs128_rd128",
+      "nt129_qh16_kh2_hs128_rd64"
+    ]
+  },
+  "fused_qk_gemma_rmsnorm_rope_gate": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_nq32_nkv8_hd128_rd128", "t8_nq32_nkv8_hd128_rd128", "t64_nq32_nkv8_hd128_rd128",
+      "t512_nq32_nkv8_hd128_rd128", "t4096_nq32_nkv8_hd128_rd128"
+    ]
+  },
+  "gemma_fused_add_rmsnorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192]
+    ]
+  },
+  "hash_topk": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_nr256_tk8_V32768", "t8_nr256_tk8_V32768", "t64_nr256_tk8_V32768",
+      "t512_nr256_tk8_V32768", "t4096_nr256_tk8_V32768"
+    ]
+  },
+  "linear_decode_forward": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "b1_h8_d128_blk32", "b8_h8_d128_blk32", "b64_h8_d128_blk32",
+      "b256_h8_d128_blk32"
+    ]
+  },
+  "moe_align_block_size": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_tk8_E256_blk128", "t8_tk8_E256_blk128", "t64_tk8_E256_blk128",
+      "t512_tk8_E256_blk128", "t4096_tk8_E256_blk128", "t16384_tk8_E256_blk128"
+    ]
+  },
+  "mrope_fused": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nt1_qh8_kh2_hs128_rd128", "nt128_qh8_kh2_hs128_rd128", "nt2048_qh8_kh2_hs128_rd128",
+      "nt8192_qh8_kh2_hs128_rd128"
+    ]
+  },
+  "per_group_transpose": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [128, 128], [1024, 128], [8192, 128],
+      [128, 512], [1024, 512], [8192, 512],
+      [128, 4096], [1024, 4096], [8192, 4096]
+    ]
+  },
+  "qk_gemma_rmsnorm_rope": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "m1_nq32_nkv8_hd128_rd128", "m8_nq32_nkv8_hd128_rd128", "m64_nq32_nkv8_hd128_rd128",
+      "m512_nq32_nkv8_hd128_rd128", "m4096_nq32_nkv8_hd128_rd128"
+    ]
+  },
+  "zero_experts_identity": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t1_tk8_h7168_E32_z8", "t8_tk8_h7168_E32_z8", "t64_tk8_h7168_E32_z8",
+      "t512_tk8_h7168_E32_z8", "t4096_tk8_h7168_E32_z8"
+    ]
+  },
+  "chunked_embedding_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s4096_L4_r32_V32000", "s8192_L2_r64_V128256", "s5_L1_r16_V128",
+      "s48_L2_r32_V512", "s18_L2_r16_V256"
+    ]
+  },
+  "chunked_sgmv_expand": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_slc4096x4096", "s1024_L2_r64_slc4096x1024x1024", "s8_L1_r16_slc64",
+      "s64_L2_r16_slc128x64", "s32_L2_r32_slc256x128x128"
+    ]
+  },
+  "chunked_sgmv_shrink": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s512_L4_r32_k4096_sl1", "s1024_L2_r64_k4096_sl1", "s8_L1_r16_k64_sl1",
+      "s64_L2_r16_k128_sl1", "s32_L2_r32_k256_sl3"
+    ]
+  },
+  "embedding_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s4096_L4_r32_V32000_0", "s8192_L2_r64_V128256_0", "s5_L1_r16_V128_0",
+      "s22_L2_r32_V512_0", "s13_L2_r16_V256_8"
+    ]
+  },
+  "gate_up_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_od4096_none", "s1024_L2_r64_od4096_none", "s5_L1_r16_od64_none",
+      "s22_L2_r16_od128_none", "s13_L2_r32_od256_shuffled"
+    ]
+  },
+  "qkv_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_dq4096_dkv1024", "s1024_L2_r64_dq4096_dkv1024", "s5_L1_r16_dq64_dkv32",
+      "s22_L2_r16_dq128_dkv64", "s13_L2_r32_dq256_dkv128"
+    ]
+  },
+  "sgemm_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s512_L4_r32_k4096_stk1_none", "s1024_L2_r64_k4096_stk1_none", "s5_L1_r16_k64_stk1_none",
+      "s22_L2_r16_k128_stk1_none", "s13_L2_r32_k256_stk3_shuffled"
+    ]
+  },
+  "sgemm_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_n4096", "s1024_L2_r64_n4096", "s5_L1_r16_n64",
+      "s22_L2_r16_n128", "s13_L2_r32_n256"
+    ]
+  },
+  "fla_layernorm_gated": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_d2048_swish_rms1_bias1", "t8_d2048_swish_rms1_bias1", "t64_d2048_swish_rms1_bias1",
+      "t512_d2048_swish_rms1_bias1", "t4096_d2048_swish_rms1_bias1", "t1_d64_swish_rms1_bias1",
+      "t37_d256_sigmoid_rms1_bias1", "t83_d512_swish_rms0_bias0"
+    ]
+  },
+  "fused_moe_router_cudacore": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 256, 8, 0.0, false], [8, 4096, 256, 8, 0.0, false], [64, 4096, 256, 8, 0.0, false],
+      [512, 4096, 256, 8, 0.0, false], [4096, 4096, 256, 8, 0.0, false], [1, 64, 8, 1, 0.0, false],
+      [37, 256, 16, 2, 30.0, false], [83, 512, 32, 3, 0.0, true]
+    ]
+  },
+  "fused_moe_router_tensorcore": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 256, 2, 0.0, false], [8, 4096, 256, 2, 0.0, false], [64, 4096, 256, 2, 0.0, false],
+      [512, 4096, 256, 2, 0.0, false], [4096, 4096, 256, 2, 0.0, false], [1, 64, 8, 1, 0.0, false],
+      [37, 256, 16, 2, 30.0, false], [83, 512, 32, 2, 0.0, true]
+    ]
+  },
+  "mamba_layernorm_gated": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 128], [8, 4096, 128], [64, 4096, 128],
+      [512, 4096, 128], [4096, 4096, 128], [1, 64, 64],
+      [37, 256, 64], [83, 512, 128], [4, 1024, 1024]
+    ]
+  },
+  "chunk_local_cumsum_scalar": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 1024, 32], "[8, 1024, 32]_reverse", [32, 256, 64],
+      "[32, 256, 64]_reverse", [2, 48, 8], "[2, 48, 8]_reverse",
+      [3, 64, 16], "[3, 64, 16]_reverse"
+    ]
+  },
+  "chunk_local_cumsum_vector": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 1024, 8, 64], "[8, 1024, 8, 64]_reverse", [32, 256, 8, 128],
+      "[32, 256, 8, 128]_reverse", [1, 16, 2, 16], "[1, 16, 2, 16]_reverse",
+      [2, 48, 4, 32], "[2, 48, 4, 32]_reverse", [3, 64, 4, 64],
+      "[3, 64, 4, 64]_reverse"
+    ]
+  },
+  "compute_src2dst": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [8], [512], [8192],
+      [131072], [1048576]
+    ]
+  },
+  "draft_topk1": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 151936, 1, 0], [8, 151936, 1, 0], [64, 151936, 1, 0],
+      [512, 151936, 1, 0], [1, 32000, 0, 0], [37, 12000, 1, 2],
+      [129, 8692, 0, 0]
+    ]
+  },
+  "ep_scatter": {
+    "dtype": "torch.float8_e4m3fn",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "t64_topk8_h2048_E8", "t512_topk8_h2048_E8", "t4096_topk8_h2048_E8"
+    ]
+  },
+  "moe_sum_reduce": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 8, 7168], [8, 8, 7168], [64, 8, 7168],
+      [512, 8, 7168], [4096, 8, 7168], [7, 2, 128],
+      [83, 4, 512], [3, 8, 2048]
+    ]
+  },
+  "selective_state_update": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "b64_nh32_dim128_ds128_ng8_z1_d1_bias1_sp1", "b256_nh64_dim64_ds128_ng8_z1_d1_bias1_sp1", "b1_nh4_dim16_ds8_ng1_z1_d1_bias1_sp1",
+      "b5_nh8_dim64_ds16_ng2_z1_d1_bias1_sp1", "b3_nh16_dim128_ds32_ng4_z0_d1_bias1_sp0", "b2_nh8_dim32_ds16_ng2_z0_d0_bias0_sp0"
+    ]
+  },
+  "sigmoid_gate_topk_renorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 131, 5], [8, 131, 5], [64, 131, 5],
+      [512, 131, 5], [4096, 131, 5], [1, 33, 3],
+      [83, 65, 6], [9, 260, 12]
+    ]
+  },
+  "silu_and_mul_masked": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [4, 256, 4096, 256, 256, 256, 256], [8, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256], [32, 256, 4096, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256],
+      [4, 16, 32, 0, 3, 16, 9], [8, 128, 256, 128, 0, 64, 1, 17, 128, 5, 90]
+    ]
+  },
+  "causal_conv1d_fn": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "nseq8_len2048_dim4096_w4", "nseq32_len512_dim2048_w4", "nseq1_len7_dim16_w4",
+      "nseq4_len1_dim8_w3"
+    ]
+  },
+  "chunk_state": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_nh32_ng8_hd64_ds128", "b32_nc4_cs256_nh64_ng8_hd64_ds128", "b1_nc1_cs8_nh4_ng2_hd16_ds8",
+      "b2_nc3_cs16_nh8_ng2_hd32_ds16", "b3_nc2_cs32_nh16_ng4_hd64_ds32"
+    ]
+  },
+  "chunk_state_varlen": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "nseq8_len256x256x256x256x256x256x256x256_cs256_nh32_ng8_hd64_ds128", "nseq32_len256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256x256_cs256_nh64_ng8_hd64_ds128", "nseq2_len3x5_cs8_nh4_ng2_hd16_ds8",
+      "nseq4_len10x6x4x12_cs16_nh8_ng2_hd32_ds16", "nseq5_len20x12x5x27x32_cs32_nh16_ng4_hd64_ds32"
+    ]
+  },
+  "context_attention": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "bs1_sl128_h32_d128", "bs1_sl2048_h32_d128", "bs8_sl128_h32_d128",
+      "bs8_sl2048_h32_d128", "bs64_sl128_h32_d128", "bs64_sl2048_h32_d128",
+      "bs2_sl8_h4_d128", "bs3_sl30_h4_d96", "bs1_sl20_h4_d80",
+      "bs1_sl9_h4_d13"
+    ]
+  },
+  "decode_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_sl2048_hq32_hkv8_d128", "B8_sl2048_hq32_hkv8_d128", "B64_sl512_hq32_hkv8_d128",
+      "B512_sl128_hq32_hkv8_d128", "B4096_sl128_hq32_hkv8_d128", "B2_sl10_hq4_hkv4_d64",
+      "B2_sl10_hq4_hkv2_d64", "B2_sl10_hq4_hkv4_d80", "B2_sl128_hq16_hkv1_d512"
+    ]
+  },
+  "decode_grouped_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_sl2048_hq128_hkv1_d128", "B8_sl2048_hq128_hkv1_d128", "B64_sl512_hq128_hkv1_d128",
+      "B512_sl128_hq128_hkv1_d128", "B4096_sl128_hq128_hkv1_d128", "B2_sl10_hq32_hkv1_d64",
+      "B2_sl10_hq128_hkv1_d64", "B2_sl10_hq32_hkv4_d80", "B2_sl128_hq128_hkv8_d512"
+    ]
+  },
+  "extend_attention": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "B1_nctx2048_hq32_hkv8_d128", "B8_nctx2048_hq32_hkv8_d128", "B64_nctx512_hq32_hkv8_d128",
+      "B256_nctx256_hq32_hkv8_d128", "B4_nctx256_hq12_hkv4_d128", "B4_nctx256_hq12_hkv4_d80",
+      "B2_nctx128_hq8_hkv8_d64"
+    ]
+  },
+  "state_passing": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b8_nc16_cs256_nh32_dim8192", "b32_nc4_cs256_nh64_dim8192", "b1_nc1_cs8_nh4_dim16",
+      "b2_nc3_cs16_nh8_dim32", "b3_nc5_cs32_nh16_dim64"
+    ]
+  },
+  "fused_moe_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "T1_E8_N4096_K4096_tk2", "T8_E8_N4096_K4096_tk2", "T64_E8_N4096_K4096_tk2",
+      "T512_E8_N4096_K4096_tk2", "T4096_E8_N4096_K4096_tk2", "T8_E4_N64_K128_tk2",
+      "T17_E8_N128_K256_tk2", "T5_E4_N64_K128_tk1"
+    ]
+  },
+  "moe_fused_gate": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "case_1_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_8_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_64_256_8_sigmoid_1_True_1.0_False_0.0_8_4",
+      "case_512_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_4096_256_8_sigmoid_1_True_1.0_False_0.0_8_4", "case_1_8_2_sigmoid_0_True_1.0_False_0.0_1_1",
+      "case_37_256_8_sigmoid_1_True_2.5_False_0.0_8_4", "case_83_64_6_sqrtsoftplus_0_True_1.0_False_0.0_1_1", "case_17_32_4_softmax_0_False_1.0_False_30.0_1_1",
+      "case_9_128_6_sigmoid_0_True_1.7_True_0.0_1_1"
+    ]
+  },
+  "moe_fused_mul_sum": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "case_1_8_4096_False_False_8_None", "case_8_8_4096_False_False_8_None", "case_64_8_4096_False_False_8_None",
+      "case_512_8_4096_False_False_8_None", "case_4096_8_4096_False_False_8_None", "case_1_2_128_False_False_8_None",
+      "case_37_4_256_False_False_8_2.5", "case_83_6_512_True_False_16_None", "case_64_4_256_False_True_16_None"
+    ]
+  },
+  "layernorm_modulate": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2240], [1, 1024, 2240], [1, 4096, 2240],
+      [2, 77, 2240], [2, 1024, 2240], [2, 4096, 2240],
+      [8, 77, 2240], [8, 1024, 2240], [8, 4096, 2240]
+    ]
+  },
+  "pack_topk_ids": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 8, 256], [8, 8, 256], [64, 8, 256],
+      [512, 8, 256], [4096, 8, 256], [16384, 8, 256]
+    ]
+  },
+  "qk_head_layernorm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 32, 128], [1, 1024, 32, 128], [1, 4360, 32, 128],
+      [1, 16384, 32, 128]
+    ]
+  },
+  "residual_gate_add": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 3072, 0], [1, 3072, 1], [64, 3072, 0],
+      [64, 3072, 1], [1024, 3072, 0], [1024, 3072, 1],
+      [16384, 3072, 0], [16384, 3072, 1]
+    ]
+  },
+  "sglang_fl_rotary_embedding": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32, 8, 128], [8, 32, 8, 128], [64, 32, 8, 128],
+      [512, 32, 8, 128], [4096, 32, 8, 128]
+    ]
+  },
+  "store_cache_4d": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 8, 128], [8, 8, 128], [64, 8, 128],
+      [512, 8, 128], [4096, 8, 128]
+    ]
+  },
+  "tiny_k_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1536, 128], [1, 3072, 128], [2, 1536, 128],
+      [2, 3072, 128], [4, 1536, 128], [4, 3072, 128],
+      [8, 1536, 128], [8, 3072, 128], [16, 1536, 128],
+      [16, 3072, 128]
+    ]
+  },
+  "tiny_n_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 512, 7168], [1, 1536, 7168], [2, 512, 7168],
+      [2, 1536, 7168], [4, 512, 7168], [4, 1536, 7168],
+      [8, 512, 7168], [8, 1536, 7168], [16, 512, 7168],
+      [16, 1536, 7168]
+    ]
+  },
+  "topk_softmax": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 256, 8], [8, 256, 8], [64, 256, 8],
+      [512, 256, 8], [4096, 256, 8]
+    ]
+  },
+  "chain_speculative_sampling": {
+    "dtype": "torch.float32",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 4, 32000], [8, 4, 32000], [64, 4, 32000],
+      [512, 4, 32000], [4096, 4, 32000], [4, 5, 32],
+      [8, 8, 128], [2, 3, 16]
+    ]
+  },
+  "chunk_gated_delta_rule_fwd": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 512, 16, 128, 128], [1, 2048, 16, 128, 128], [2, 2048, 16, 128, 128],
+      [1, 4096, 16, 128, 128], [4, 4096, 16, 128, 128]
+    ]
+  },
+  "chunk_scaled_dot_kkt": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 16, 64, 8, 32, 128, 1], [32, 4, 64, 8, 32, 128, 1], [1, 1, 16, 2, 2, 32, 1],
+      [2, 3, 16, 2, 4, 32, 0], [3, 2, 32, 4, 8, 64, 1]
+    ]
+  },
+  "fused_moe": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048, 1408, 64, 8], [8, 2048, 1408, 64, 8], [64, 2048, 1408, 64, 8],
+      [512, 2048, 1408, 64, 8], [4096, 2048, 1408, 64, 8]
+    ]
+  },
+  "fused_recurrent_gated_delta_rule": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1, 16, 32, 128, 128], [8, 1, 16, 32, 128, 128], [64, 1, 16, 32, 128, 128],
+      [1, 2048, 16, 32, 128, 128], [256, 1, 16, 32, 128, 128]
+    ]
+  },
+  "fused_recurrent_gated_delta_rule_packed_decode": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      [1, 32, 16, 128, 128], [8, 32, 16, 128, 128], [64, 32, 16, 128, 128],
+      [256, 32, 16, 128, 128], [512, 32, 16, 128, 128]
+    ]
   }
 }

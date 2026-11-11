@@ -15,35 +15,29 @@
 """Benchmark for diffusion/rotary_embedding."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import rotary_embedding as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 INTERLEAVED = False
 
-# Shapes match kernel-comp-baseline/problems/diffusion/rotary_embedding.
-SHAPES = [(t, 16, 128) for t in (1, 64, 1024, 8192, 32768)]
-MORE_SHAPES = [(37, 16, 128), (1024, 8, 128), (4096, 16, 64)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    tokens, heads, head_size = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    x = torch.randn(tokens, heads, head_size, generator=g, device=device).to(
-        cur_dtype
+def _build_inputs(plan, cur_dtype, device):
+    tokens, heads, head_size = plan.builder_args[0]
+    args, kwargs = workload.build_inputs(
+        {"tokens": tokens, "heads": heads, "head_size": head_size},
+        cur_dtype,
+        device,
     )
-    ang = torch.randn(tokens, head_size // 2, generator=g, device=device)
-    yield x, torch.cos(ang).to(cur_dtype), torch.sin(ang).to(
-        cur_dtype
-    ), INTERLEAVED
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (tokens, heads, head_size) = shape
+    tokens, heads, head_size = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (tokens, heads, head_size),
@@ -68,10 +62,10 @@ def test_perf_rotary_embedding():
         op_name="rotary_embedding",
         torch_op=get_reference("rotary_embedding"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="tokens, heads, head_size",
     )
     bench.set_gems_from_module(flaggems_sglang)
