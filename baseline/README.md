@@ -51,8 +51,9 @@ flagos-optest /path/to/FlagGems-sglang --gpus 0 --ops "$OPS" \
 ```
 
 Check `speedup_source` per result: `origin` means the runner used a local
-ratio instead. The current workloads have one configuration per shape and dtype;
-future variants with the same shape need distinct keys and verified matching.
+ratio instead. Workloads such as `gate_topk` with multiple configurations per shape use
+explicit collection keys in their benchmark case plans. The benchmark looks
+up those keys directly.
 The existing `tools/op_sglang_perf_baseline.json` and repository workflow
 remain available during the migration. Correctness tests still use their own
 reference and inputs.

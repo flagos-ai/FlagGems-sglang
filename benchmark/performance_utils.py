@@ -652,6 +652,7 @@ class Benchmark:
             shape=plan.shape,
             params=plan.params,
             builder_args=(plan,),
+            baseline_key=plan.baseline_key,
         )
 
     def get_case_iter(self, dtype) -> Generator:
@@ -711,7 +712,9 @@ class Benchmark:
         update_result(self.op_name, json.loads(result_json))
         return result
 
-    def _measure_input(self, input, case_id=None, dtype=None):
+    def _measure_input(
+        self, input, case_id=None, dtype=None, baseline_key=None
+    ):
         metric = BenchmarkMetrics(case_id=case_id)
         try:
             args, kwargs = self.unpack_to_args_kwargs(input)
@@ -723,7 +726,7 @@ class Benchmark:
                 and "latency" in self.to_bench_metrics
             ):
                 base_rec, miss_reason = self._external_base_record(
-                    metric, dtype
+                    metric, dtype, baseline_key
                 )
                 if base_rec is not None and self.timing_reset_args:
                     get_latency = self._get_latency_with_input_reset
@@ -777,12 +780,13 @@ class Benchmark:
             gc.collect()
         return metric
 
-    def _external_base_record(self, metric, dtype):
+    def _external_base_record(self, metric, dtype, baseline_key=None):
         base_rec, miss_reason = lookup_base_record_ex(
             Config.base_data,
             self.op_name,
             dtype,
             metric.shape_detail,
+            baseline_key=baseline_key,
         )
         if base_rec is None:
             return None, miss_reason
@@ -901,7 +905,10 @@ class Benchmark:
                     pytest.fail(str(e))
                 metrics.append(
                     self._measure_input(
-                        input, case_id=case.case_id, dtype=dtype
+                        input,
+                        case_id=case.case_id,
+                        dtype=dtype,
+                        baseline_key=case.baseline_key,
                     )
                 )
                 executed.append(case.case_id)

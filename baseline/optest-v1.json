@@ -510,5 +510,48 @@
       [512, 2048], [512, 7168], [4096, 2048],
       [4096, 7168]
     ]
+  },
+  "gate_topk": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 256, 4], [1, 256, 8], [8, 256, 4],
+      [8, 256, 8], [64, 256, 4], [64, 256, 8],
+      [512, 256, 4], [512, 256, 8], [4096, 256, 4],
+      [4096, 256, 8]
+    ]
+  },
+  "get_target_cache_loc": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_nvt8", "bs8_nvt8", "bs64_nvt8",
+      "bs256_nvt8", "bs1024_nvt8"
+    ]
+  },
+  "moe_align_single_token": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "tk1_E256_blk16", "tk1_E256_blk64", "tk4_E256_blk16",
+      "tk4_E256_blk64", "tk8_E256_blk16", "tk8_E256_blk64",
+      "tk1_E256_blk128", "tk4_E256_blk128", "tk8_E256_blk128"
+    ]
+  },
+  "scatter_to_padded": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b1_sl1024_h16_d128", "b4_sl1024_h16_d128", "b16_sl1024_h16_d128",
+      "b64_sl1024_h16_d128"
+    ]
+  },
+  "seqlens_expand": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [512], [4096]
+    ]
   }
 }

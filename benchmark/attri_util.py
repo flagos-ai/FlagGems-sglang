@@ -458,7 +458,9 @@ def _match_by_signature(base_data, op_name, dtype, shape_detail):
     return None, None
 
 
-def lookup_base_record_ex(base_data, op_name, dtype, shape_detail):
+def lookup_base_record_ex(
+    base_data, op_name, dtype, shape_detail, *, baseline_key=None
+):
     """Look up the NVIDIA baseline record, three levels deep:
     op_name -> shape -> dtype. Returns a (record, miss_reason) tuple:
 
@@ -469,14 +471,23 @@ def lookup_base_record_ex(base_data, op_name, dtype, shape_detail):
 
     Never raises: an unmatched entry just yields a reason. Baseline layout:
         base_data[op_name]["shapes"][str([d0, d1, ...])][str(dtype)]
-    The shape key is the string of the first tensor's dimensions for simple
-    ops; complex ops fall back to the tensor-signature match.
+    A benchmark may supply its collection key explicitly for cases whose
+    tensor shapes cannot uniquely identify the workload. Otherwise use the
+    first tensor's dimensions and fall back to the tensor signature.
     """
     try:
         op_entry = base_data.get(op_name)
         if not op_entry:
             return None, f"baseline 中没有算子 '{op_name}'"
         shapes = op_entry.get("shapes", {})
+        if baseline_key is not None:
+            record = shapes.get(str(baseline_key), {}).get(str(dtype))
+            if record is None:
+                return (
+                    None,
+                    f"baseline has no case {baseline_key!r} for {op_name} ({dtype})",
+                )
+            return record, None
         first_shape = _first_tensor_shape(shape_detail)
         if first_shape is None:
             return None, (
