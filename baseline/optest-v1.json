@@ -416,5 +416,99 @@
       [4096, 1024, 4096], [4096, 4096, 4096], [4096, 7168, 4096],
       [7, 256, 512], [64, 1024, 512], [256, 1024, 4096]
     ]
+  },
+  "clamp_position": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [512], [4096], [16384]
+    ]
+  },
+  "compute_position": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1], [8], [64],
+      [256], [1024]
+    ]
+  },
+  "fused_moe_dispatch_index": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_topk8_E32_mmax8192", "t8_topk8_E32_mmax8192", "t64_topk8_E32_mmax8192",
+      "t512_topk8_E32_mmax8192", "t4096_topk8_E32_mmax8192"
+    ]
+  },
+  "fused_sigmoid_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "strided_bs1_h32_d128", "strided_bs8_h32_d128", "strided_bs64_h32_d128",
+      "strided_bs512_h32_d128", "strided_bs1024_h32_d128", "strided_bs4096_h32_d128"
+    ]
+  },
+  "gather_spec_extras": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "m1_pool4096_topk8_h7168", "m8_pool4096_topk8_h7168", "m64_pool4096_topk8_h7168",
+      "m512_pool4096_topk8_h7168", "m2048_pool4096_topk8_h7168"
+    ]
+  },
+  "group_norm_silu": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 64, 64], [1, 256, 32, 32], [2, 128, 64, 64],
+      [2, 256, 32, 32], [1, 512, 16, 16], [2, 512, 16, 16]
+    ]
+  },
+  "interleaved_rope": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [3, 1, 128], [3, 128, 128], [3, 2048, 128],
+      [3, 8192, 128], [3, 1, 48], [3, 37, 96],
+      [3, 257, 128]
+    ]
+  },
+  "sigmoid_gate_mul": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1024], [1, 4096], [1, 8192],
+      [8, 1024], [8, 4096], [8, 8192],
+      [64, 1024], [64, 4096], [64, 8192],
+      [512, 1024], [512, 4096], [512, 8192],
+      [4096, 1024], [4096, 4096], [4096, 8192]
+    ]
+  },
+  "tma_align_input_scale": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 56], [8, 56], [64, 56],
+      [512, 56], [4096, 56], [16384, 56]
+    ]
+  },
+  "unpad_draft_extend_output": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_tpb8_nh16_hd128", "bs8_tpb8_nh16_hd128", "bs64_tpb8_nh16_hd128",
+      "bs256_tpb8_nh16_hd128", "bs1024_tpb8_nh16_hd128"
+    ]
+  },
+  "vocab_parallel_embedding": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 7168], [8, 2048],
+      [8, 7168], [64, 2048], [64, 7168],
+      [512, 2048], [512, 7168], [4096, 2048],
+      [4096, 7168]
+    ]
   }
 }
