@@ -1,0 +1,243 @@
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Optional SGLang adapter; importing this module never initializes CUDA."""
+
+import functools
+import hashlib
+import importlib
+import logging
+import sys
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+_handle = None
+_configure_original = None
+_SOURCE_PINS = {
+    "sglang.kernels.ops.attention.dsv4.sm90_fp4_indexer": (
+        "a367425a9c89fb087650d857423e3df75c5ab102b68baf9821135c4f21712fb3",
+        "7f2ea95cfebbf3dc2eff8322f5255b757e3b476abceb82c3b9ae1f47b1b94930",
+        "9117aecd9098bf041b2145bd3bcfdf84cb20bcb6036b376a9f6a800d54559c9a",
+    ),
+    "sglang.kernels.ops.quantization.fp8_kernel": (
+        "5422b04361bc1d7cde2aba2e1077e150d477dedab255e1c9628a49ddcb9e9d24",
+        "bf4d819c35f35e58be94085c081425284de4d1efd640ff4b000219e1bfef1169",
+        "17a23c306dcf17c4b4ec5f6b7a5f521d90c3c3281c21174a26e7edd048920a01",
+    ),
+    "sglang.kernels.ops.layernorm.mhc": (
+        "a2377a7880c98b8559718021841af9e2e3497cb19a93e613e9efa13fdaae00b6",
+        "ea17b9c3716c541b71d5b9334e234e2445690e7d78a7a0a46c5bd6a9468c0335",
+        "7f8bd7d0a83d9d1438d045337d61957e36c56ebfca1a8185cfb03a6d8c99cc52",
+    ),
+}
+
+
+class Installation:
+    """Own only bindings replaced by this adapter; restore them by identity."""
+
+    def __init__(self, bindings, replacements, children=()):
+        self.bindings = bindings
+        self.replacements = replacements
+        self.children = children
+
+    def uninstall(self):
+        global _handle
+        for module, name, old, new in reversed(self.bindings):
+            if getattr(module, name, None) is new:
+                setattr(module, name, old)
+        for child in reversed(self.children):
+            child.uninstall()
+        if _handle is self:
+            _handle = None
+
+
+def _install_w4a8():
+    from .w4a8_moe import install_if_supported
+
+    return install_if_supported()
+
+
+def install():
+    """Install the source-pinned SM90 adapter in the current scheduler process.
+
+    The full-model adapter is deliberately narrower than the public numerical
+    APIs. Other SGLang source revisions must be reviewed explicitly before
+    extending these pins. No model weights, routing, communication or caches
+    are replaced. Invoke before model construction / CUDA Graph capture.
+    """
+    global _handle
+    if _handle is not None:
+        return _handle
+    import torch
+
+    if torch.cuda.get_device_capability() != (9, 0):
+        raise RuntimeError("DSV4.1 adapter requires SM90")
+    modules = {}
+    for name, expected in _SOURCE_PINS.items():
+        module = importlib.import_module(name)
+        supported = (expected,) if isinstance(expected, str) else expected
+        if (
+            hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+            not in supported
+        ):
+            raise RuntimeError("unreviewed SGLang operator source: " + name)
+        modules[name] = module
+
+    from flag_gems.fused.dsv41 import mhc as model_mhc
+    from flag_gems.fused.dsv41.fp4_indexer import (
+        FP4_INDEX_SCORE_ABI,
+        fp4_index_logits_decode,
+    )
+    from flag_gems.ops._w8a8_block_fp8_configs import (
+        _H100_MIDRANGE_FP8_CONFIGS,
+        BLOCK_FP8_SM90_ABI,
+    )
+    from flag_gems.ops.w8a8_block_fp8_matmul import w8a8_block_fp8_matmul
+
+    if (BLOCK_FP8_SM90_ABI, FP4_INDEX_SCORE_ABI, model_mhc.MHC_EXACT_ABI) != (
+        1,
+        1,
+        1,
+    ):
+        raise RuntimeError(
+            "incompatible FlagGems SM90 operator ABI; install the pinned dsv41 extra"
+        )
+
+    fp4 = modules["sglang.kernels.ops.attention.dsv4.sm90_fp4_indexer"]
+    mhc = modules["sglang.kernels.ops.layernorm.mhc"]
+    fp8 = modules["sglang.kernels.ops.quantization.fp8_kernel"]
+    replacements = {}
+    replacements[fp4.fp4_index_logits_decode] = fp4_index_logits_decode
+    # Request-table and candidate indexers are routed by sglang-plugin-FL
+    # through its backend policy, rather than patched here.
+    for name in ["hc_mix_stats", "hc_mix_stats_sinkhorn_exact", "hc_combine"]:
+        replacements[getattr(mhc, name)] = getattr(model_mhc, name)
+    # The release backport uses native implementations until installation.
+    # Install every public cast/prefill entry as well as decode before Graph.
+    from flag_gems.fused.dsv41 import fp4_prefill
+
+    from flaggems_sglang.runtime.backend._nvidia.hopper.ops._dsv41_fp8_prefill import (
+        fp8_index_logits_prefill,
+    )
+
+    from .compat.dsv41 import mhc as release_mhc
+
+    for name in [
+        "quantize_bf16_index_queries_fp8",
+        "unpack_fp4_index_keys_to_fp8",
+    ]:
+        replacements[getattr(fp4, name)] = getattr(fp4_prefill, name)
+    replacements[fp4.fp8_index_logits_prefill] = fp8_index_logits_prefill
+    replacements[mhc.hc_mix_stats_sinkhorn] = release_mhc.hc_mix_stats_sinkhorn
+    original = fp8.w8a8_block_fp8_matmul_triton
+
+    @functools.wraps(original)
+    def block_fp8(A, B, As, Bs, block_size, output_dtype=torch.float16):
+        supported = (
+            not torch._dynamo.is_compiling()
+            and A.ndim == B.ndim == 2
+            and tuple(block_size) == (32, 32)
+            and A.dtype == B.dtype == torch.float8_e4m3fn
+            and As.dtype == Bs.dtype == torch.float32
+            and output_dtype in (torch.bfloat16, torch.float32)
+            and A.is_contiguous()
+            and B.is_contiguous()
+            and (A.shape[0], B.shape[0], A.shape[1])
+            in _H100_MIDRANGE_FP8_CONFIGS
+        )
+        if supported:
+            return w8a8_block_fp8_matmul(A, B, As, Bs, [32, 32], output_dtype)
+        return original(A, B, As, Bs, block_size, output_dtype)
+
+    replacements[original] = block_fp8
+    bindings = []
+    pending = []
+    # Resolve all aliases before installing any replacements.
+    for name, module in list(sys.modules.items()):
+        if not name.startswith("sglang.") or module is None:
+            continue
+        for attr, value in list(vars(module).items()):
+            if not callable(value):
+                continue
+            try:
+                replacement = replacements.get(value)
+            except TypeError:
+                continue
+            if replacement is not None:
+                pending.append((module, attr, value, replacement))
+
+    moe = None
+    try:
+        moe = _install_w4a8()
+        for module, attr, old, new in pending:
+            if getattr(module, attr, None) is not old:
+                raise RuntimeError(
+                    "SGLang binding changed during installation"
+                )
+            setattr(module, attr, new)
+            bindings.append((module, attr, old, new))
+    except BaseException:
+        # Preserve wrappers belonging to another owner and undo our child first.
+        for module, attr, old, new in reversed(bindings):
+            if getattr(module, attr, None) is new:
+                setattr(module, attr, old)
+        if moe is not None:
+            moe.uninstall()
+        raise
+    _handle = Installation(bindings, replacements, (moe,) if moe else ())
+    logger.info(
+        "FlagGems DSV4.1 SM90 operator adapter installed: device=%d, bindings=%d",
+        torch.cuda.current_device(),
+        len(bindings),
+    )
+    return _handle
+
+
+def load_plugin():
+    """SGLang entry point; defer GPU imports to scheduler setup."""
+    global _configure_original
+    scheduler = sys.modules.get("sglang.srt.managers.scheduler")
+    if scheduler is None or _configure_original is not None:
+        return
+    _configure_original = scheduler.configure_scheduler_process
+
+    @functools.wraps(_configure_original)
+    def configure(*args, **kwargs):
+        result = _configure_original(*args, **kwargs)
+        server_args = kwargs.get("server_args", args[0] if args else None)
+        get_model_config = getattr(server_args, "get_model_config", None)
+        if not callable(get_model_config):
+            return result
+        model_config = get_model_config()
+        if (
+            getattr(model_config.hf_config, "model_type", None)
+            != "deepseek_v41"
+        ):
+            return result
+        import torch
+
+        if not torch.cuda.is_available():
+            return result
+        gpu_id = kwargs.get("gpu_id", args[1] if len(args) > 1 else None)
+        if gpu_id is None:
+            raise RuntimeError("scheduler GPU identity missing")
+        torch.cuda.set_device(gpu_id)
+        if torch.cuda.get_device_capability() == (9, 0):
+            install()
+        return result
+
+    scheduler.configure_scheduler_process = configure
+
+
+__all__ = ["install", "load_plugin"]
