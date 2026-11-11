@@ -670,6 +670,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fp8_per_token_to_per_tensor_quant
+    description: |
+      Requantize expert activations from per-128 group scales to one per-tensor scale:
+      dequantize with x_scale, divide by output_scale, cast to e4m3. Rows at or past
+      masked_m[e] come back zero, since that band is not a real activation.
+    for:
+      - fp8_per_token_to_per_tensor_quant
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+
   - id: fused_dual_residual_rmsnorm
     description: |
       Two chained RMS norms with a residual add in between.
