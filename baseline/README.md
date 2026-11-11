@@ -35,11 +35,19 @@ python /path/to/optest/src/nv_baseline/collect_baseline_multi_gpu.py \
     --ops "$OPS" --output /tmp/sglang-nv.json
 ```
 
-Run the command above with SGLang v0.5.21. For standalone KKT, use SGLang
-v0.5.11 and run the same collector with `--ops chunk_scaled_dot_kkt` and
+Run the command above with SGLang v0.5.21. For standalone KKT, install SGLang
+from commit `fa243fee401c5c1fcaa8faa85d73dd8168f5cc4a` and run the same
+collector with `--ops chunk_scaled_dot_kkt` and
 `--output /tmp/sglang-kkt-nv.json`. Later releases fuse KKT with the triangular
 solve. Add the `chunk_scaled_dot_kkt` entry to a copy of the primary JSON
 before replay and retain the two original files for provenance.
+
+The original standalone KKT baseline is in
+[`kernel-comp-baseline@3b1adb78e39790b75652c55fc6e74bc521f840b3`](https://github.com/liuhycs/kernel-comp-baseline/blob/3b1adb78e39790b75652c55fc6e74bc521f840b3/problems/fla/chunk_scaled_dot_kkt/baseline.py),
+the last revision before the problem was removed. Its repository-wide freeze
+records [`SGLang@fa243fee401c5c1fcaa8faa85d73dd8168f5cc4a`](https://github.com/sgl-project/sglang/blob/fa243fee401c5c1fcaa8faa85d73dd8168f5cc4a/python/sglang/kernels/ops/attention/fla/chunk_scaled_dot_kkt.py#L89),
+which exports the original `chunk_scaled_dot_kkt_fwd` entry point under
+`sglang.kernels.ops.attention.fla.chunk_scaled_dot_kkt`.
 
 Before publishing a versioned artifact, check the collector's
 `/tmp/sglang-nv.json.work/status.json` and confirm every selected key listed in

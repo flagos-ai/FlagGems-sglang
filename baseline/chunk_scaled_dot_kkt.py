@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Native SGLang v0.5.11 collection workload for chunk_scaled_dot_kkt."""
+"""Collection workload for the original standalone SGLang KKT kernel."""
 
 import torch
 
@@ -33,7 +33,7 @@ MORE_SHAPES = [
 
 def native():
     try:
-        from sglang.srt.layers.attention.fla.chunk_scaled_dot_kkt import (
+        from sglang.kernels.ops.attention.fla.chunk_scaled_dot_kkt import (
             chunk_scaled_dot_kkt_fwd as op,
         )
     except (ImportError, AttributeError, OSError, RuntimeError):
