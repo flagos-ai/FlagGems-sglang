@@ -15,33 +15,20 @@
 """Benchmark for attention/log_scaling_tau."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import log_scaling_tau as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match kernel-comp-baseline/problems/attention/log_scaling_tau.
-SHAPES = [(t, 16, 128) for t in (1, 128, 2048, 8192)]
-# (37, 8, 64) and (129, 512) from the correctness cases; the 2-D case is
-# padded with a 1 so every shape tuple has the same arity.
-MORE_SHAPES = [(1, 1, 128), (37, 8, 64), (129, 1, 512)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    g = torch.Generator(device=device).manual_seed(0)
-    # A leading 1 in the middle position marks a genuinely 2-D case.
-    dims = tuple(d for i, d in enumerate(shape) if not (i == 1 and d == 1))
-    x = torch.randn(*dims, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    # tau is per-row (one entry per index along dim 0).
-    tau = 0.5 + torch.rand(
-        shape[0], generator=g, device=device, dtype=torch.float32
-    )
-    yield x, tau
+def _build_inputs(plan, cur_dtype, device):
+    t, heads, d = plan.builder_args[0]
+    return workload.build_inputs(
+        {"t": t, "heads": heads, "d": d}, cur_dtype, device
+    )[0]
 
 
 def _case_fn(shape, cur_dtype):
@@ -63,10 +50,10 @@ def test_perf_log_scaling_tau():
         op_name="log_scaling_tau",
         torch_op=get_reference("log_scaling_tau"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="t, heads, d",
     )
     bench.set_gems_from_module(flaggems_sglang)

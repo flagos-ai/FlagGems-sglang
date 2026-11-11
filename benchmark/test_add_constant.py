@@ -15,31 +15,18 @@
 """Benchmark for elementwise/add_constant."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import add_constant as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match kernel-comp-baseline/problems/elementwise/add_constant.
-SHAPES = [(1 << 12,), (1 << 16,), (1 << 20,)]
-MORE_SHAPES = [(1 << 24,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    (n,) = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    src = torch.randint(
-        -(2**20),
-        2**20,
-        (n,),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    yield src, 42
+def _build_inputs(plan, cur_dtype, device):
+    (n,) = plan.builder_args[0]
+    return workload.build_inputs({"n": n}, cur_dtype, device)[0]
 
 
 def _case_fn(shape, cur_dtype):
@@ -57,10 +44,10 @@ def test_perf_add_constant():
         op_name="add_constant",
         torch_op=get_reference("add_constant"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n",
     )
     bench.set_gems_from_module(flaggems_sglang)

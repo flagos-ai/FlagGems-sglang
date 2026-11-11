@@ -170,5 +170,70 @@
       [512, 1024], [512, 4096], [512, 8192],
       [4096, 1024], [4096, 4096], [4096, 8192]
     ]
+  },
+  "add_constant": {
+    "dtype": "torch.int32",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [4096], [65536], [1048576],
+      [16777216]
+    ]
+  },
+  "fused_norm_rope_stacked": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_L8_kvh8_hd128_rd128", "t128_L8_kvh8_hd128_rd128", "t2048_L8_kvh8_hd128_rd128",
+      "t8192_L8_kvh8_hd128_rd128", "t1_L2_kvh2_hd64_rd64", "t37_L3_kvh4_hd128_rd128",
+      "t129_L2_kvh2_hd128_rd64"
+    ]
+  },
+  "log_scaling_tau": {
+    "dtype": "torch.float16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 16, 128], [128, 16, 128], [2048, 16, 128],
+      [8192, 16, 128]
+    ]
+  },
+  "ltx2_split_rotary": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 1, 16, 128], [1, 64, 16, 128], [1, 1024, 16, 128],
+      [1, 8192, 16, 128]
+    ]
+  },
+  "per_token_group_quant_int8": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 2048], [1, 4096], [1, 8192],
+      [8, 2048], [8, 4096], [8, 8192],
+      [64, 2048], [64, 4096], [64, 8192],
+      [512, 2048], [512, 4096], [512, 8192],
+      [4096, 2048], [4096, 4096], [4096, 8192],
+      [7, 128], [83, 512], [256, 4096],
+      [3, 256]
+    ]
+  },
+  "recompute_w_u": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "b1_t64_h16_hg4_k128_v128_bt64", "b1_t256_h16_hg4_k128_v128_bt64", "b1_t1024_h16_hg4_k128_v128_bt64",
+      "b1_t4096_h16_hg4_k128_v128_bt64"
+    ]
+  },
+  "rmsnorm_hf": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128], [1, 4096], [1, 7168],
+      [8, 128], [8, 4096], [8, 7168],
+      [64, 128], [64, 4096], [64, 7168],
+      [512, 128], [512, 4096], [512, 7168],
+      [4096, 128], [4096, 4096], [4096, 7168]
+    ]
   }
 }

@@ -4,6 +4,9 @@ FlagGems-sglang owns the workload, baseline artifact, and target test run.
 Use a pinned FlagOS optest checkout as the H800 collector. The supported
 workloads are listed in `optest-v1.json`. Their benchmark case plans reuse the
 collection input builders and preserve the existing core and comprehensive grids.
+The manifest lists only the cases selected for collection. For example,
+`log_scaling_tau` collects the four existing 3-D core cases, while its
+comprehensive benchmark also runs the three additional local cases.
 
 Each module exposes `OP_NAME`, `DTYPES`, `IS_INPLACE`, `native()`, `grid()`,
 `build_inputs()`, and `key_shape()`. Use the actual SGLang CUDA callable;
