@@ -205,16 +205,6 @@ def _baseline_awq(input, qweight, scales, qzeros, split_k_iters):
     return output
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    """Backward-compatible alias for the operator entry point."""
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    """Compatibility entry point with the exact requested argument names."""
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 @triton.jit
 def _group_sum(
     P,

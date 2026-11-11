@@ -1282,14 +1282,6 @@ def _awq_nv_previous(input, qweight, scales, qzeros, split_k_iters):
     return output
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 @triton.jit
 def _awq_nv_case_0(A, Q, S, Z, P):
     _awq_control_gemv(

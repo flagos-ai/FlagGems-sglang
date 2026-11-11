@@ -533,14 +533,6 @@ def _awq_original(input, qweight, scales, qzeros, split_k_iters):
     return out
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 @triton.jit
 def _r5_unpack(packed):
     logical = tl.arange(0, 8)

@@ -970,14 +970,6 @@ def _awq_general(input, qweight, scales, qzeros, split_k_iters):
     return output
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 @triton.jit
 def _contiguous_gemv(
     A,

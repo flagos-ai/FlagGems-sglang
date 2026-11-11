@@ -832,14 +832,6 @@ def _baseline_awq_gemm(input, qweight, scales, qzeros, split_k_iters):
     return _row_reuse_gemm(input, qweight, scales, qzeros, split_k_iters)
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 # Staged native SDNN path preserves both operand rounding locations;
 # M=1 retains full FP32 operands.
 @triton.jit

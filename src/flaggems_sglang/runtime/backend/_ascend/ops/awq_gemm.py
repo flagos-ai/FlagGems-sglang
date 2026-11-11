@@ -847,12 +847,4 @@ def awq_gemm(input, qweight, scales, qzeros, split_k_iters):
     return out
 
 
-def solution(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
-def reference(input, qweight, scales, qzeros, split_k_iters):
-    return awq_gemm(input, qweight, scales, qzeros, split_k_iters)
-
-
 __all__ = ["awq_gemm"]
