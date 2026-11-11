@@ -1,9 +1,9 @@
 # NVIDIA performance baselines
 
-The operator library owns the workload; FlagOS optest owns H800 collection and
-publishes the resulting JSON. This directory starts with `silu_and_mul` and
-`softcap_inplace_logits`. Their benchmark case plans reuse these input builders
-and preserve the existing core and comprehensive grids.
+FlagGems-sglang owns the workload, baseline artifact, and target test run.
+Use a pinned FlagOS optest checkout as the H800 collector. The supported
+workloads are listed in `optest-v1.json`. Their benchmark case plans reuse the
+collection input builders and preserve the existing core and comprehensive grids.
 
 Each module exposes `OP_NAME`, `DTYPES`, `IS_INPLACE`, `native()`, `grid()`,
 `build_inputs()`, and `key_shape()`. Use the actual SGLang CUDA callable;
@@ -23,11 +23,8 @@ the external record.
 and lists the exact workload keys required for publication. Update it with
 the workload grid when adding or changing collection cases.
 
-In the optest repository, run the `nv-baseline` workflow with
-`repo=FlagGems-sglang` and `ref` set to the desired FlagGems-sglang commit.
-For verification set `auto_update=false` and use the uploaded JSON and its
-collection status report. The equivalent collector invocation in the
-configured H800 SGLang/NCU environment is:
+In the H800 SGLang/NCU environment, invoke the collector from a pinned optest
+checkout. Set `--output` to the desired local artifact path:
 
 ```sh
 python /path/to/optest/src/nv_baseline/collect_baseline_nvidia.py \
@@ -35,9 +32,9 @@ python /path/to/optest/src/nv_baseline/collect_baseline_nvidia.py \
     --ops silu_and_mul,softcap_inplace_logits --output /tmp/sglang-nv.json
 ```
 
-The workflow requires all declared shapes and dtypes to complete timing and
-profiling before it can replace the published file. The target runner can
-then use the static H800 baseline:
+Verify that all selected workload keys completed timing and profiling before
+publishing a versioned artifact. On the target machine, make that JSON available
+locally and pass it to the benchmark with `--base-data`. For example:
 
 ```sh
 flagos-optest /path/to/FlagGems-sglang --gpus 0 \
@@ -46,7 +43,7 @@ flagos-optest /path/to/FlagGems-sglang --gpus 0 \
 ```
 
 Check `speedup_source` per result: `origin` means the runner used a local
-ratio instead. These two workloads have one configuration per shape and dtype;
+ratio instead. The current workloads have one configuration per shape and dtype;
 future variants with the same shape need distinct keys and verified matching.
 The existing `tools/op_sglang_perf_baseline.json` and repository workflow
 remain available during the migration. Correctness tests still use their own
