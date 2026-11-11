@@ -49,9 +49,10 @@ records [`SGLang@fa243fee401c5c1fcaa8faa85d73dd8168f5cc4a`](https://github.com/s
 which exports the original `chunk_scaled_dot_kkt_fwd` entry point under
 `sglang.kernels.ops.attention.fla.chunk_scaled_dot_kkt`.
 
-Before publishing a versioned artifact, check the collector's
-`/tmp/sglang-nv.json.work/status.json` and confirm every selected key listed in
-`optest-v1.json` has a latency and NCU record in the JSON. On the target machine,
+Before publishing a versioned artifact, check both collector status files
+(`/tmp/sglang-nv.json.work/status.json` and
+`/tmp/sglang-kkt-nv.json.work/status.json`) and confirm every selected key
+listed in `optest-v1.json` has a latency and NCU record. On the target machine,
 install `flagos-optest` from the same pinned checkout, make that JSON available
 locally, and pass it to the benchmark with `--base-data`:
 

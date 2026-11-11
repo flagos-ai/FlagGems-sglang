@@ -45,6 +45,7 @@ def native():
             cache_k_nope,
             cache_k_rope,
             loc,
+            -1,  # All workload locations, including slot 0, are valid.
             kv_buffer.stride(0),
             cache_k_nope.stride(0),
             cache_k_rope.stride(0),

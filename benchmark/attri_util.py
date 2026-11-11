@@ -472,8 +472,9 @@ def lookup_base_record_ex(
     Never raises: an unmatched entry just yields a reason. Baseline layout:
         base_data[op_name]["shapes"][str([d0, d1, ...])][str(dtype)]
     A benchmark may supply its collection key explicitly for cases whose
-    tensor shapes cannot uniquely identify the workload. Otherwise use the
-    first tensor's dimensions and fall back to the tensor signature.
+    tensor shapes cannot uniquely identify the workload. The legacy SGLang
+    collector recorded its repo in environment.run and used older case keys.
+    Its compatible records can still use the original shape lookup.
     """
     try:
         op_entry = base_data.get(op_name)
@@ -481,13 +482,18 @@ def lookup_base_record_ex(
             return None, f"baseline 中没有算子 '{op_name}'"
         shapes = op_entry.get("shapes", {})
         if baseline_key is not None:
+            run = base_data.get("_environment", {}).get("run", {})
+            legacy_sglang = run.get("repo") == "sglang"
+            if legacy_sglang and op_name == "chunk_scaled_dot_kkt":
+                return None, "legacy baseline measured the KDA operator"
             record = shapes.get(str(baseline_key), {}).get(str(dtype))
-            if record is None:
+            if record is not None:
+                return record, None
+            if not legacy_sglang:
                 return (
                     None,
                     f"baseline has no case {baseline_key!r} for {op_name} ({dtype})",
                 )
-            return record, None
         first_shape = _first_tensor_shape(shape_detail)
         if first_shape is None:
             return None, (
