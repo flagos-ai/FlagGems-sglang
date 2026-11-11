@@ -1857,6 +1857,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: silu_mul_dynamic_tensorwise_quant
+    description: |
+      Fused gated SiLU, multiply and dynamic tensorwise FP8 quantisation. Derives the per-tensor scale from the data as max(absmax(activation), 1e-10) over the finite FP8 maximum, so no calibrated scale is needed.
+      Computes the absmax over the active prefix, then writes that prefix into a copy of the caller's FP8 buffer; rows beyond the token count keep their existing contents.
+    for:
+      - silu_mul_dynamic_tensorwise_quant
+    labels:
+      - fused
+      - pointwise
+      - quantize
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: softcap_inplace_logits
     description: |
       In-place logit softcapping. Computes cap * tanh(x / cap) over the full logit tensor.
