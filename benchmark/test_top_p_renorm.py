@@ -15,38 +15,30 @@
 """Benchmark for sampling_grammar/top_p_renorm."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import top_p_renorm as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/sampling_grammar/top_p_renorm.
-SHAPES = [(b, v) for b in (1, 8, 64) for v in (32000, 131072)]
-MORE_SHAPES = [(b, v) for b in (256,) for v in (32000, 131072)]
-
-_TOP_P = 0.9
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, vocab = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    logits = torch.randn(
-        batch, vocab, dtype=torch.float32, device=device, generator=g
-    )
-    yield torch.softmax(logits, dim=-1).contiguous(), _TOP_P
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, vocab) = shape
+    batch, vocab = shape
     yield BenchmarkCasePlan(
         shape={"probs": (batch, vocab)},
         params={
             "configuration": shape,
             "seed": 9,
-            "_TOP_P": _TOP_P,
+            "_TOP_P": workload._TOP_P,
             "batch": batch,
             "vocab": vocab,
         },
@@ -60,10 +52,10 @@ def test_perf_top_p_renorm():
         op_name="top_p_renorm",
         torch_op=get_reference("top_p_renorm"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, vocab",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,31 +15,24 @@
 """Benchmark for attention/fused_softmax_pool."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_softmax_pool as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/fused_softmax_pool.
-SHAPES = [(bs, k, 128) for bs in (1, 64, 1024) for k in (4, 16, 64)]
-MORE_SHAPES = [(bs, k, 128) for bs in (4096,) for k in (4, 16, 64)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, k, head_dim = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    # The last axis packs [kv(head_dim), score(head_dim)].
-    kv_score = torch.randn(bs, k, 2 * head_dim, device=device, generator=g).to(
-        cur_dtype
-    )
-    yield kv_score.contiguous(), head_dim
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, k, head_dim) = shape
+    bs, k, head_dim = shape
     yield BenchmarkCasePlan(
         shape={"kv_score": (bs, k, 2 * head_dim)},
         params={
@@ -59,10 +52,10 @@ def test_perf_fused_softmax_pool():
         op_name="fused_softmax_pool",
         torch_op=get_reference("fused_softmax_pool"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, k, head_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)
