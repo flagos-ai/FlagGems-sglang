@@ -1728,6 +1728,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: set_mla_kv_buffer_fp8_quant
+    description: |
+      Cast the MLA key to eight bits and scatter it into the paged KV cache.
+      Each token's NoPE and RoPE key parts are concatenated along the last axis, downcast to the requested FP8 dtype, and stored at slot loc[i] in an FP8 view of a copy of the buffer, which is returned.
+    for:
+      - set_mla_kv_buffer_fp8_quant
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: set_token_filter
     description: |
       Grammar and structured-output token mask: resets one row of the int32 vocab bitmask, then sets or clears
