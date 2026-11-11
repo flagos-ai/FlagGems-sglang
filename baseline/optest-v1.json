@@ -954,5 +954,60 @@
       "s512_L4_r32_n4096", "s1024_L2_r64_n4096", "s5_L1_r16_n64",
       "s22_L2_r16_n128", "s13_L2_r32_n256"
     ]
+  },
+  "fla_layernorm_gated": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "t1_d2048_swish_rms1_bias1", "t8_d2048_swish_rms1_bias1", "t64_d2048_swish_rms1_bias1",
+      "t512_d2048_swish_rms1_bias1", "t4096_d2048_swish_rms1_bias1", "t1_d64_swish_rms1_bias1",
+      "t37_d256_sigmoid_rms1_bias1", "t83_d512_swish_rms0_bias0"
+    ]
+  },
+  "fused_moe_router_cudacore": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 256, 8, 0.0, false], [8, 4096, 256, 8, 0.0, false], [64, 4096, 256, 8, 0.0, false],
+      [512, 4096, 256, 8, 0.0, false], [4096, 4096, 256, 8, 0.0, false], [1, 64, 8, 1, 0.0, false],
+      [37, 256, 16, 2, 30.0, false], [83, 512, 32, 3, 0.0, true]
+    ]
+  },
+  "fused_moe_router_tensorcore": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 256, 2, 0.0, false], [8, 4096, 256, 2, 0.0, false], [64, 4096, 256, 2, 0.0, false],
+      [512, 4096, 256, 2, 0.0, false], [4096, 4096, 256, 2, 0.0, false], [1, 64, 8, 1, 0.0, false],
+      [37, 256, 16, 2, 30.0, false], [83, 512, 32, 2, 0.0, true]
+    ]
+  },
+  "mamba_layernorm_gated": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 4096, 128], [8, 4096, 128], [64, 4096, 128],
+      [512, 4096, 128], [4096, 4096, 128], [1, 64, 64],
+      [37, 256, 64], [83, 512, 128], [4, 1024, 1024]
+    ]
+  },
+  "chunk_local_cumsum_scalar": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 1024, 32], "[8, 1024, 32]_reverse", [32, 256, 64],
+      "[32, 256, 64]_reverse", [2, 48, 8], "[2, 48, 8]_reverse",
+      [3, 64, 16], "[3, 64, 16]_reverse"
+    ]
+  },
+  "chunk_local_cumsum_vector": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 1024, 8, 64], "[8, 1024, 8, 64]_reverse", [32, 256, 8, 128],
+      "[32, 256, 8, 128]_reverse", [1, 16, 2, 16], "[1, 16, 2, 16]_reverse",
+      [2, 48, 4, 32], "[2, 48, 4, 32]_reverse", [3, 64, 4, 64],
+      "[3, 64, 4, 64]_reverse"
+    ]
   }
 }
