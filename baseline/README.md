@@ -27,7 +27,8 @@ checkout (`e160a8ae56dcc3594e8b34d6408f04647d5b7e16` was used for workload
 discovery). Set `--output` to a fresh local artifact path:
 
 ```sh
-OPS=silu_and_mul,softcap_inplace_logits,softcap_out,fused_rmsnorm,l2norm
+WORKLOADS=/path/to/FlagGems-sglang/baseline/optest-v1.json
+OPS=$(python -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))))' "$WORKLOADS")
 python /path/to/optest/src/nv_baseline/collect_baseline_multi_gpu.py \
     --ops-dir /path/to/FlagGems-sglang/baseline --devices 0 \
     --ops "$OPS" --output /tmp/sglang-nv.json
@@ -40,7 +41,8 @@ install `flagos-optest` from the same pinned checkout, make that JSON available
 locally, and pass it to the benchmark with `--base-data`:
 
 ```sh
-OPS=silu_and_mul,softcap_inplace_logits,softcap_out,fused_rmsnorm,l2norm
+WORKLOADS=/path/to/FlagGems-sglang/baseline/optest-v1.json
+OPS=$(python -c 'import json, sys; print(",".join(json.load(open(sys.argv[1]))))' "$WORKLOADS")
 flagos-optest /path/to/FlagGems-sglang --gpus 0 --ops "$OPS" \
     --base-data /tmp/sglang-nv.json --speedup-source nv_baseline
 ```
