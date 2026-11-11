@@ -890,5 +890,69 @@
       "t1_tk8_h7168_E32_z8", "t8_tk8_h7168_E32_z8", "t64_tk8_h7168_E32_z8",
       "t512_tk8_h7168_E32_z8", "t4096_tk8_h7168_E32_z8"
     ]
+  },
+  "chunked_embedding_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s4096_L4_r32_V32000", "s8192_L2_r64_V128256", "s5_L1_r16_V128",
+      "s48_L2_r32_V512", "s18_L2_r16_V256"
+    ]
+  },
+  "chunked_sgmv_expand": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_slc4096x4096", "s1024_L2_r64_slc4096x1024x1024", "s8_L1_r16_slc64",
+      "s64_L2_r16_slc128x64", "s32_L2_r32_slc256x128x128"
+    ]
+  },
+  "chunked_sgmv_shrink": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s512_L4_r32_k4096_sl1", "s1024_L2_r64_k4096_sl1", "s8_L1_r16_k64_sl1",
+      "s64_L2_r16_k128_sl1", "s32_L2_r32_k256_sl3"
+    ]
+  },
+  "embedding_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s4096_L4_r32_V32000_0", "s8192_L2_r64_V128256_0", "s5_L1_r16_V128_0",
+      "s22_L2_r32_V512_0", "s13_L2_r16_V256_8"
+    ]
+  },
+  "gate_up_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_od4096_none", "s1024_L2_r64_od4096_none", "s5_L1_r16_od64_none",
+      "s22_L2_r16_od128_none", "s13_L2_r32_od256_shuffled"
+    ]
+  },
+  "qkv_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_dq4096_dkv1024", "s1024_L2_r64_dq4096_dkv1024", "s5_L1_r16_dq64_dkv32",
+      "s22_L2_r16_dq128_dkv64", "s13_L2_r32_dq256_dkv128"
+    ]
+  },
+  "sgemm_lora_a": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "s512_L4_r32_k4096_stk1_none", "s1024_L2_r64_k4096_stk1_none", "s5_L1_r16_k64_stk1_none",
+      "s22_L2_r16_k128_stk1_none", "s13_L2_r32_k256_stk3_shuffled"
+    ]
+  },
+  "sgemm_lora_b": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "no-graph-device-event-reset-outside-5warmup-25sample-median",
+    "shapes": [
+      "s512_L4_r32_n4096", "s1024_L2_r64_n4096", "s5_L1_r16_n64",
+      "s22_L2_r16_n128", "s13_L2_r32_n256"
+    ]
   }
 }

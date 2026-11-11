@@ -458,7 +458,7 @@ class Benchmark:
 
     def _get_latency_with_input_reset(self, op, *args, **kwargs):
         fn, _ = self._benchmark_callable(op, *args, **kwargs)
-        return self._time_with_input_reset(fn, args)
+        return self._time_with_input_reset(fn, args, kwargs)
 
     def _get_latency_with_triton_baseline(self, op, *args, **kwargs):
         fn, xs = self._benchmark_callable(op, *args, **kwargs)
@@ -470,12 +470,14 @@ class Benchmark:
             grad_to_none=xs if self.is_backward else None,
         )
 
-    def _time_with_input_reset(self, fn, args):
+    def _time_with_input_reset(self, fn, args, kwargs):
         # Match optest's native in-place protocol. Copies are outside the
         # event interval, and each invocation sees the original input.
-        snapshots = [
-            (args[i], args[i].clone()) for i in self.timing_reset_args
+        values = [
+            args[location] if isinstance(location, int) else kwargs[location]
+            for location in self.timing_reset_args
         ]
+        snapshots = [(value, value.clone()) for value in values]
 
         def restore():
             for value, snapshot in snapshots:
