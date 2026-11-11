@@ -235,5 +235,64 @@
       [512, 128], [512, 4096], [512, 7168],
       [4096, 128], [4096, 4096], [4096, 7168]
     ]
+  },
+  "concat_mla_absorb_q": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 128, 512, 64], [8, 128, 512, 64], [64, 128, 512, 64],
+      [512, 128, 512, 64], [4096, 128, 512, 64]
+    ]
+  },
+  "dsv3_fused_a_gemm": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 7168, 2112], [2, 7168, 2112], [4, 7168, 2112],
+      [8, 7168, 2112], [16, 7168, 2112]
+    ]
+  },
+  "fused_pack_qkv": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "bs1_seq8_h16_d128", "bs1_seq128_h16_d128", "bs1_seq1024_h16_d128",
+      "bs1_seq8192_h16_d128"
+    ]
+  },
+  "pack_qkv_destination_major": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      "r64_gh32_hs128_ws8", "r1024_gh32_hs128_ws8", "r4096_gh32_hs128_ws8",
+      "r16384_gh32_hs128_ws8"
+    ]
+  },
+  "rmsnorm_scale": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 2048], [8, 4096], [64, 2048],
+      [64, 4096], [1024, 2048], [1024, 4096],
+      [8192, 2048], [8192, 4096]
+    ]
+  },
+  "rmsnorm_scale_shift": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [1, 77, 2048], [1, 1024, 2048], [1, 4096, 2048],
+      [2, 77, 2048], [2, 1024, 2048], [2, 4096, 2048],
+      [8, 77, 2048], [8, 1024, 2048], [8, 4096, 2048]
+    ]
+  },
+  "rmsnorm_tanh_residual": {
+    "dtype": "torch.bfloat16",
+    "timing_protocol": "triton-do-bench-no-graph-25ms-warmup-100ms-median",
+    "shapes": [
+      [8, 2048], [8, 4096], [64, 2048],
+      [64, 4096], [1024, 2048], [1024, 4096],
+      [8192, 2048], [8192, 4096]
+    ]
   }
 }

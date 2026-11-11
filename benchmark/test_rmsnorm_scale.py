@@ -15,36 +15,24 @@
 """Benchmark for diffusion/rmsnorm_scale."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import rmsnorm_scale as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(r, d) for r in (8, 64, 1024) for d in (2048, 4096)]
-MORE_SHAPES = [(8192, d) for d in (2048, 4096)]
 
-_EPS = 1e-6
-
-
-def _input_fn(shape, cur_dtype, device):
-    rows, dim = shape
-    g = torch.Generator(device=device).manual_seed(9)
-
-    def _t(*s):
-        return torch.randn(
-            *s, dtype=torch.float32, device=device, generator=g
-        ).to(cur_dtype)
-
-    # scale has one row per x row here; the broadcast path is covered by the
-    # test.
-    yield _t(rows, dim), _t(dim), _t(rows, dim), _EPS
+def _build_inputs(plan, cur_dtype, device):
+    rows, dim = plan.builder_args[0]
+    return workload.build_inputs(
+        {"rows": rows, "dim": dim}, cur_dtype, device
+    )[0]
 
 
 def _case_fn(shape, cur_dtype):
-    (num_rows, hidden) = shape
+    num_rows, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (num_rows, hidden),
@@ -67,10 +55,10 @@ def test_perf_rmsnorm_scale():
         op_name="rmsnorm_scale",
         torch_op=get_reference("rmsnorm_scale"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_rows, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)
