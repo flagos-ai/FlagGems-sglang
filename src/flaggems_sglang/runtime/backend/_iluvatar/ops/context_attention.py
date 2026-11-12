@@ -2,7 +2,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 _CONFIGS = [
     triton.Config({"BLOCK_M": 128, "BLOCK_N": 32}, num_warps=8, num_stages=3),
     triton.Config({"BLOCK_M": 128, "BLOCK_N": 64}, num_warps=8, num_stages=2),
