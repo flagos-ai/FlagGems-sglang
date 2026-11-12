@@ -1055,6 +1055,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: gemma4_fused_routing
+    description: |
+      Fused MoE routing for Gemma-4 style gating: topk experts in descending logit order (ties prefer the
+      smaller id), softmax over the selected logits, scaled by per-expert scale. Returns fp32 weights + int32 ids.
+    for:
+      - gemma4_fused_routing
+    labels:
+      - fused
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: gemma_fused_add_rmsnorm
     description: |
       Residual add fused with Gemma RMSNorm, returning both the normalized output and the pre-norm sum.
