@@ -15,54 +15,24 @@
 """Benchmark for mamba/causal_conv1d_update."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import causal_conv1d_update as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/causal_conv1d_update.
-SHAPES = [(64, 4096, 4, 1), (256, 2048, 4, 1)]
-MORE_SHAPES = [(2, 16, 4, 1), (5, 64, 4, 1), (3, 32, 3, 4)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, dim, width, seqlen = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    state_len = width - 1
-    x = torch.randn(
-        batch,
-        dim,
-        seqlen,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    if seqlen == 1:
-        x = x.squeeze(-1)
-    conv_state = torch.randn(
-        batch,
-        dim,
-        state_len,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    weight = torch.randn(
-        dim, width, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    bias = torch.randn(
-        dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    # ``activation`` keeps its "silu" default: unpack_to_args_kwargs drops
-    # bare str positionals.
-    yield x, conv_state, weight, bias
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, dim, width, seqlen) = shape
+    batch, dim, width, seqlen = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (batch, dim) if seqlen == 1 else (batch, dim, seqlen),
@@ -88,10 +58,11 @@ def test_perf_causal_conv1d_update():
         op_name="causal_conv1d_update",
         torch_op=get_reference("causal_conv1d_update"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, dim, width, seqlen",
     )
     bench.set_gems_from_module(flaggems_sglang)

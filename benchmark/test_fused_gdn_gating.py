@@ -15,41 +15,24 @@
 """Benchmark for fla/fused_gdn_gating."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_gdn_gating as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/fused_gdn_gating.
-SHAPES = [(m, 64) for m in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(1, 4), (37, 32), (256, 8)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, num_heads = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    # This op is float32 throughout; cur_dtype is not applied.
-    a_log = (
-        torch.randn(num_heads, generator=g, device=device, dtype=torch.float32)
-        * 0.5
-    )
-    a = torch.randn(
-        batch, num_heads, generator=g, device=device, dtype=torch.float32
-    )
-    b = torch.randn(
-        batch, num_heads, generator=g, device=device, dtype=torch.float32
-    )
-    dt_bias = torch.randn(
-        num_heads, generator=g, device=device, dtype=torch.float32
-    )
-    yield a_log, a, b, dt_bias
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, num_heads) = shape
+    batch, num_heads = shape
     yield BenchmarkCasePlan(
         shape={
             "a_log": (num_heads,),
@@ -73,10 +56,10 @@ def test_perf_fused_gdn_gating():
         op_name="fused_gdn_gating",
         torch_op=get_reference("fused_gdn_gating"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, num_heads",
     )
     bench.set_gems_from_module(flaggems_sglang)

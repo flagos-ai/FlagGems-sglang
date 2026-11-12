@@ -15,50 +15,27 @@
 """Benchmark for attention/merge_state."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import merge_state as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match kernel-comp-baseline/problems/attention/merge_state.
-SHAPES = [(n, 32, 128) for n in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(7, 4, 64), (83, 16, 128), (3, 32, 512)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    n_tokens, num_heads, head_size = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    prefix_output = torch.randn(
-        n_tokens,
-        num_heads,
-        head_size,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    suffix_output = torch.randn(
-        n_tokens,
-        num_heads,
-        head_size,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    # lse stays fp32; scaled up to exercise the max-subtraction path.
-    prefix_lse = (
-        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
+def _build_inputs(plan, cur_dtype, device):
+    n_tokens, num_heads, head_size = plan.builder_args[0]
+    args, kwargs = workload.build_inputs(
+        {"n_tokens": n_tokens, "num_heads": num_heads, "head_size": head_size},
+        cur_dtype,
+        device,
     )
-    suffix_lse = (
-        torch.randn(n_tokens, num_heads, generator=g, device=device) * 3
-    )
-    yield prefix_output, prefix_lse, suffix_output, suffix_lse
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (n_tokens, num_heads, head_size) = shape
+    n_tokens, num_heads, head_size = shape
     yield BenchmarkCasePlan(
         shape={
             "prefix_output": (n_tokens, num_heads, head_size),
@@ -83,10 +60,10 @@ def test_perf_merge_state():
         op_name="merge_state",
         torch_op=get_reference("merge_state"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n_tokens, num_heads, head_size",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,117 +15,20 @@
 """Benchmark for moe/moe_fused_gate."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import moe_fused_gate as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
-
-def _shape(
-    m,
-    n,
-    topk,
-    scoring_func="sigmoid",
-    num_fused_shared_experts=0,
-    renormalize=True,
-    routed_scaling_factor=1.0,
-    apply_routed_scaling_factor_on_output=False,
-    moe_softcapping=0.0,
-    num_expert_group=1,
-    topk_group=1,
-):
-    return (
-        m,
-        n,
-        topk,
-        scoring_func,
-        num_fused_shared_experts,
-        renormalize,
-        routed_scaling_factor,
-        apply_routed_scaling_factor_on_output,
-        moe_softcapping,
-        num_expert_group,
-        topk_group,
-    )
-
-
 # Shapes match kernel-comp-baseline/problems/moe/moe_fused_gate.
-SHAPES = [
-    _shape(
-        m, 256, 8, num_fused_shared_experts=1, num_expert_group=8, topk_group=4
-    )
-    for m in (1, 8, 64, 512, 4096)
-]
-MORE_SHAPES = [
-    _shape(1, 8, 2),
-    _shape(
-        37,
-        256,
-        8,
-        num_fused_shared_experts=1,
-        routed_scaling_factor=2.5,
-        num_expert_group=8,
-        topk_group=4,
-    ),
-    _shape(83, 64, 6, scoring_func="sqrtsoftplus"),
-    _shape(
-        17,
-        32,
-        4,
-        scoring_func="softmax",
-        moe_softcapping=30.0,
-        renormalize=False,
-    ),
-    _shape(
-        9,
-        128,
-        6,
-        apply_routed_scaling_factor_on_output=True,
-        routed_scaling_factor=1.7,
-    ),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    (
-        m,
-        n,
-        topk,
-        scoring_func,
-        num_fused_shared_experts,
-        renormalize,
-        routed_scaling_factor,
-        apply_routed_scaling_factor_on_output,
-        moe_softcapping,
-        num_expert_group,
-        topk_group,
-    ) = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    scores = torch.randn(
-        m, n, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    # The bias stays fp32; the reference upcasts both operands anyway.
-    bias = 0.1 * torch.randn(
-        n, generator=g, device=device, dtype=torch.float32
-    )
-    # ``scoring_func`` is a str, which unpack_to_args_kwargs would drop from
-    # the positional args, so route it (and the rest of the gate config)
-    # through kwargs.
-    yield scores, bias, topk, dict(
-        scoring_func=scoring_func,
-        num_fused_shared_experts=num_fused_shared_experts,
-        renormalize=renormalize,
-        routed_scaling_factor=routed_scaling_factor,
-        apply_routed_scaling_factor_on_output=(
-            apply_routed_scaling_factor_on_output
-        ),
-        moe_softcapping=moe_softcapping,
-        num_expert_group=num_expert_group,
-        topk_group=topk_group,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -159,6 +62,21 @@ def _case_fn(shape, cur_dtype):
             "num_expert_group": num_expert_group,
             "topk_group": topk_group,
         },
+        baseline_key=workload.key_shape(
+            {
+                "m": shape[0],
+                "n": shape[1],
+                "topk": shape[2],
+                "scoring_func": shape[3],
+                "num_fused_shared_experts": shape[4],
+                "renormalize": shape[5],
+                "routed_scaling_factor": shape[6],
+                "apply_routed_scaling_factor_on_output": shape[7],
+                "moe_softcapping": shape[8],
+                "num_expert_group": shape[9],
+                "topk_group": shape[10],
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -175,10 +93,10 @@ def test_perf_moe_fused_gate():
         op_name="moe_fused_gate",
         torch_op=get_reference("moe_fused_gate"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc=(
             "m, n, topk, scoring_func, num_fused_shared_experts, "
             "renormalize, routed_scaling_factor, "

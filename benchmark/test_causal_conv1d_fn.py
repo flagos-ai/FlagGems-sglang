@@ -15,49 +15,24 @@
 """Benchmark for mamba/causal_conv1d_fn."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import causal_conv1d_fn as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/causal_conv1d_fn.
-SHAPES = [(8, 2048, 4096, 4), (32, 512, 2048, 4)]
-MORE_SHAPES = [(1, 7, 16, 4), (4, 1, 8, 3)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_seqs, seq_len, dim, width = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    seq_lens = [seq_len] * num_seqs
-    x = torch.randn(
-        dim,
-        sum(seq_lens),
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    weight = torch.randn(
-        dim, width, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    bias = torch.randn(
-        dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    query_start_loc = torch.zeros(
-        num_seqs + 1, dtype=torch.int32, device=device
-    )
-    query_start_loc[1:] = torch.cumsum(
-        torch.tensor(seq_lens, dtype=torch.int32, device=device), dim=0
-    )
-    # ``activation`` keeps its "silu" default: the vendored
-    # unpack_to_args_kwargs drops bare str positionals.
-    yield x, weight, bias, query_start_loc, seq_lens
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_seqs, seq_len, dim, width) = shape
+    num_seqs, seq_len, dim, width = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (dim, num_seqs * seq_len),
@@ -73,6 +48,15 @@ def _case_fn(shape, cur_dtype):
             "dim": dim,
             "width": width,
         },
+        baseline_key=workload.key_shape(
+            {
+                "num_seqs": num_seqs,
+                "seq_len": seq_len,
+                "dim": dim,
+                "width": width,
+                "seq_lens": [seq_len] * num_seqs,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -83,10 +67,11 @@ def test_perf_causal_conv1d_fn():
         op_name="causal_conv1d_fn",
         torch_op=get_reference("causal_conv1d_fn"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_seqs, seq_len, dim, width",
     )
     bench.set_gems_from_module(flaggems_sglang)

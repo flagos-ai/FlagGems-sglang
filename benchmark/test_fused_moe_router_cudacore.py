@@ -15,49 +15,24 @@
 """Benchmark for moe/fused_moe_router_cudacore."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_moe_router_cudacore as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
 # Shapes match kernel-comp-baseline/problems/moe/fused_moe_router_cudacore.
-SHAPES = [(m, 4096, 256, 8, 0.0, False) for m in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [
-    (1, 64, 8, 1, 0.0, False),
-    (37, 256, 16, 2, 30.0, False),
-    (83, 512, 32, 3, 0.0, True),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, hidden_dim, num_experts, topk, softcap, has_bias = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(
-        bs, hidden_dim, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    router_weight = torch.randn(
-        num_experts,
-        hidden_dim,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    bias = None
-    if has_bias:
-        bias = (
-            torch.randn(
-                num_experts, generator=g, device=device, dtype=torch.float32
-            )
-            * 0.1
-        )
-    yield x, router_weight, topk, softcap, bias
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, hidden_dim, num_experts, topk, softcap, has_bias) = shape
+    bs, hidden_dim, num_experts, topk, softcap, has_bias = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (bs, hidden_dim),
@@ -74,6 +49,16 @@ def _case_fn(shape, cur_dtype):
             "softcap": softcap,
             "has_bias": has_bias,
         },
+        baseline_key=workload.key_shape(
+            {
+                "bs": bs,
+                "hidden": hidden_dim,
+                "num_experts": num_experts,
+                "topk": topk,
+                "softcap": softcap,
+                "has_bias": has_bias,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -90,10 +75,10 @@ def test_perf_fused_moe_router_cudacore():
         op_name="fused_moe_router_cudacore",
         torch_op=get_reference("fused_moe_router_cudacore"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc=(
             "bs, hidden_dim, num_experts, topk, moe_softcapping, has_bias"
         ),

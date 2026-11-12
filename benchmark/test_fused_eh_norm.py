@@ -15,43 +15,22 @@
 """Benchmark for norm/fused_eh_norm."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_eh_norm as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [
-    (bs, hidden) for bs in (1, 8, 64, 512) for hidden in (2048, 4096, 7168)
-]
-MORE_SHAPES = [(bs, hidden) for bs in (4096,) for hidden in (2048, 4096, 7168)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, hidden = shape
-    eps = 1e-6
-    g = torch.Generator(device=device).manual_seed(0)
-    inputs_embeds = torch.randn(
-        num_tokens, hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    previous_hidden = torch.randn(
-        num_tokens, hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    enorm_weight = torch.randn(
-        hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    hnorm_weight = torch.randn(
-        hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    yield inputs_embeds, previous_hidden, enorm_weight, hnorm_weight, {
-        "eps": eps
-    }
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, hidden) = shape
+    num_tokens, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "inputs_embeds": (num_tokens, hidden),
@@ -75,10 +54,10 @@ def test_perf_fused_eh_norm():
         op_name="fused_eh_norm",
         torch_op=get_reference("fused_eh_norm"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

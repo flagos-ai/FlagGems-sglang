@@ -15,29 +15,24 @@
 """Benchmark for moe/moe_topk_sum."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import moe_topk_sum as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/moe_topk_sum.
-SHAPES = [(m, topk, 7168) for m in (1, 8, 64, 512) for topk in (4, 8)]
-MORE_SHAPES = [(m, topk, 7168) for m in (4096,) for topk in (4, 8)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    m, topk, k = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(m, topk, k, device=device, generator=g).to(cur_dtype)
-    out = torch.zeros(m, k, dtype=cur_dtype, device=device)
-    yield x, out
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (m, topk, k) = shape
+    m, topk, k = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, topk, k), "out": (m, k)},
         params={
@@ -57,10 +52,11 @@ def test_perf_moe_topk_sum():
         op_name="moe_topk_sum",
         torch_op=get_reference("moe_topk_sum"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, topk, k",
     )
     bench.set_gems_from_module(flaggems_sglang)
