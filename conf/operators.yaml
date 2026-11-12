@@ -2157,6 +2157,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: top_k_renorm
+    description: |
+      Exact top-k thresholding and renormalization of a probability distribution.
+      The mask is probs >= the k-th largest value, so entries tied at the pivot are all kept.
+    for:
+      - top_k_renorm
+    labels:
+      - fused
+      - sglang
+      - Sampling
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: top_p_renorm
     description: |
       Exact top-p (nucleus) thresholding and renormalization of a probability distribution.
