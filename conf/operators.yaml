@@ -1097,6 +1097,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: grouped_gemma_rmsnorm
+    description: |
+      Grouped Gemma RMSNorm: split the last dim into groups, RMS-normalize each group, scale by 1 + weight.
+      Returns in the input dtype; used by gpt-oss style MoE outputs.
+    for:
+      - grouped_gemma_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - ActivationNorm
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: group_norm_silu
     description: |
       Fused GroupNorm plus SiLU for diffusion U-Net and VAE blocks.
