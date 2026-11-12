@@ -15,31 +15,22 @@
 """Benchmark for diffusion/fused_qk_inv_rms."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_qk_inv_rms as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(1, n, 16, 128) for n in (64, 512, 4096)]
-MORE_SHAPES = [(1, 16384, 16, 128)]
 
-_EPS = 1e-6
-
-
-def _input_fn(shape, cur_dtype, device):
-    b, n, heads, dim = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    qkv = torch.randn(
-        b, n, 3, heads, dim, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    yield qkv, _EPS
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, num_tokens, heads, head_dim) = shape
+    batch, num_tokens, heads, head_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "q": (batch, num_tokens, heads, head_dim),
@@ -63,10 +54,10 @@ def test_perf_fused_qk_inv_rms():
         op_name="fused_qk_inv_rms",
         torch_op=get_reference("fused_qk_inv_rms"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, num_tokens, heads, head_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

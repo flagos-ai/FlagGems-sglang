@@ -15,32 +15,25 @@
 """Benchmark for activation_norm/relu2."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import relu2 as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match kernel-comp-baseline/problems/activation_norm/relu2.
-SHAPES = [
-    (bs, hidden) for bs in (1, 8, 64, 512) for hidden in (2048, 4096, 8192)
-]
-MORE_SHAPES = [(bs, hidden) for bs in (4096,) for hidden in (2048, 4096, 8192)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, hidden = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(
-        num_tokens, hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    yield (x,)
+def _build_inputs(plan, cur_dtype, device):
+    bs, hidden = plan.builder_args[0]
+    args, kwargs = workload.build_inputs(
+        {"bs": bs, "hidden": hidden}, cur_dtype, device
+    )
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, hidden) = shape
+    num_tokens, hidden = shape
     yield BenchmarkCasePlan(
         shape={"x": (num_tokens, hidden)},
         params={
@@ -59,10 +52,10 @@ def test_perf_relu2():
         op_name="relu2",
         torch_op=get_reference("relu2"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

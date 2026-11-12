@@ -77,6 +77,12 @@ pytest -q benchmark --collect-only
 pytest -q benchmark/test_silu_and_mul.py --level core --iter 1 --warmup 1
 ```
 
+### 跨机性能对比
+
+使用 [FlagOS optest](https://github.com/flagos-ai/optest) 在 H800 采集
+SGLang 原生基线，并在目标芯片调度 benchmark。支持的算子、
+采集命令及报告验收口径见 [`baseline/`](baseline/README.md)。
+
 ### 说明
 
 - 大多数 tests/benchmark 需要 CUDA GPU 环境。

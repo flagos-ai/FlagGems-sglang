@@ -69,6 +69,34 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: awq_dequantize
+    description: |
+      AWQ 4-bit packed weight dequantization.
+      Unpacks 8 nibbles per int32 with AWQ shuffle order and applies per-group scale/zero.
+    for:
+      - awq_dequantize
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: awq_gemm
+    description: |
+      Fused AWQ 4-bit dequantize + GEMM along K with configurable split-k.
+      Dequantizes packed weights and multiplies by the fp32 activation in one pass.
+    for:
+      - awq_gemm
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: bmm_chunk
     description: |
       Chunked batched matrix multiplication for the Mamba2 SSD scan.
@@ -670,6 +698,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fp8_quantize
+    description: |
+      Per-tensor FP8 quantization: out = saturate(x * scale_inv -> fp8).
+      Bandwidth-bound; the multiply is elided at compile time when scale_inv == 1.0.
+    for:
+      - fp8_quantize
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_dual_residual_rmsnorm
     description: |
       Two chained RMS norms with a residual add in between.
@@ -1263,6 +1306,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: mxfp8_block_scaled_matmul
+    description: |
+      Block-scaled MXFP8 matmul: A[M,K] and B[N,K] are float8_e4m3fn with per-32-element UE8M0 scales.
+      Dequantizes both operands and computes A @ B.T cast to output_dtype.
+    for:
+      - mxfp8_block_scaled_matmul
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: moe_align_block_size
     description: |
       The MoE sort and pad that every block-tiled fused-MoE GEMM depends on.
@@ -1433,6 +1490,77 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: per_tensor_absmax_fp8
+    description: |
+      Per-tensor absmax reduction for FP8 quantization: output_s = max(|input|) / fp8_e4m3_max.
+      First half of a two-pass dynamic per-tensor FP8 quantizer.
+    for:
+      - per_tensor_absmax_fp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_tensor_quant_fp8
+    description: |
+      Dynamic per-tensor FP8 quantization: computes absmax scale then casts the whole tensor.
+      Covers both dynamic (is_static=False) and static-scale (is_static=True) modes.
+    for:
+      - per_tensor_quant_fp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_group_quant_8bit_v2
+    description: |
+      v2 (JIT CUDA) per-token-group 8-bit quantizer: destination-passing, PDL-aware.
+      Parameterized by scale layout, scale_ue8m0 rounding and optional fused SwiGLU.
+    for:
+      - per_token_group_quant_8bit_v2
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_group_quant_fp8
+    description: |
+      Per-token-group FP8 quantization: last dim split into groups of group_size,
+      each with an absmax-based float8_e4m3fn scale.
+    for:
+      - per_token_group_quant_fp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_group_quant_fp8_moe_mn_major
+    description: |
+      Per-token-group FP8 quantization for grouped-GEMM activation buffers.
+      Writes scale factors in Hopper CUTLASS MN-major layout for expert-routed rows.
+    for:
+      - per_token_group_quant_fp8_moe_mn_major
+    labels:
+      - fused
+      - sglang
+      - quantization
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: per_token_group_quant_int8
     description: |
       Per-token, per-group symmetric INT8 quantization.
@@ -1457,6 +1585,20 @@ ops:
       - fused
       - sglang
       - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_quant_int8_sum
+    description: |
+      Per-token INT8 quantization with fused row-sum for W8A8 zero-point folding.
+      Computes absmax scale, quantizes, and accumulates the row sum in one pass.
+    for:
+      - per_token_quant_int8_sum
+    labels:
+      - fused
+      - sglang
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -1640,6 +1782,35 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: quant_store_kv_mxfp8
+    description: |
+      Quantizes bf16 K/V rows to MXFP8 and scatters into a paged KV cache.
+      Writes UE8M0 scale bytes in FlashAttention-4 BlockScaledBasicChunk interleaved layout.
+    for:
+      - quant_store_kv_mxfp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: quantize_fp4_indexer
+    description: |
+      DSV4 indexer NVFP4 quantization: 128 values per token, four 32-element UE8M0 groups,
+      packs two E2M1 codes per byte and four exponents into one int32.
+    for:
+      - quantize_fp4_indexer
+    labels:
+      - fused
+      - sglang
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -1930,6 +2101,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: store_sf_interleaved
+    description: |
+      Scatters per-token MXFP8 scale factors into the FA4 BlockScaledBasicChunk interleaved page layout.
+      Vectorizes the four-byte u32 load/store; the core challenge is scattered address arithmetic.
+    for:
+      - store_sf_interleaved
+    labels:
+      - fused
+      - sglang
+      - quantization
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: tiny_k_gemm
     description: |
       Small-K, large-N GEMM: out = x @ w.T with m <= 16 and k in {128, 256}.
@@ -2013,6 +2199,34 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: to_mxfp8
+    description: |
+      Per-block MXFP8 quantization over the last dimension: 32 elements share one UE8M0 scale byte.
+      Outputs float8_e4m3fn payload and uint8 scale tensor.
+    for:
+      - to_mxfp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: triton_scaled_mm
+    description: |
+      Scaled GEMM for int8 or fp8 operands with per-row/per-col float scales.
+      Computes scale_a * (input @ weight) * scale_b.T cast to out_dtype, with optional bias.
+    for:
+      - triton_scaled_mm
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: unpad_draft_extend_output
     description: |
       Inverse of pad_draft_extend_query in speculative decoding.
@@ -2037,6 +2251,20 @@ ops:
     labels:
       - fused
       - sglang
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: w8a8_block_fp8_matmul
+    description: |
+      Block-wise FP8 GEMM with DeepSeek-style [128,128] block scales.
+      A[M,K] and B[N,K] are float8_e4m3fn; outputs fp32 accumulated result cast to output_dtype.
+    for:
+      - w8a8_block_fp8_matmul
+    labels:
+      - fused
+      - sglang
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -2079,6 +2307,21 @@ ops:
       - fused
       - sglang
       - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: zimage_qk_rmsnorm
+    description: |
+      ZImage per-head QK RMSNorm that reads directly from strided fused-QKV slices.
+      Eliminates the eager .contiguous() copy; head_dim must be 128.
+    for:
+      - zimage_qk_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - diffusion
+      - Normalization
     kind:
       - NeuralNetwork
     stages:

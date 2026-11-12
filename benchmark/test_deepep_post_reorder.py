@@ -15,53 +15,22 @@
 """Benchmark for moe/deepep_post_reorder."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import deepep_post_reorder as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(t, 8, 7168, 1.0) for t in (1, 8, 64, 512)]
-MORE_SHAPES = [(t, 8, 7168, 1.0) for t in (2048,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, topk, hidden, scaling = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    n = num_tokens * topk
-    down = torch.randn(
-        n, hidden, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    # torch_gcu randperm hangs on-device; generate on CPU then move.
-    src2dst = (
-        torch.randperm(
-            n, generator=torch.Generator(device="cpu").manual_seed(0)
-        )
-        .reshape(num_tokens, topk)
-        .to(torch.int32)
-        .to(device)
-    )
-    output = torch.zeros(num_tokens, hidden, dtype=cur_dtype, device=device)
-    topk_ids = torch.zeros(num_tokens, topk, dtype=torch.int32, device=device)
-    topk_weights = torch.rand(
-        num_tokens, topk, dtype=torch.float32, device=device, generator=g
-    )
-    yield (
-        down,
-        output,
-        src2dst,
-        topk_ids,
-        topk_weights,
-        topk,
-        hidden,
-        scaling,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, topk, hidden, scaling) = shape
+    num_tokens, topk, hidden, scaling = shape
     yield BenchmarkCasePlan(
         shape={
             "down": (num_tokens * topk, hidden),
@@ -85,10 +54,11 @@ def test_perf_deepep_post_reorder():
         op_name="deepep_post_reorder",
         torch_op=get_reference("deepep_post_reorder"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, topk, hidden, scaling",
     )
     bench.set_gems_from_module(flaggems_sglang)

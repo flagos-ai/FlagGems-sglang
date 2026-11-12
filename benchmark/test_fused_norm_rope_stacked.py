@@ -15,76 +15,47 @@
 """Benchmark for speculative/fused_norm_rope_stacked."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_norm_rope_stacked as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match
 # kernel-comp-baseline/problems/speculative/fused_norm_rope_stacked.
-SHAPES = [(t, 8, 8, 128, 128) for t in (1, 128, 2048, 8192)]
-MORE_SHAPES = [(1, 2, 2, 64, 64), (37, 3, 4, 128, 128), (129, 2, 2, 128, 64)]
-
-_MAX_POS = 4096
-_EPS = 1e-6
 
 
-def _input_fn(shape, cur_dtype, device):
-    t, n_layers, num_kv_heads, head_dim, rotary_dim = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    kv_size = num_kv_heads * head_dim
-    kv = torch.randn(
-        t,
-        n_layers,
-        2 * kv_size,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    k_norm_weight = torch.randn(
-        n_layers, head_dim, generator=g, device=device, dtype=torch.float32
-    )
-    eps = torch.full((n_layers,), _EPS, device=device, dtype=torch.float32)
-    cos_sin_cache = torch.randn(
-        _MAX_POS,
-        rotary_dim,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    positions = torch.randint(
-        0, _MAX_POS, (t,), generator=g, device=device, dtype=torch.int64
-    )
-    yield (
-        kv,
-        k_norm_weight,
-        eps,
-        cos_sin_cache,
-        positions,
-        num_kv_heads,
-        head_dim,
-        rotary_dim,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    t, n_layers, num_kv_heads, head_dim, rotary_dim = plan.builder_args[0]
+    return workload.build_inputs(
+        {
+            "t": t,
+            "n_layers": n_layers,
+            "num_kv_heads": num_kv_heads,
+            "head_dim": head_dim,
+            "rotary_dim": rotary_dim,
+        },
+        cur_dtype,
+        device,
+    )[0]
 
 
 def _case_fn(shape, cur_dtype):
-    (t, n_layers, num_kv_heads, head_dim, rotary_dim) = shape
+    t, n_layers, num_kv_heads, head_dim, rotary_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "kv": (t, n_layers, 2 * num_kv_heads * head_dim),
             "k_norm_weight": (n_layers, head_dim),
             "eps": (n_layers,),
-            "cos_sin_cache": (_MAX_POS, rotary_dim),
+            "cos_sin_cache": (workload.MAX_POS, rotary_dim),
             "positions": (t,),
         },
         params={
             "configuration": shape,
             "seed": 0,
-            "_EPS": _EPS,
-            "_MAX_POS": _MAX_POS,
+            "_EPS": workload.EPS,
+            "_MAX_POS": workload.MAX_POS,
             "t": t,
             "n_layers": n_layers,
             "num_kv_heads": num_kv_heads,
@@ -101,10 +72,10 @@ def test_perf_fused_norm_rope_stacked():
         op_name="fused_norm_rope_stacked",
         torch_op=get_reference("fused_norm_rope_stacked"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="t, n_layers, num_kv_heads, head_dim, rotary_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

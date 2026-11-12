@@ -15,62 +15,24 @@
 """Benchmark for moe/moe_align_block_size."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import moe_align_block_size as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/moe_align_block_size.
-SHAPES = [(t, 8, 256, 128) for t in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(t, 8, 256, 128) for t in (16384,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, top_k, num_experts, block_size = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    topk_ids = torch.randint(
-        0,
-        num_experts,
-        (num_tokens, top_k),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    numel = topk_ids.numel()
-    # The trailing "filtered expert" slot never receives tokens, matching how
-    # moe_runner.triton_utils calls the kernel.
-    arg_experts = num_experts + 1
-    if numel < arg_experts + 1:
-        max_padded = numel * block_size
-    else:
-        max_padded = numel + (arg_experts + 1) * (block_size - 1)
-    max_blocks = (max_padded + block_size - 1) // block_size
-
-    sorted_token_ids = torch.full(
-        (max_padded,), numel, dtype=torch.int32, device=device
-    )
-    expert_ids = torch.zeros(max_blocks, dtype=torch.int32, device=device)
-    num_tokens_post_pad = torch.zeros(1, dtype=torch.int32, device=device)
-    cumsum_buffer = torch.zeros(
-        arg_experts + 1, dtype=torch.int32, device=device
-    )
-    yield (
-        topk_ids,
-        arg_experts,
-        block_size,
-        sorted_token_ids,
-        expert_ids,
-        num_tokens_post_pad,
-        cumsum_buffer,
-        {"pad_sorted_token_ids": True},
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, top_k, num_experts, block_size) = shape
+    num_tokens, top_k, num_experts, block_size = shape
     numel = num_tokens * top_k
     max_padded = (
         numel * block_size
@@ -95,6 +57,14 @@ def _case_fn(shape, cur_dtype):
             "numel": numel,
             "max_padded": max_padded,
         },
+        baseline_key=workload.key_shape(
+            {
+                "num_tokens": num_tokens,
+                "top_k": top_k,
+                "num_experts": num_experts,
+                "block_size": block_size,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -105,10 +75,11 @@ def test_perf_moe_align_block_size():
         op_name="moe_align_block_size",
         torch_op=get_reference("moe_align_block_size"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, top_k, num_experts, block_size",
     )
     bench.set_gems_from_module(flaggems_sglang)

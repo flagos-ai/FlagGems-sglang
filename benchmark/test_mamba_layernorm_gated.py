@@ -15,54 +15,38 @@
 """Benchmark for mamba/layernorm_gated."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import mamba_layernorm_gated as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-EPS = 1e-5
-
 # Shapes match kernel-comp-baseline/problems/mamba/layernorm_gated.
-SHAPES = [(m, 4096, 128) for m in (1, 8, 64, 512, 4096)]
 # ``group_size == n`` is equivalent to the single-group default.
-MORE_SHAPES = [(1, 64, 64), (37, 256, 64), (83, 512, 128), (4, 1024, 1024)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    m, n, group_size = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(m, n, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    weight = torch.randn(
-        n, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    bias = torch.randn(n, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    z = torch.randn(m, n, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    # ``norm_before_gate``/``is_rms_norm`` keep their defaults; the vendored
-    # unpack_to_args_kwargs routes the dict into kwargs.
-    yield x, weight, bias, EPS, dict(z=z, group_size=group_size)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (m, n, group_size) = shape
+    m, n, group_size = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, n), "weight": (n,), "bias": (n,), "z": (m, n)},
         params={
             "configuration": shape,
             "seed": 0,
-            "EPS": EPS,
+            "EPS": workload.EPS,
             "m": m,
             "n": n,
             "group_size": group_size,
         },
+        baseline_key=workload.key_shape(
+            {"m": m, "n": n, "group_size": group_size}
+        ),
         builder_args=(shape,),
     )
 
@@ -73,10 +57,10 @@ def test_perf_mamba_layernorm_gated():
         op_name="mamba_layernorm_gated",
         torch_op=get_reference("mamba_layernorm_gated"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, n, group_size",
     )
     bench.set_gems_from_module(flaggems_sglang)

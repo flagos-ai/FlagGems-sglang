@@ -15,36 +15,20 @@
 """Benchmark for linear-attn/fused_recurrent_gated_delta_rule."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_recurrent_gated_delta_rule as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # (B, T, H, HV, K, V).
-SHAPES = [
-    (1, 1, 16, 32, 128, 128),
-    (8, 1, 16, 32, 128, 128),
-    (64, 1, 16, 32, 128, 128),
-    (1, 2048, 16, 32, 128, 128),
-]
-MORE_SHAPES = [(256, 1, 16, 32, 128, 128)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    B, T, H, HV, K, V = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    q = torch.randn(B, T, H, K, device=device, generator=g).to(cur_dtype)
-    k = torch.randn(B, T, H, K, device=device, generator=g).to(cur_dtype)
-    v = torch.randn(B, T, HV, V, device=device, generator=g).to(cur_dtype)
-    gate = -torch.rand(B, T, HV, device=device, generator=g) * 0.5
-    beta = torch.rand(B, T, HV, device=device, generator=g)
-    scale = K**-0.5
-    yield q, k, v, gate, beta, scale, None, False, {
-        "use_qk_l2norm_in_kernel": True
-    }
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -66,6 +50,7 @@ def _case_fn(shape, cur_dtype):
             "V": V,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -75,10 +60,10 @@ def test_perf_fused_recurrent_gated_delta_rule():
         op_name="fused_recurrent_gated_delta_rule",
         torch_op=get_reference("fused_recurrent_gated_delta_rule"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="B, T, H, HV, K, V",
     )
     bench.set_gems_from_module(flaggems_sglang)
