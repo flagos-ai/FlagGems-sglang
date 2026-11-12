@@ -22,7 +22,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 _CONFIGS = [
     # Mixed grid: BLOCK_H=1 with small BLOCK_D for the many-program shape,
     # BLOCK_H=2/4 with small BLOCK_D for extra row parallelism, and large
