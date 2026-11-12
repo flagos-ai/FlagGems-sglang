@@ -1688,6 +1688,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: quantize_k_cache_fast_separate
+    description: |
+      Quantize the non-rotary key groups to FP8 and return the packed non-rotary bytes and their
+      group scales as one tensor, with the unquantized rotary channels in a separate tensor.
+    for:
+      - quantize_k_cache_fast_separate
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: recompute_w_u
     description: |
       The w and u recomputation step of the chunked Gated DeltaNet forward pass.
