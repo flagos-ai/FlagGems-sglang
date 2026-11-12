@@ -2028,6 +2028,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: silu_mul_static_tensorwise_quant
+    description: |
+      Fused gated SiLU, multiply and static tensorwise FP8 quantisation. Computes silu(gate) * up / scale for the active rows of the gated-MLP buffer and casts to FP8 on store, so the bf16 activation is never materialised.
+      Returns a copy of the caller's FP8 buffer with the active prefix replaced; rows beyond the token count keep their existing contents.
+    for:
+      - silu_mul_static_tensorwise_quant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: softcap_inplace_logits
     description: |
       In-place logit softcapping. Computes cap * tanh(x / cap) over the full logit tensor.
