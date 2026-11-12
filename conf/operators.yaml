@@ -2142,6 +2142,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: timestep_embedding
+    description: |
+      Builds sinusoidal timestep embeddings with exponential frequencies from max_period and
+      downscale_freq_shift, one fused kernel per token row. flip_sin_to_cos selects which half
+      of the embedding holds the cosine terms and scale multiplies the angles.
+    for:
+      - timestep_embedding
+    labels:
+      - fused
+      - sglang
+      - PositionEmbedding
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: tma_align_input_scale
     description: |
       Transposes the per-token FP8 activation scales into the column-major, 16-byte aligned DeepGEMM TMA layout.
