@@ -41,6 +41,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: apply_rotary_emb
+    description: |
+      Treats adjacent features as complex pairs and multiplies them by the matching freqs_cis row.
+      Rows are selected by positions when supplied and by token order otherwise; inverse uses the conjugate.
+    for:
+      - apply_rotary_emb
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: apply_token_bitmask
     description: |
       Applies a packed bitmask to logits for grammar-constrained decoding.
