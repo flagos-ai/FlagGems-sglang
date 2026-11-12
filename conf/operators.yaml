@@ -840,6 +840,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_norm_rope_inplace
+    description: |
+      Applies last-dimension RMS normalization with optional weight, then rotates the trailing rotary
+      channels via adjacent complex pairs indexed by positions. Returns kv dtype and leaves kv intact.
+    for:
+      - fused_norm_rope_inplace
+    labels:
+      - fused
+      - sglang
+      - Normalization
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_norm_rope_stacked
     description: |
       Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
