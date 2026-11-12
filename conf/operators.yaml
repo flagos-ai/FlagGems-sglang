@@ -2283,6 +2283,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: wan_rmsnorm_silu
+    description: |
+      Wan-style channel RMSNorm: normalize over the channel axis, scale by rms_scale (or sqrt(C)),
+      apply gamma + optional bias, then SiLU; output in the promoted dtype of x and gamma.
+    for:
+      - wan_rmsnorm_silu
+    labels:
+      - fused
+      - sglang
+      - ActivationNorm
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: wide_row_softmax
     description: |
       Column-parallel softmax over very wide fp32 rows with an optional per-row temperature.
