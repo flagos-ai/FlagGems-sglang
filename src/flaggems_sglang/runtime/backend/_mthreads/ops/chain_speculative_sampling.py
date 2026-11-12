@@ -2,7 +2,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # ---------------------------------------------------------------------------
 # Shared chain logic (vectorised):
 #   The reference walks rows step-1, step-1, ... while accepting, i.e. the
