@@ -16,29 +16,37 @@ import torch
 import triton
 import triton.language as tl
 
+# gfx1100: 512 output elements per 16-warp program was the fastest or within
+# noise on every shape tried (d from 128 to 8192, 1 to 32768 rows).
+_BLOCK = 512
+_WARPS = 16
+
 
 @triton.jit
 def _silu_and_mul_kernel(
     x_ptr,
     out_ptr,
+    total,
     d: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
+    BLOCK: tl.constexpr,
+    WIDE: tl.constexpr,
 ):
-    row_idx = tl.program_id(0)
-    col_block_idx = tl.program_id(1)
-
-    col_offs = col_block_idx * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    mask = col_offs < d
-
-    # int64 scalar row base (overflow-safe), int32 lane offsets (fast).
-    base = x_ptr + row_idx.to(tl.int64) * (2 * d)
-    x1 = tl.load(base + col_offs, mask=mask, other=0.0).to(tl.float32)
-    x2 = tl.load(base + d + col_offs, mask=mask, other=0.0).to(tl.float32)
+    # Blocks of the flattened output, so short rows share a program and long
+    # rows need no padding to a power of two.
+    pid = tl.program_id(0)
+    if WIDE:
+        offs = pid.to(tl.int64) * BLOCK + tl.arange(0, BLOCK)
+    else:
+        offs = pid * BLOCK + tl.arange(0, BLOCK)
+    mask = offs < total
+    row = offs // d
+    src = x_ptr + row * (2 * d) + (offs - row * d)
+    x1 = tl.load(src, mask=mask, other=0.0).to(tl.float32)
+    x2 = tl.load(src + d, mask=mask, other=0.0).to(tl.float32)
 
     silu_x1 = tl.fdiv(x1, 1.0 + tl.exp(-x1))
 
-    out_base = out_ptr + row_idx.to(tl.int64) * d
-    tl.store(out_base + col_offs, silu_x1 * x2, mask=mask)
+    tl.store(out_ptr + offs, silu_x1 * x2, mask=mask)
 
 
 def silu_and_mul(hidden_states: torch.Tensor) -> torch.Tensor:
@@ -49,19 +57,15 @@ def silu_and_mul(hidden_states: torch.Tensor) -> torch.Tensor:
     if d == 0 or numel == 0:
         return out
     x = hidden_states.contiguous()
-    n_rows = numel // (2 * d)
-    # gfx1100: for up to 64 rows and from 2048 rows on, 16 warps a program,
-    # on 1024-column blocks when d is a power of two up to 8192 and on one
-    # block of the padded row (up to 8192 columns) otherwise; in between, the
-    # generic one-block-per-row launch is as fast or faster.
-    block_size = min(8192, triton.next_power_of_2(d))
-    num_warps = 4
-    if n_rows <= 64 or n_rows >= 2048:
-        num_warps = 16
-        if d <= 8192 and d & (d - 1) == 0:
-            block_size = min(1024, d)
-    _silu_and_mul_kernel[(n_rows, triton.cdiv(d, block_size))](
-        x, out, d=d, BLOCK_SIZE=block_size, num_warps=num_warps
+    total = numel // 2
+    _silu_and_mul_kernel[(triton.cdiv(total, _BLOCK),)](
+        x,
+        out,
+        total,
+        d=d,
+        BLOCK=_BLOCK,
+        WIDE=numel >= 2**31,
+        num_warps=_WARPS,
     )
     return out
 
