@@ -152,6 +152,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: causal_conv3d_cat_pad
+    description: |
+      Concatenates the causal-conv3d cache frames onto the input along time, then pads the result.
+      The cache frames consume part of the temporal front padding, so only the remainder is zero-filled.
+    for:
+      - causal_conv3d_cat_pad
+    labels:
+      - fused
+      - sglang
+      - diffusion
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: chain_speculative_sampling
     description: |
       Chain speculative sampling for tree-based speculative decoding.
@@ -191,6 +205,19 @@ ops:
       - fused
       - sglang
       - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: chunk_kda_scaled_dot_kkt
+    description: |
+      Per-chunk K K^T and Q K^T matrices for Kimi delta attention, with exp2 per-channel gate decay.
+      Returns the strictly-lower beta-scaled K K^T together with the lower-triangular scaled Q K^T.
+    for:
+      - chunk_kda_scaled_dot_kkt
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -713,6 +740,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_append_shared_experts
+    description: |
+      Appends the fused shared-expert slots to each token's top-k ids and weights in a single pass.
+      Shared ids continue from the routed expert count and all carry the same scale factor.
+    for:
+      - fused_append_shared_experts
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_dual_residual_rmsnorm
     description: |
       Two chained RMS norms with a residual add in between.
@@ -1055,12 +1096,68 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: gemma_dual_rmsnorm_residual_scalar
+    description: |
+      Normalizes two inputs with their own weights, normalizes the sum a third time, then adds the residual and applies a scalar.
+      All three RMSNorms and the final scaling run in fp32 within one row pass.
+    for:
+      - gemma_dual_rmsnorm_residual_scalar
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: gemma_fused_add_rmsnorm
     description: |
       Residual add fused with Gemma RMSNorm, returning both the normalized output and the pre-norm sum.
       The sum is written once and normalized without a second read; the next decoder layer consumes it.
     for:
       - gemma_fused_add_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gemma_qkv_rmsnorm
+    description: |
+      Per-head RMSNorm over the Q, K and V projections in one launch, writing each back in place.
+      V is normalized without a learned scale (Gemma4 sets with_scale=False); K and V may both be omitted.
+    for:
+      - gemma_qkv_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gemma_rmsnorm
+    description: |
+      Gemma RMSNorm with the unit-offset weight: x * rsqrt(mean(x^2) + eps) * (1 + weight).
+      The reduction and scaling run in fp32, with a single rounding back to the input dtype.
+    for:
+      - gemma_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gemma_rmsnorm_residual_scalar
+    description: |
+      RMSNorm fused with a residual add and a device-scalar multiply.
+      The weight is a plain multiplier here, without the unit offset that gemma_rmsnorm applies.
+    for:
+      - gemma_rmsnorm_residual_scalar
     labels:
       - fused
       - sglang
@@ -1107,6 +1204,20 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: grouped_gemm
+    description: |
+      Per-expert grouped GEMM over a token-sorted activation matrix, driven by precomputed block schedules.
+      Each token segment multiplies its own expert weight slice, so every expert shares one launch.
+    for:
+      - grouped_gemm
+    labels:
+      - fused
+      - sglang
+      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -1177,6 +1288,32 @@ ops:
       - fused
       - sglang
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: kda_gate_chunk_cumsum
+    description: |
+      Kimi delta attention gate activation fused with a chunk-local cumulative sum along time.
+      Covers the softplus and the lower-bounded sigmoid gate variants, with optional bias and output scale.
+    for:
+      - kda_gate_chunk_cumsum
+    labels:
+      - fused
+      - sglang
+    kind:
+      - Reduction
+    stages:
+      - stable: '1.0'
+  - id: kda_prologue
+    description: |
+      Builds the five decay-weighted Q and K tensors plus the gate cumsum that Kimi delta attention consumes.
+      One varlen chunk sweep reads each chunk's own sequence bounds, so the masked tails stay zero.
+    for:
+      - kda_prologue
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -1306,20 +1443,6 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
-  - id: mxfp8_block_scaled_matmul
-    description: |
-      Block-scaled MXFP8 matmul: A[M,K] and B[N,K] are float8_e4m3fn with per-32-element UE8M0 scales.
-      Dequantizes both operands and computes A @ B.T cast to output_dtype.
-    for:
-      - mxfp8_block_scaled_matmul
-    labels:
-      - fused
-      - sglang
-      - quantization
-    kind:
-      - NeuralNetwork
-    stages:
-      - stable: '1.0'
   - id: moe_align_block_size
     description: |
       The MoE sort and pad that every block-tiled fused-MoE GEMM depends on.
@@ -1415,6 +1538,33 @@ ops:
       - fused
       - sglang
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: mxfp8_block_scaled_matmul
+    description: |
+      Block-scaled MXFP8 matmul: A[M,K] and B[N,K] are float8_e4m3fn with per-32-element UE8M0 scales.
+      Dequantizes both operands and computes A @ B.T cast to output_dtype.
+    for:
+      - mxfp8_block_scaled_matmul
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: normalize_and_patchify
+    description: |
+      Pads an image up to the patch grid, applies the affine normalization, and emits a patch-major layout.
+      The padding is applied first, so the padded pixels carry the bias instead of zero.
+    for:
+      - normalize_and_patchify
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -1688,6 +1838,35 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: quant_store_kv_mxfp8
+    description: |
+      Quantizes bf16 K/V rows to MXFP8 and scatters into a paged KV cache.
+      Writes UE8M0 scale bytes in FlashAttention-4 BlockScaledBasicChunk interleaved layout.
+    for:
+      - quant_store_kv_mxfp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: quantize_fp4_indexer
+    description: |
+      DSV4 indexer NVFP4 quantization: 128 values per token, four 32-element UE8M0 groups,
+      packs two E2M1 codes per byte and four exponents into one int32.
+    for:
+      - quantize_fp4_indexer
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: recompute_w_u
     description: |
       The w and u recomputation step of the chunked Gated DeltaNet forward pass.
@@ -1782,35 +1961,6 @@ ops:
       - fused
       - sglang
       - Normalization
-    kind:
-      - NeuralNetwork
-    stages:
-      - stable: '1.0'
-  - id: quant_store_kv_mxfp8
-    description: |
-      Quantizes bf16 K/V rows to MXFP8 and scatters into a paged KV cache.
-      Writes UE8M0 scale bytes in FlashAttention-4 BlockScaledBasicChunk interleaved layout.
-    for:
-      - quant_store_kv_mxfp8
-    labels:
-      - fused
-      - sglang
-      - quantization
-      - Attention
-    kind:
-      - NeuralNetwork
-    stages:
-      - stable: '1.0'
-  - id: quantize_fp4_indexer
-    description: |
-      DSV4 indexer NVFP4 quantization: 128 values per token, four 32-element UE8M0 groups,
-      packs two E2M1 codes per byte and four exponents into one int32.
-    for:
-      - quantize_fp4_indexer
-    labels:
-      - fused
-      - sglang
-      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -2028,6 +2178,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: silu_and_mul_routed
+    description: |
+      SiLU gate-and-multiply fused with the per-token routing weight for Mixture-of-Experts activations.
+      Handles interleaved and split gate/up layouts; the weight is applied before the single output cast.
+    for:
+      - silu_and_mul_routed
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: softcap_inplace_logits
     description: |
       In-place logit softcapping. Computes cap * tanh(x / cap) over the full logit tensor.
@@ -2087,6 +2253,62 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: step_a_q
+    description: |
+      MLA LoRA query shrink: projects q_nope down to the adapter rank per head for segmented multi-adapter batches.
+      Reads only the K half of each head's B_buf block and skips segments whose adapter rank is zero.
+    for:
+      - step_a_q
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: step_a_v
+    description: |
+      MLA LoRA value shrink: projects the attention output down to the adapter rank per head.
+      Contracts A_buf along kv_lora_rank, with one head-shared weight per adapter.
+    for:
+      - step_a_v
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: step_b_q
+    description: |
+      MLA LoRA query expand: accumulates the scaled A_buf projection into the base output in place.
+      The kv_b_proj LoRA-A weight is shared across heads, unlike the per-head slices step_a_q reads.
+    for:
+      - step_b_q
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: step_b_v
+    description: |
+      MLA LoRA value expand: accumulates the scaled B_buf projection into the base output in place.
+      Reads the V half of each head's B_buf block, the same buffer step_a_q reads the K half of.
+    for:
+      - step_b_v
+    labels:
+      - fused
+      - sglang
+      - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: store_cache_4d
     description: |
       Single-launch, token-parallel write of K and V into 4-D page-major envelope KV cache views.
@@ -2112,6 +2334,22 @@ ops:
       - sglang
       - quantization
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: swiglu_oai_split
+    description: |
+      OpenAI-style SwiGLU over a split gate/up tensor: gate * sigmoid(alpha * gate) * (up + beta).
+      The clamp is asymmetric: gate is bounded above only, while up is bounded on both sides.
+    for:
+      - swiglu_oai_split
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
     kind:
       - NeuralNetwork
     stages:
@@ -2157,6 +2395,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: to_mxfp8
+    description: |
+      Per-block MXFP8 quantization over the last dimension: 32 elements share one UE8M0 scale byte.
+      Outputs float8_e4m3fn payload and uint8 scale tensor.
+    for:
+      - to_mxfp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: top_p_renorm
     description: |
       Exact top-p (nucleus) thresholding and renormalization of a probability distribution.
@@ -2197,20 +2449,6 @@ ops:
       - MoE
     kind:
       - Reduction
-    stages:
-      - stable: '1.0'
-  - id: to_mxfp8
-    description: |
-      Per-block MXFP8 quantization over the last dimension: 32 elements share one UE8M0 scale byte.
-      Outputs float8_e4m3fn payload and uint8 scale tensor.
-    for:
-      - to_mxfp8
-    labels:
-      - fused
-      - sglang
-      - quantization
-    kind:
-      - NeuralNetwork
     stages:
       - stable: '1.0'
   - id: triton_scaled_mm
