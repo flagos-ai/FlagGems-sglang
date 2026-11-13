@@ -97,6 +97,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: bias_gelu_tanh
+    description: |
+      Adds a bias vector broadcast over the last dimension and applies the tanh approximation of GELU.
+      The computation runs in fp32 with a fused libdevice tanh and returns the input dtype.
+    for:
+      - bias_gelu_tanh
+    labels:
+      - fused
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: bmm_chunk
     description: |
       Chunked batched matrix multiplication for the Mamba2 SSD scan.
