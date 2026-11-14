@@ -60,7 +60,9 @@ def _residual_gate_add_broadcast(
     MASKCOL: tl.constexpr,
     WIDE: tl.constexpr,
 ):
-    for job in range(tl.program_id(0), tl.cdiv(ROWS, 8) * cols, tl.num_programs(0)):
+    for job in range(
+        tl.program_id(0), tl.cdiv(ROWS, 8) * cols, tl.num_programs(0)
+    ):
         rg = job // cols
         cb = job % cols
         col = cb * B
@@ -143,7 +145,9 @@ def _residual_gate_add_broadcast(
 
 
 def residual_gate_add(residual, update, gate):
-    out = torch.empty(residual.shape, dtype=residual.dtype, device=residual.device)
+    out = torch.empty(
+        residual.shape, dtype=residual.dtype, device=residual.device
+    )
     n = residual.numel()
     if n:
         d = residual.shape[-1]

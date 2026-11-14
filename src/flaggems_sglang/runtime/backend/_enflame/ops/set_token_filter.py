@@ -56,7 +56,11 @@ def _set_token_filter_kernel(
         slot_base = w_lo * 32
         slots = tl.arange(0, BLOCK * 32)
         smask = (slot_base + slots) < n_words * 32
-        tl.store(p_ptr + slot_base + slots, tl.zeros([BLOCK * 32], tl.int32), mask=smask)
+        tl.store(
+            p_ptr + slot_base + slots,
+            tl.zeros([BLOCK * 32], tl.int32),
+            mask=smask,
+        )
         tl.debug_barrier()
         for i in range(0, n_tokens, TID_BLOCK):
             toffs = i + tl.arange(0, TID_BLOCK)

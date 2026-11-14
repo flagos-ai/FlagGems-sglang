@@ -138,8 +138,12 @@ def _qkvzba_split_3d_kernel(
     q = tl.load(qkvz_ptr + in_base + offc_q[None, None, :], mask=m3)
     k = tl.load(qkvz_ptr + in_base + HQ + offc_q[None, None, :], mask=m3)
     v = tl.load(qkvz_ptr + in_base + 2 * HQ + offc_v[None, None, :], mask=m3)
-    z = tl.load(qkvz_ptr + in_base + 2 * HQ + RV + offc_v[None, None, :], mask=m3)
-    ba_row = rows[:, None, None] * (NQK * 2 * R) + heads[None, :, None] * (2 * R)
+    z = tl.load(
+        qkvz_ptr + in_base + 2 * HQ + RV + offc_v[None, None, :], mask=m3
+    )
+    ba_row = rows[:, None, None] * (NQK * 2 * R) + heads[None, :, None] * (
+        2 * R
+    )
     bv = tl.load(ba_ptr + ba_row + offc_b[None, None, :], mask=m3)
     av = tl.load(ba_ptr + ba_row + R + offc_b[None, None, :], mask=m3)
 
@@ -147,7 +151,9 @@ def _qkvzba_split_3d_kernel(
     z_row = rows[:, None, None] * (NQK * RV)
     bao_row = rows[:, None, None] * (NQK * R)
     tl.store(
-        qkv_ptr + qkv_row + heads[None, :, None] * HQ + offc_q[None, None, :], q, mask=m3
+        qkv_ptr + qkv_row + heads[None, :, None] * HQ + offc_q[None, None, :],
+        q,
+        mask=m3,
     )
     tl.store(
         qkv_ptr
@@ -168,13 +174,19 @@ def _qkvzba_split_3d_kernel(
         mask=m3,
     )
     tl.store(
-        z_ptr + z_row + heads[None, :, None] * RV + offc_v[None, None, :], z, mask=m3
+        z_ptr + z_row + heads[None, :, None] * RV + offc_v[None, None, :],
+        z,
+        mask=m3,
     )
     tl.store(
-        b_ptr + bao_row + heads[None, :, None] * R + offc_b[None, None, :], bv, mask=m3
+        b_ptr + bao_row + heads[None, :, None] * R + offc_b[None, None, :],
+        bv,
+        mask=m3,
     )
     tl.store(
-        a_ptr + bao_row + heads[None, :, None] * R + offc_b[None, None, :], av, mask=m3
+        a_ptr + bao_row + heads[None, :, None] * R + offc_b[None, None, :],
+        av,
+        mask=m3,
     )
 
 

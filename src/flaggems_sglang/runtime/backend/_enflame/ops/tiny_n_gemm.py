@@ -69,6 +69,8 @@ The generic kernels below are kept verbatim as the K > 8192 fallback
 installed).
 """
 
+import re
+
 import torch
 import triton
 import triton.language as tl
@@ -90,7 +92,6 @@ from flaggems_sglang import runtime as _runtime
 # It is idempotent and leaves already-compatible IR (e.g. pure 1-D kernels)
 # untouched.
 
-import re
 
 _GCU_SENTINEL = "-9223372036854775808"
 
@@ -112,9 +113,16 @@ def _fix_gcu_attr(attr_match, line, op_name):
                 return f" <{{operandSegmentSizes = {new_seg}, {rest}}}>"
             return f" <{{operandSegmentSizes = {new_seg}}}>"
         return attr_match.group(0)
-    if op_name in ("memref.reinterpret_cast", "memref.subview") and not seg_match:
+    if (
+        op_name in ("memref.reinterpret_cast", "memref.subview")
+        and not seg_match
+    ):
         opers = re.search(r"\(([^()]*)\)\s*<\{", line)
-        n_ops = len([x for x in opers.group(1).split(",") if x.strip()]) if opers else 1
+        n_ops = (
+            len([x for x in opers.group(1).split(",") if x.strip()])
+            if opers
+            else 1
+        )
         offs = re.search(r"static_offsets = array<i64: ([^>]*)>", line)
         sizes = re.search(r"static_sizes = array<i64: ([^>]*)>", line)
         strides = re.search(r"static_strides = array<i64: ([^>]*)>", line)
@@ -158,7 +166,9 @@ def _patch_gcu_compiler_opt():
 
     def _shim(content, *args):
         if isinstance(content, str) and "operandSegmentSizes" in content:
-            content = "\n".join(_fix_gcu_dialect_line(l) for l in content.split("\n"))
+            content = "\n".join(
+                _fix_gcu_dialect_line(line) for line in content.split("\n")
+            )
         return _orig(content, *args)
 
     _shim._flaggems_dialect_shim = True
@@ -599,9 +609,7 @@ def tiny_n_gemm(x, w, out_dtype):
         w = w.contiguous()
         out = torch.empty((m, n), device=x.device, dtype=out_dtype)
         block_k = triton.next_power_of_2(max(k, 16))
-        grid = (
-            triton.cdiv(m, _BLOCK_M) * triton.cdiv(n, _MMA_BLOCK_N),
-        )
+        grid = (triton.cdiv(m, _BLOCK_M) * triton.cdiv(n, _MMA_BLOCK_N),)
         _tiny_n_mma_kernel[grid](
             x,
             w,

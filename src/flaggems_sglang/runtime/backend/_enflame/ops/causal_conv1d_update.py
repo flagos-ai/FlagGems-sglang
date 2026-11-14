@@ -481,7 +481,9 @@ def causal_conv1d_update(x, conv_state, weight, bias=None, activation="silu"):
             n_total = batch * n_dim_blocks
             if n_total >= _RB_MIN_TOTAL:
                 chunk = _rb_chunk(n_total, batch)
-                _single_w4_s3_rb_kernel[(n_dim_blocks, triton.cdiv(batch, chunk))](
+                _single_w4_s3_rb_kernel[
+                    (n_dim_blocks, triton.cdiv(batch, chunk))
+                ](
                     x,
                     conv_state,
                     weight,

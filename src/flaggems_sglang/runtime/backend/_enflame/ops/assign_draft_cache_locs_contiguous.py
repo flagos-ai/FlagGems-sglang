@@ -65,10 +65,26 @@ def _assign_draft_cache_locs_grouped4_kernel(
     v1 = tl.load(req_to_token + p1 * req_stride + s1 + cols, mask=cmask)
     v2 = tl.load(req_to_token + p2 * req_stride + s2 + cols, mask=cmask)
     v3 = tl.load(req_to_token + p3 * req_stride + s3 + cols, mask=cmask)
-    tl.store(output + (base + 0) * ITEMS_PER_REQUEST + cols, v0, mask=cmask & (base + 0 < n_req))
-    tl.store(output + (base + 1) * ITEMS_PER_REQUEST + cols, v1, mask=cmask & (base + 1 < n_req))
-    tl.store(output + (base + 2) * ITEMS_PER_REQUEST + cols, v2, mask=cmask & (base + 2 < n_req))
-    tl.store(output + (base + 3) * ITEMS_PER_REQUEST + cols, v3, mask=cmask & (base + 3 < n_req))
+    tl.store(
+        output + (base + 0) * ITEMS_PER_REQUEST + cols,
+        v0,
+        mask=cmask & (base + 0 < n_req),
+    )
+    tl.store(
+        output + (base + 1) * ITEMS_PER_REQUEST + cols,
+        v1,
+        mask=cmask & (base + 1 < n_req),
+    )
+    tl.store(
+        output + (base + 2) * ITEMS_PER_REQUEST + cols,
+        v2,
+        mask=cmask & (base + 2 < n_req),
+    )
+    tl.store(
+        output + (base + 3) * ITEMS_PER_REQUEST + cols,
+        v3,
+        mask=cmask & (base + 3 < n_req),
+    )
 
 
 @triton.jit
@@ -110,14 +126,46 @@ def _assign_draft_cache_locs_grouped8_kernel(
     v5 = tl.load(req_to_token + p5 * req_stride + s5 + cols, mask=cmask)
     v6 = tl.load(req_to_token + p6 * req_stride + s6 + cols, mask=cmask)
     v7 = tl.load(req_to_token + p7 * req_stride + s7 + cols, mask=cmask)
-    tl.store(output + (base + 0) * ITEMS_PER_REQUEST + cols, v0, mask=cmask & (base + 0 < n_req))
-    tl.store(output + (base + 1) * ITEMS_PER_REQUEST + cols, v1, mask=cmask & (base + 1 < n_req))
-    tl.store(output + (base + 2) * ITEMS_PER_REQUEST + cols, v2, mask=cmask & (base + 2 < n_req))
-    tl.store(output + (base + 3) * ITEMS_PER_REQUEST + cols, v3, mask=cmask & (base + 3 < n_req))
-    tl.store(output + (base + 4) * ITEMS_PER_REQUEST + cols, v4, mask=cmask & (base + 4 < n_req))
-    tl.store(output + (base + 5) * ITEMS_PER_REQUEST + cols, v5, mask=cmask & (base + 5 < n_req))
-    tl.store(output + (base + 6) * ITEMS_PER_REQUEST + cols, v6, mask=cmask & (base + 6 < n_req))
-    tl.store(output + (base + 7) * ITEMS_PER_REQUEST + cols, v7, mask=cmask & (base + 7 < n_req))
+    tl.store(
+        output + (base + 0) * ITEMS_PER_REQUEST + cols,
+        v0,
+        mask=cmask & (base + 0 < n_req),
+    )
+    tl.store(
+        output + (base + 1) * ITEMS_PER_REQUEST + cols,
+        v1,
+        mask=cmask & (base + 1 < n_req),
+    )
+    tl.store(
+        output + (base + 2) * ITEMS_PER_REQUEST + cols,
+        v2,
+        mask=cmask & (base + 2 < n_req),
+    )
+    tl.store(
+        output + (base + 3) * ITEMS_PER_REQUEST + cols,
+        v3,
+        mask=cmask & (base + 3 < n_req),
+    )
+    tl.store(
+        output + (base + 4) * ITEMS_PER_REQUEST + cols,
+        v4,
+        mask=cmask & (base + 4 < n_req),
+    )
+    tl.store(
+        output + (base + 5) * ITEMS_PER_REQUEST + cols,
+        v5,
+        mask=cmask & (base + 5 < n_req),
+    )
+    tl.store(
+        output + (base + 6) * ITEMS_PER_REQUEST + cols,
+        v6,
+        mask=cmask & (base + 6 < n_req),
+    )
+    tl.store(
+        output + (base + 7) * ITEMS_PER_REQUEST + cols,
+        v7,
+        mask=cmask & (base + 7 < n_req),
+    )
 
 
 _GROUPED_MIN_REQUESTS = 64

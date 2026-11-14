@@ -53,7 +53,9 @@ def _sgmb_row1_masked(x_ptr, g_ptr, out_ptr, D, BLOCK_D: tl.constexpr):
 
 
 @triton.jit
-def _sgmb_flat(x_ptr, g_ptr, out_ptr, D, BPR: tl.constexpr, BLOCK: tl.constexpr):
+def _sgmb_flat(
+    x_ptr, g_ptr, out_ptr, D, BPR: tl.constexpr, BLOCK: tl.constexpr
+):
     pid = tl.program_id(0)
     row = pid // BPR
     sig = tl.sigmoid(tl.load(g_ptr + row).to(tl.float32)).to(
@@ -65,7 +67,13 @@ def _sgmb_flat(x_ptr, g_ptr, out_ptr, D, BPR: tl.constexpr, BLOCK: tl.constexpr)
 
 @triton.jit
 def _sgmb_flat_wide(
-    x_ptr, g_ptr, out_ptr, NT, D, BPR: tl.constexpr, BLOCK: tl.constexpr,
+    x_ptr,
+    g_ptr,
+    out_ptr,
+    NT,
+    D,
+    BPR: tl.constexpr,
+    BLOCK: tl.constexpr,
     P: tl.constexpr,
 ):
     for tile in tl.range(tl.program_id(0), NT, P):
@@ -272,8 +280,7 @@ def sigmoid_gate_mul_broadcast(x, gate):
             num_tiles = numel // block
             persistent = min(_PERSISTENT_GRID, num_tiles)
             if block * item_size >= _FLAT_WARP_BYTES or (
-                persistent > 0
-                and triton.cdiv(num_tiles, persistent) <= 4
+                persistent > 0 and triton.cdiv(num_tiles, persistent) <= 4
             ):
                 _sgmb_flat_wide[(persistent,)](
                     xc,

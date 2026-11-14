@@ -107,13 +107,17 @@ def _fill_bonus_tokens_paired(
         # lanes must not leave speculative far-OOB addresses on the wire.
         row_c = tl.where(keep_lane, row, 0)
         length = tl.load(lens + row_c, mask=keep_lane, other=1)
-        pairs = tl.load(src64 + tl.where(keep_lane, base + c, 0), mask=keep_lane, other=0)
+        pairs = tl.load(
+            src64 + tl.where(keep_lane, base + c, 0), mask=keep_lane, other=0
+        )
         m = keep_lane
     else:
         keep = keep_lane & (row < N)
         row_c = tl.where(keep, row, 0)
         length = tl.load(lens + row_c, mask=keep, other=1)
-        pairs = tl.load(src64 + tl.where(keep, base + c, 0), mask=keep, other=0)
+        pairs = tl.load(
+            src64 + tl.where(keep, base + c, 0), mask=keep, other=0
+        )
         m = keep
     lo = pairs & 0xFFFFFFFF
     hi = (pairs >> 32) & 0xFFFFFFFF
@@ -167,7 +171,9 @@ def _fill_bonus_tokens_words(
         off_c = tl.where(keep_lane, base + c, 0)
         if LENS_I64:
             lens64 = lens_ptr.to(tl.pointer_type(tl.int64))
-            length = tl.load(lens64 + row_c, mask=keep_lane, other=1).to(tl.int32)
+            length = tl.load(lens64 + row_c, mask=keep_lane, other=1).to(
+                tl.int32
+            )
         else:
             lens32 = lens_ptr.to(tl.pointer_type(tl.int32))
             length = tl.load(lens32 + row_c, mask=keep_lane, other=1)

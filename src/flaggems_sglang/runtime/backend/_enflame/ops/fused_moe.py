@@ -70,7 +70,9 @@ import triton.language as tl
 # bookkeeping kernels
 # ---------------------------------------------------------------------------
 @triton.jit
-def _reset_kernel(cnt_ptr, cur_ptr, sorted_ptr, E, FILL_ROWS, BLOCK: tl.constexpr):
+def _reset_kernel(
+    cnt_ptr, cur_ptr, sorted_ptr, E, FILL_ROWS, BLOCK: tl.constexpr
+):
     pid = tl.program_id(0)
     offs = pid * BLOCK + tl.arange(0, BLOCK)
     m = offs < E
@@ -207,9 +209,6 @@ def _gate_up_kernel(
         e = tl.load(eids_ptr + pid_m)
         offs_m = start_row + tl.arange(0, BLOCK_M)
         j = tl.load(sorted_ptr + offs_m)
-        off_e = tl.load(off_ptr + e)
-        cnt_e = tl.load(cnt_ptr + e)
-        row_valid = offs_m < (off_e + cnt_e)
         tok = j // TOPK
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         offs_k = tl.arange(0, BLOCK_K)
@@ -542,13 +541,15 @@ def _down_kernel(
         res = acc * wv[:, None]
         if EVEN_N:
             tl.store(
-                c3_ptr + c3_off[:, None] + offs_n[None, :], res,
+                c3_ptr + c3_off[:, None] + offs_n[None, :],
+                res,
                 mask=row_valid[:, None],
             )
         else:
             nm = offs_n < H
             tl.store(
-                c3_ptr + c3_off[:, None] + offs_n[None, :], res,
+                c3_ptr + c3_off[:, None] + offs_n[None, :],
+                res,
                 mask=row_valid[:, None] & nm[None, :],
             )
 
@@ -776,9 +777,20 @@ def fused_moe(
         bk = min(bk, triton.next_power_of_2(max(H, 1)))
         num_pid_n1 = triton.cdiv(inter, bn)
         gkey = (
-            "gate_up", bn, bk, BLOCK_M, TOPK, ACT, H, inter, warps,
-            (H % bk == 0), (inter % bn == 0), COMPENSATE,
-            (dtype == torch.float16), wide,
+            "gate_up",
+            bn,
+            bk,
+            BLOCK_M,
+            TOPK,
+            ACT,
+            H,
+            inter,
+            warps,
+            (H % bk == 0),
+            (inter % bn == 0),
+            COMPENSATE,
+            (dtype == torch.float16),
+            wide,
         )
         if gkey in _oor_memo:
             continue
@@ -821,9 +833,20 @@ def fused_moe(
         bk = min(bk, triton.next_power_of_2(max(inter, 1)))
         num_pid_n2 = triton.cdiv(H, bn)
         dkey = (
-            "down", bn, bk, BLOCK_M, TOPK, H, inter, warps,
-            (inter % bk == 0), (H % bn == 0), SPLIT,
-            (dtype == torch.float16) and SPLIT, (dtype == torch.float16), wide,
+            "down",
+            bn,
+            bk,
+            BLOCK_M,
+            TOPK,
+            H,
+            inter,
+            warps,
+            (inter % bk == 0),
+            (H % bn == 0),
+            SPLIT,
+            (dtype == torch.float16) and SPLIT,
+            (dtype == torch.float16),
+            wide,
         )
         if dkey in _oor_memo:
             continue

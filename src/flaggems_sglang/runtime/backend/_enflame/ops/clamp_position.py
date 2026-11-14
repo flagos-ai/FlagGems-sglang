@@ -49,7 +49,9 @@ def _clamp_position_kernel(
 
 
 def _gcu_int64_enabled():
-    return os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "").lower() not in (
+    return os.environ.get(
+        "TORCH_GCU_ENABLE_INT64_AND_UINT64", ""
+    ).lower() not in (
         "",
         "0",
         "false",

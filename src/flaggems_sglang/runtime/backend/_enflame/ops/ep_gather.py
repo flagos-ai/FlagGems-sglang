@@ -17,7 +17,9 @@ import triton.language as tl
 
 
 @triton.jit
-def _gather_pair(X, IDS, W, IDX, Y, S: tl.constexpr, B: tl.constexpr, TAIL: tl.constexpr):
+def _gather_pair(
+    X, IDS, W, IDX, Y, S: tl.constexpr, B: tl.constexpr, TAIL: tl.constexpr
+):
     K: tl.constexpr = S[0]
     N: tl.constexpr = S[1]
     XS0: tl.constexpr = S[2]

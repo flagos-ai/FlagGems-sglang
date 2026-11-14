@@ -324,12 +324,7 @@ def _chunk_state_varlen_fallback_kernel(
         + seg_start * sdt_t
         + offs_k * sdt_t
     )
-    da_base = (
-        da_ptr
-        + pid_c * sda_c
-        + pid_h * sda_h
-        + seg_start * sda_t
-    )
+    da_base = da_ptr + pid_c * sda_c + pid_h * sda_h + seg_start * sda_t
     da_ptrs = da_base + offs_k * sda_t
     da_last = tl.load(
         da_ptr + pid_c * sda_c + pid_h * sda_h + seg_last * sda_t

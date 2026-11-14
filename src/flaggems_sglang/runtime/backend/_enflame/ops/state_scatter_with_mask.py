@@ -99,22 +99,38 @@ def _state_scatter_gcu_kernel(
         m2 = (base + 2 < M) & (st2 >= 0) & nmask
         m3 = (base + 3 < M) & (st3 >= 0) & nmask
         v0 = tl.load(
-            src_ptr + r0 // SEQ * src_sl + r0 % SEQ * src_sr + st0 * src_ss + n,
+            src_ptr
+            + r0 // SEQ * src_sl
+            + r0 % SEQ * src_sr
+            + st0 * src_ss
+            + n,
             mask=m0,
             other=0.0,
         )
         v1 = tl.load(
-            src_ptr + r1 // SEQ * src_sl + r1 % SEQ * src_sr + st1 * src_ss + n,
+            src_ptr
+            + r1 // SEQ * src_sl
+            + r1 % SEQ * src_sr
+            + st1 * src_ss
+            + n,
             mask=m1,
             other=0.0,
         )
         v2 = tl.load(
-            src_ptr + r2 // SEQ * src_sl + r2 % SEQ * src_sr + st2 * src_ss + n,
+            src_ptr
+            + r2 // SEQ * src_sl
+            + r2 % SEQ * src_sr
+            + st2 * src_ss
+            + n,
             mask=m2,
             other=0.0,
         )
         v3 = tl.load(
-            src_ptr + r3 // SEQ * src_sl + r3 % SEQ * src_sr + st3 * src_ss + n,
+            src_ptr
+            + r3 // SEQ * src_sl
+            + r3 % SEQ * src_sr
+            + st3 * src_ss
+            + n,
             mask=m3,
             other=0.0,
         )

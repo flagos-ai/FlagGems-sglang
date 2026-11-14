@@ -133,7 +133,9 @@ def _concat_cast_mha_k_kernel(
             token = (tile // GROUPS) * BT + tl.arange(0, BT)
             head0 = tile % GROUPS
             if FULL:
-                nv = tl.load(N + token[:, None] * NS0 + head0 * NS1 + nc[None, :] * NS2)
+                nv = tl.load(
+                    N + token[:, None] * NS0 + head0 * NS1 + nc[None, :] * NS2
+                )
                 rv = tl.load(R + token[:, None] * RS0 + rc[None, :] * RS2)
             else:
                 nv = tl.load(
@@ -206,7 +208,11 @@ def _concat_cast_mha_k_kernel(
                     other=0,
                 )
             if HEAD_MAJOR:
-                base = OUT + token[:, None, None] * H * (DN + DR) + head[None, None, :]
+                base = (
+                    OUT
+                    + token[:, None, None] * H * (DN + DR)
+                    + head[None, None, :]
+                )
                 if FULL:
                     tl.store(base + nc[None, :, None] * H, nv.trans(0, 2, 1))
                     tl.store(
@@ -229,9 +235,9 @@ def _concat_cast_mha_k_kernel(
                         & (rc[None, :, None] < DR),
                     )
             else:
-                base = OUT + (token[:, None, None] * H + head[None, :, None]) * (
-                    DN + DR
-                )
+                base = OUT + (
+                    token[:, None, None] * H + head[None, :, None]
+                ) * (DN + DR)
                 if FULL:
                     tl.store(base + nc[None, None, :], nv)
                     tl.store(

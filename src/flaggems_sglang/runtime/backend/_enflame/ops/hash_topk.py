@@ -242,9 +242,9 @@ def _hash_topk_tiled_kernel(
     total = tl.zeros((BLOCK_T,), dtype=tl.float32)
     for k in tl.static_range(TOPK):
         eid = tl.load(table_ptr + tokens * TOPK + k, mask=rmask, other=0)
-        logit = tl.load(rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")).to(
-            tl.float32
-        )
+        logit = tl.load(
+            rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")
+        ).to(tl.float32)
         ax = tl.maximum(logit, -logit)
         sp = tl.maximum(logit, 0.0) + tl.log(1.0 + tl.exp(-ax))
         w = tl.sqrt(sp)
@@ -252,9 +252,9 @@ def _hash_topk_tiled_kernel(
         tl.store(id_ptr + rows * W_OUT + k, eid, mask=rmask)
     for k in tl.static_range(TOPK):
         eid = tl.load(table_ptr + tokens * TOPK + k, mask=rmask, other=0)
-        logit = tl.load(rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")).to(
-            tl.float32
-        )
+        logit = tl.load(
+            rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")
+        ).to(tl.float32)
         ax = tl.maximum(logit, -logit)
         sp = tl.maximum(logit, 0.0) + tl.log(1.0 + tl.exp(-ax))
         w = tl.sqrt(sp)
@@ -298,9 +298,9 @@ def _hash_topk_rowloop_kernel(
         smask = row < T
         token = tl.load(tid_ptr + rowc)
         eid = tl.load(table_ptr + token * TOPK + j, mask=jm, other=0)
-        logit = tl.load(rl_ptr + rowc * NR + eid, mask=jm, other=float("-inf")).to(
-            tl.float32
-        )
+        logit = tl.load(
+            rl_ptr + rowc * NR + eid, mask=jm, other=float("-inf")
+        ).to(tl.float32)
         ax = tl.maximum(logit, -logit)
         sp = tl.maximum(logit, 0.0) + tl.log(1.0 + tl.exp(-ax))
         w = tl.sqrt(sp)
@@ -349,9 +349,9 @@ def _hash_topk_regtile_kernel(
     w2d = tl.zeros((BLOCK_K, BLOCK_T), dtype=tl.float32)
     for k in tl.static_range(TOPK):
         eid = tl.load(table_ptr + tokens * TOPK + k, mask=rmask, other=0)
-        logit = tl.load(rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")).to(
-            tl.float32
-        )
+        logit = tl.load(
+            rl_ptr + rows * NR + eid, mask=rmask, other=float("-inf")
+        ).to(tl.float32)
         ax = tl.maximum(logit, -logit)
         sp = tl.maximum(logit, 0.0) + tl.log(1.0 + tl.exp(-ax))
         w = tl.sqrt(sp)

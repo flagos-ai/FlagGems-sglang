@@ -16,7 +16,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # Why this diverges from the generic implementation (enflame GCU rewrite)
 # -----------------------------------------------------------------------
 # The generic file keeps a `_topk_sigmoid_tuple_kernel` (per-lane sort-4
@@ -72,8 +71,15 @@ def _mono(bits):
 
 
 @triton.jit
-def _load_key(x_ptr, row, cols, stride_x, n_experts, NOMASK: tl.constexpr,
-              I32LOAD: tl.constexpr):
+def _load_key(
+    x_ptr,
+    row,
+    cols,
+    stride_x,
+    n_experts,
+    NOMASK: tl.constexpr,
+    I32LOAD: tl.constexpr,
+):
     # fp32 input: the monotonic map consumes the raw bit pattern, so skip
     # the float convert entirely.  Padded lanes get the -inf image, which
     # is never selected ahead of a finite logit.
@@ -392,7 +398,14 @@ def _topk_sigmoid_kernel(
 # The selection loop is issue-bound per program, so the per-row cost falls
 # from 3.18us (ROWS=2) to 1.63us (ROWS=11); ROWS=12 regresses and is not on
 # the ladder.  Re-measure this table when the toolchain moves.
-_ROW_COST_US = ((1, 6.29), (2, 6.36), (4, 8.54), (6, 11.34), (8, 14.61), (11, 17.90))
+_ROW_COST_US = (
+    (1, 6.29),
+    (2, 6.36),
+    (4, 8.54),
+    (6, 11.34),
+    (8, 14.61),
+    (11, 17.90),
+)
 _SP_COUNT = 48
 # Interleaved-chain budget: rows_per_program * BLOCK is capped at the
 # measured-no-spill point (11 * 256 lanes) so wide expert tiles dispatch to

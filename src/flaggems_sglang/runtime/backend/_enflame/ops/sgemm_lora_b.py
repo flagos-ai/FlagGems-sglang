@@ -354,9 +354,7 @@ def _launch_config(
         even_k=int(rank) == int(block_k),
         even_n=output_size % block_n == 0,
         hoist_base=(
-            block_m
-            * block_n
-            * (8 if num_warps == 1 else 4)
+            block_m * block_n * (8 if num_warps == 1 else 4)
             + 2 * block_k * (block_m + block_n)
             + block_m * block_n * 4
             <= _DSM_DUAL_PROGRAM
@@ -484,7 +482,9 @@ def _launch_plan(max_len, rank):
     candidates = _SMALL_TILES if max_len <= 64 else _LARGE_TILES
     for block_m, block_n, num_warps, num_stages in candidates:
         tile = block_m * block_n
-        dsm = tile * (8 if num_warps == 1 else 4) + 2 * block_k * (block_m + block_n)
+        dsm = tile * (8 if num_warps == 1 else 4) + 2 * block_k * (
+            block_m + block_n
+        )
         if tile <= 65536 and dsm <= _DSM_PLAN_LIMIT:
             return block_m, block_n, num_warps, num_stages
     return None

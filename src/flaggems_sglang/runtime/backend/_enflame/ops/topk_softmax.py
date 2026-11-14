@@ -127,9 +127,16 @@ def _fix_gcu_attr(attr_match, line, op_name):
                 return f" <{{operandSegmentSizes = {new_seg}, {rest}}}>"
             return f" <{{operandSegmentSizes = {new_seg}}}>"
         return attr_match.group(0)
-    if op_name in ("memref.reinterpret_cast", "memref.subview") and not seg_match:
+    if (
+        op_name in ("memref.reinterpret_cast", "memref.subview")
+        and not seg_match
+    ):
         opers = re.search(r"\(([^()]*)\)\s*<\{", line)
-        n_ops = len([x for x in opers.group(1).split(",") if x.strip()]) if opers else 1
+        n_ops = (
+            len([x for x in opers.group(1).split(",") if x.strip()])
+            if opers
+            else 1
+        )
         offs = re.search(r"static_offsets = array<i64: ([^>]*)>", line)
         sizes = re.search(r"static_sizes = array<i64: ([^>]*)>", line)
         strides = re.search(r"static_strides = array<i64: ([^>]*)>", line)
@@ -173,7 +180,9 @@ def _patch_gcu_compiler_opt():
 
     def _shim(content, *args):
         if isinstance(content, str) and "operandSegmentSizes" in content:
-            content = "\n".join(_fix_gcu_dialect_line(l) for l in content.split("\n"))
+            content = "\n".join(
+                _fix_gcu_dialect_line(line) for line in content.split("\n")
+            )
         return _orig(content, *args)
 
     _shim._flaggems_dialect_shim = True
@@ -209,9 +218,9 @@ def _topk_softmax_row_kernel(
     row = tl.program_id(0)
     offs_e = tl.arange(0, BLOCK_E)
     if EVEN_E:
-        x = tl.load(
-            gating_ptr + row * stride_gm + offs_e * stride_ge
-        ).to(tl.float32)
+        x = tl.load(gating_ptr + row * stride_gm + offs_e * stride_ge).to(
+            tl.float32
+        )
         row_max = tl.max(x, axis=0)
         e = tl.exp(x - row_max)
         sel = e
@@ -344,9 +353,8 @@ def _rows_kernel_eligible(num_experts):
     # E must be a power of two (>= 16, <= 512 to keep the fp32 tile set
     # inside a comfortable DSM budget at BLOCK_M=32).  Powers of two below
     # the 128-wide BLOCK_E floor load through the column mask.
-    return (
-        16 <= num_experts <= 512
-        and num_experts == triton.next_power_of_2(num_experts)
+    return 16 <= num_experts <= 512 and num_experts == triton.next_power_of_2(
+        num_experts
     )
 
 
@@ -426,7 +434,10 @@ def _launch_rows_kernel(
     # row kernel's validated output, so no copy-back is needed on success.
     try:
         w_ref = torch.empty_strided(
-            weights.shape, weights.stride(), dtype=weights.dtype, device=weights.device
+            weights.shape,
+            weights.stride(),
+            dtype=weights.dtype,
+            device=weights.device,
         )
         i_ref = torch.empty_strided(
             ids.shape, ids.stride(), dtype=ids.dtype, device=ids.device

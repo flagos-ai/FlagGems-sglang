@@ -304,8 +304,7 @@ def concat_mla_absorb_q(a, b):
             else:
                 # Non-pow2 lane widths: persistent wide-lane kernel.
                 block = 8192
-                grid = (min(2 * _num_programs(),
-                            triton.cdiv(n_out, block)),)
+                grid = (min(2 * _num_programs(), triton.cdiv(n_out, block)),)
                 _concat_mla_absorb_q_wide_persistent_kernel[grid](
                     a,
                     b,

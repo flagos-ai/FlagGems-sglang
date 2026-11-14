@@ -237,7 +237,10 @@ def fla_layernorm_gated(
 
     u_rows = max(
         2,
-        min(16 if HAS_B else 32, triton.next_power_of_2(rows // _DISPATCH_FLOOR)),
+        min(
+            16 if HAS_B else 32,
+            triton.next_power_of_2(rows // _DISPATCH_FLOOR),
+        ),
     )
     nblk = triton.cdiv(rows, u_rows)
     if nblk <= _MAX_ITERS * _DISPATCH_FLOOR:

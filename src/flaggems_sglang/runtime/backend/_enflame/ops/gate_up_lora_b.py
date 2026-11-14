@@ -109,7 +109,8 @@ def _gate_up_lora_b_fast_kernel(
                 + adapter * (2 * output_dim * rank)
                 + columns[None, :] * rank
                 + offsets_k[:, None],
-                mask=(offsets_k[:, None] < rank) & (offsets_n[None, :] < output_dim),
+                mask=(offsets_k[:, None] < rank)
+                & (offsets_n[None, :] < output_dim),
                 other=0.0,
             )
         update = tl.dot(x_values, weight_values)
@@ -218,7 +219,9 @@ def _gate_up_lora_b_fast_kernel(
                 base_output + output_offsets, mask=output_mask, other=0.0
             ).to(tl.float32)
             tl.store(
-                output + output_offsets, base + scaling * update, mask=output_mask
+                output + output_offsets,
+                base + scaling * update,
+                mask=output_mask,
             )
 
 

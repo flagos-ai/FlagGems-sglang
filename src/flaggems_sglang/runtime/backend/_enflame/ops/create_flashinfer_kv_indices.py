@@ -52,7 +52,9 @@ def _kv_indices_kernel(
         full_end = (nb - 1) * BLOCK
         for c in range(0, full_end, BLOCK):
             offs = c + cols_b
-            tl.store(out_ptr + beg + offs, tl.load(table_ptr + (base + offs) * TS))
+            tl.store(
+                out_ptr + beg + offs, tl.load(table_ptr + (base + offs) * TS)
+            )
         tail_start = tl.maximum(full_end, 0)
         for c in range(tail_start, n, TB):
             offs = c + cols_t
@@ -65,7 +67,9 @@ def _kv_indices_kernel(
 
 
 def _int64_word_stride():
-    return 2 if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1" else 1
+    return (
+        2 if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1" else 1
+    )
 
 
 def _index(t):

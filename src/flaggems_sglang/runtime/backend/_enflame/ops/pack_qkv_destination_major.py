@@ -162,12 +162,20 @@ def _grouped(
                     cache_modifier=".cg" if HINT else "",
                 )
                 dst = ((rank * R + row) * L + head) * (3 * D) + col
-                tl.store(O + dst, q, mask, cache_modifier=".cs" if STREAM else "")
                 tl.store(
-                    O + dst + D, k, mask, cache_modifier=".cs" if STREAM else ""
+                    O + dst, q, mask, cache_modifier=".cs" if STREAM else ""
                 )
                 tl.store(
-                    O + dst + 2 * D, v, mask, cache_modifier=".cs" if STREAM else ""
+                    O + dst + D,
+                    k,
+                    mask,
+                    cache_modifier=".cs" if STREAM else "",
+                )
+                tl.store(
+                    O + dst + 2 * D,
+                    v,
+                    mask,
+                    cache_modifier=".cs" if STREAM else "",
                 )
 
 
@@ -283,9 +291,7 @@ def pack_qkv_destination_major(q, k, v, world_size, out):
         # (-1.1..-1.7% at rows=4096/16384, neutral at 1024), U=64 stays best
         # for small row counts, num_warps=1 throughout (nw 2/4 regress
         # 2x+). Larger tiles (U=1024) exceed the DSM budget and regress.
-        rows_per_program = (
-            64 if rows < 256 else (512 if rows >= 1024 else 256)
-        )
+        rows_per_program = 64 if rows < 256 else (512 if rows >= 1024 else 256)
         row_blocks = triton.cdiv(rows, rows_per_program)
         jobs = world_size * local * row_blocks
         launched = min(_FIXED_GRID, jobs)

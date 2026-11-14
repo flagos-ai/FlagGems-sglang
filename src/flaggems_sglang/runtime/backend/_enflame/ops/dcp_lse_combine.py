@@ -81,8 +81,13 @@ def _dcp_lse_combine_pair(
             row_offs = tl.arange(0, ROWS)
             flat_offs = tl.arange(0, ROWS * BLOCK)
             rbase = base * D
-            x0 = tl.load(recv_out_ptr + rbase + flat_offs, cache_modifier=".cg")
-            x1 = tl.load(recv_out_ptr + stride_rn + rbase + flat_offs, cache_modifier=".cg")
+            x0 = tl.load(
+                recv_out_ptr + rbase + flat_offs, cache_modifier=".cg"
+            )
+            x1 = tl.load(
+                recv_out_ptr + stride_rn + rbase + flat_offs,
+                cache_modifier=".cg",
+            )
             l0 = tl.load(recv_lse_ptr + base + row_offs)
             l0 = tl.where((l0 != l0) | (l0 == float("inf")), float("-inf"), l0)
             l1 = tl.load(recv_lse_ptr + stride_ln + base + row_offs)
@@ -272,7 +277,9 @@ def _dcp_lse_combine_flat(
                     recv_out_ptr + n * stride_rn + base * D + flat_offs,
                     cache_modifier=".cg",
                 )
-                acc += w_n[:, None] * tl.reshape(x, (ROWS, BLOCK)).to(tl.float32)
+                acc += w_n[:, None] * tl.reshape(x, (ROWS, BLOCK)).to(
+                    tl.float32
+                )
 
             out = tl.reshape(
                 (acc / wsum[:, None]).to(out_ptr.dtype.element_ty),
@@ -352,7 +359,9 @@ def _dcp_lse_combine_kernel(
                     recv_out_ptr + n * stride_rn + base * D + flat_offs,
                     cache_modifier=".cg",
                 )
-                acc += w_n[:, None] * tl.reshape(x, (ROWS, BLOCK)).to(tl.float32)
+                acc += w_n[:, None] * tl.reshape(x, (ROWS, BLOCK)).to(
+                    tl.float32
+                )
 
             out = tl.reshape(
                 (acc / wsum[:, None]).to(out_ptr.dtype.element_ty),

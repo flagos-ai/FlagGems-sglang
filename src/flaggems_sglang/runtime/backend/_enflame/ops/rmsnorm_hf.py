@@ -161,9 +161,9 @@ def _rmsnorm_hf_kernel_rowbatch(
         rows = (row0 + tl.arange(0, R)).to(tl.int64)
         cols = tl.arange(0, BLOCK)
         if EXACT:
-            x = tl.load(
-                x_ptr + rows[:, None] * stride_x + cols[None, :]
-            ).to(tl.float32)
+            x = tl.load(x_ptr + rows[:, None] * stride_x + cols[None, :]).to(
+                tl.float32
+            )
             # [1, BLOCK] 2D-shaped weight load: keeps the broadcast chain on
             # the proven-safe form (1D vector broadcast is a miscompile face).
             wv = tl.load(w_ptr + cols[None, :]).to(tl.float32)
@@ -209,9 +209,9 @@ def _rmsnorm_hf_kernel_rowbatch(
                 ms = tl.sum(x * x, axis=0) / N
                 rrms = tl.math.rsqrt(ms + eps)
                 y = (x * rrms).to(x_ptr.dtype.element_ty).to(tl.float32)
-                wv = tl.load(
-                    w_ptr + cols, mask=cmask, other=0.0
-                ).to(tl.float32)
+                wv = tl.load(w_ptr + cols, mask=cmask, other=0.0).to(
+                    tl.float32
+                )
                 tl.store(
                     out_ptr + row.to(tl.int64) * stride_o + cols,
                     (wv * y).to(out_ptr.dtype.element_ty),

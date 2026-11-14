@@ -151,8 +151,12 @@ def _w8a8_bk_matmul_unroll(
                 b = tl.load(b_ptrs, mask=in_n[None, :], other=0)
             else:
                 in_k = (it * BLOCK_K + rk) < K
-                a = tl.load(a_ptrs, mask=in_m[:, None] & in_k[None, :], other=0)
-                b = tl.load(b_ptrs, mask=in_k[:, None] & in_n[None, :], other=0)
+                a = tl.load(
+                    a_ptrs, mask=in_m[:, None] & in_k[None, :], other=0
+                )
+                b = tl.load(
+                    b_ptrs, mask=in_k[:, None] & in_n[None, :], other=0
+                )
             sa = tl.load(as_ptr + rm * ASM + ik * ASK, mask=in_m, other=0.0)
             sb = tl.load(bs_ptr + nblk * BSN + ik * BSK)
             prod = tl.dot(a, b, out_dtype=tl.int32)

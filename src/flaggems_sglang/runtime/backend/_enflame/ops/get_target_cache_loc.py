@@ -114,7 +114,9 @@ def _pow2_at_least(n):
 
 
 def _gcu_int64_enabled():
-    return os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "").lower() not in (
+    return os.environ.get(
+        "TORCH_GCU_ENABLE_INT64_AND_UINT64", ""
+    ).lower() not in (
         "",
         "0",
         "false",
@@ -219,7 +221,9 @@ def get_target_cache_loc(
     out = out_cache_loc.contiguous()
     if out.dtype != torch.int32:
         out = out.to(torch.int32)
-    tgt, free = _run_packed(drafts, frees, out, bs, int(num_verify_tokens), False)
+    tgt, free = _run_packed(
+        drafts, frees, out, bs, int(num_verify_tokens), False
+    )
     return tgt.to(dtype), free.to(dtype)
 
 

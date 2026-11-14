@@ -136,9 +136,9 @@ def _ssu_khead_kernel(
             )
 
         x = tl.load(x_ptr + rowbase + m_off).to(tl.float32)
-        Bc = tl.load(
-            B_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off
-        ).to(tl.float32)
+        Bc = tl.load(B_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off).to(
+            tl.float32
+        )
 
         # new_state = state * exp(dt'*A) + (dt'*x) * B_bcast
         dA = tl.exp(dt[:, None] * A)
@@ -147,9 +147,9 @@ def _ssu_khead_kernel(
 
         # y = sum_n(new_state * C_bcast), reusing the register-resident
         # new_state (no extra global read of the just-stored values).
-        Cc = tl.load(
-            C_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off
-        ).to(tl.float32)
+        Cc = tl.load(C_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off).to(
+            tl.float32
+        )
         y = tl.sum(ns2d * Cc[None, :], axis=1)
         if HAS_D:
             y = y + Dv * x
@@ -157,6 +157,7 @@ def _ssu_khead_kernel(
             z = tl.load(z_ptr + rowbase + m_off).to(tl.float32)
             y = y * (z * tl.sigmoid(z))
         tl.store(y_ptr + rowbase + m_off, y)
+
 
 # ---------------------------------------------------------------------------
 # Autotune configs. BLOCK_P sweeps the ``dim`` axis tile size; BLOCK_B sweeps the
@@ -405,9 +406,7 @@ def _ssu_kernel(
             y = y * (z * tl.sigmoid(z))
 
         # store y (will be cast to x dtype by the output tensor dtype).
-        y_offs = (
-            b * y_stride_b + h * y_stride_h + p_off * y_stride_p
-        )
+        y_offs = b * y_stride_b + h * y_stride_h + p_off * y_stride_p
         tl.store(
             y_ptr + y_offs, y, mask=p_valid, eviction_policy="evict_first"
         )
@@ -461,7 +460,9 @@ def _fast_path_params(batch, nheads, dim, dstate, ngroups, tensors, a_ndim):
     block_b = 8
     while block_b > 1 and batch % block_b != 0:
         block_b //= 2
-    while batch // block_b > _KHEAD_GRID_Y_LIMIT and batch % (block_b * 2) == 0:
+    while (
+        batch // block_b > _KHEAD_GRID_Y_LIMIT and batch % (block_b * 2) == 0
+    ):
         block_b *= 2
     if batch // block_b > _KHEAD_GRID_Y_LIMIT:
         return None
@@ -490,7 +491,11 @@ def selective_state_update(
     HAS_DT_BIAS = dt_bias is not None
 
     fast = _fast_path_params(
-        batch, nheads, dim, dstate, ngroups,
+        batch,
+        nheads,
+        dim,
+        dstate,
+        ngroups,
         (state, x, dt, A, B, C, D, z, dt_bias),
         A.ndim,
     )

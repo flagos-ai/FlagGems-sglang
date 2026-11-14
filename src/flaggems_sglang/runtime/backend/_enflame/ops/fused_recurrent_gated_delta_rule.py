@@ -181,7 +181,10 @@ def _zero_state_tile(device):
     buf = _ZERO_TILE_CACHE.get(key)
     if buf is None:
         buf = torch.zeros(
-            _ZERO_TILE_ROWS, _ZERO_TILE_COLS, dtype=torch.float32, device=device
+            _ZERO_TILE_ROWS,
+            _ZERO_TILE_COLS,
+            dtype=torch.float32,
+            device=device,
         )
         _ZERO_TILE_CACHE[key] = buf
     return buf
@@ -203,6 +206,7 @@ def _gdn_grid(total):
     grid_z = triton.cdiv(total, _GRID_X_MAX * _GRID_YZ_MAX)
     grid_y = triton.cdiv(total, _GRID_X_MAX * grid_z)
     return (triton.cdiv(total, grid_y * grid_z), grid_y, grid_z)
+
 
 @triton.jit
 def _gdn_fwd_kernel(
@@ -267,7 +271,11 @@ def _gdn_fwd_kernel(
     DOT: tl.constexpr,
     T1_NOINIT: tl.constexpr,
 ):
-    pid = tl.program_id(0) + tl.program_id(1) * grid_x + tl.program_id(2) * grid_xy
+    pid = (
+        tl.program_id(0)
+        + tl.program_id(1) * grid_x
+        + tl.program_id(2) * grid_xy
+    )
     if pid >= num_programs:
         return
     pid_v = pid % NV
@@ -506,6 +514,7 @@ def _gdn_fwd_kernel(
                 + offs_k[None, :] * thk,
                 state,
             )
+
 
 def fused_recurrent_gated_delta_rule(
     q,

@@ -261,9 +261,7 @@ def _scatter_values(
     target = tl.load(loc + row * LOC_S0, mask=flat_mask, other=0)
     nope_mask = flat_mask & (col < NOPE)
     rope_mask = flat_mask & (col >= NOPE)
-    nope_value = tl.load(
-        nope + row * NOPE_S0 + col * NOPE_S1, mask=nope_mask
-    )
+    nope_value = tl.load(nope + row * NOPE_S0 + col * NOPE_S1, mask=nope_mask)
     rope_value = tl.load(
         rope + row * ROPE_S0 + (col - NOPE) * ROPE_S1, mask=rope_mask
     )
@@ -306,21 +304,27 @@ def _row_target(loc_ptr, row, n, stride_loc):
 
 
 @triton.jit
-def _load_nope_row(nope_ptr, c, stride_n, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr):
+def _load_nope_row(
+    nope_ptr, c, stride_n, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr
+):
     if BLOCK_N == NOPE_D:
         return tl.load(nope_ptr + c * stride_n + d_n)
     return tl.load(nope_ptr + c * stride_n + d_n, mask=d_n < NOPE_D, other=0)
 
 
 @triton.jit
-def _load_rope_row(rope_ptr, c, stride_r, d_r, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr):
+def _load_rope_row(
+    rope_ptr, c, stride_r, d_r, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr
+):
     if BLOCK_R == ROPE_D:
         return tl.load(rope_ptr + c * stride_r + d_r)
     return tl.load(rope_ptr + c * stride_r + d_r, mask=d_r < ROPE_D, other=0)
 
 
 @triton.jit
-def _store_nope_row(dst_ptr, t, v, stride_d, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr):
+def _store_nope_row(
+    dst_ptr, t, v, stride_d, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr
+):
     if BLOCK_N == NOPE_D:
         tl.store(dst_ptr + t * stride_d + d_n, v.to(dst_ptr.dtype.element_ty))
     else:
@@ -333,10 +337,20 @@ def _store_nope_row(dst_ptr, t, v, stride_d, d_n, NOPE_D: tl.constexpr, BLOCK_N:
 
 @triton.jit
 def _store_rope_row(
-    dst_ptr, t, v, stride_d, d_r, NOPE_D: tl.constexpr, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr
+    dst_ptr,
+    t,
+    v,
+    stride_d,
+    d_r,
+    NOPE_D: tl.constexpr,
+    ROPE_D: tl.constexpr,
+    BLOCK_R: tl.constexpr,
 ):
     if BLOCK_R == ROPE_D:
-        tl.store(dst_ptr + t * stride_d + NOPE_D + d_r, v.to(dst_ptr.dtype.element_ty))
+        tl.store(
+            dst_ptr + t * stride_d + NOPE_D + d_r,
+            v.to(dst_ptr.dtype.element_ty),
+        )
     else:
         tl.store(
             dst_ptr + t * stride_d + NOPE_D + d_r,
@@ -362,8 +376,12 @@ def _scatter_rows_u1(
     BLOCK_R: tl.constexpr,
 ):
     base = tl.program_id(0) * 1
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     c0, t0 = _row_target(loc, base + 0, n, stride_loc)
     v0n = _load_nope_row(nope, c0, stride_n, d_n, NOPE_D, BLOCK_N)
     v0r = _load_rope_row(rope, c0, stride_r, d_r, ROPE_D, BLOCK_R)
@@ -388,8 +406,12 @@ def _scatter_rows_u4(
     BLOCK_R: tl.constexpr,
 ):
     base = tl.program_id(0) * 4
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     c0, t0 = _row_target(loc, base + 0, n, stride_loc)
     c1, t1 = _row_target(loc, base + 1, n, stride_loc)
     c2, t2 = _row_target(loc, base + 2, n, stride_loc)
@@ -429,8 +451,12 @@ def _scatter_rows_u8(
     BLOCK_R: tl.constexpr,
 ):
     base = tl.program_id(0) * 8
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     c0, t0 = _row_target(loc, base + 0, n, stride_loc)
     c1, t1 = _row_target(loc, base + 1, n, stride_loc)
     c2, t2 = _row_target(loc, base + 2, n, stride_loc)
@@ -492,8 +518,12 @@ def _scatter_rows_persistent(
 ):
     # Persistent grid-stride form: each program walks 8-row blocks
     # pid, pid + P, pid + 2P, ... (P = tl.num_programs(0) = 48).
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     for blk in range(tl.program_id(0), n_blocks, tl.num_programs(0)):
         base = blk * 8
         c0, t0 = _row_target(loc, base + 0, n, stride_loc)
@@ -562,7 +592,9 @@ def set_mla_kv_buffer(kv_buffer, loc, cache_k_nope, cache_k_rope):
         # kernel that the int64 env gate turns into a real 8-byte read.
         loc = loc.contiguous().view(torch.int32)
         loc_word_stride = (
-            2 if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1" else 1
+            2
+            if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1"
+            else 1
         )
     nvidia_like = getattr(torch.version, "hip", None) is None  # noqa: F841
     flags = None  # noqa: F841
@@ -601,19 +633,40 @@ def set_mla_kv_buffer(kv_buffer, loc, cache_k_nope, cache_k_rope):
                 cache_k_rope.stride(0),
             )
             shapes = dict(
-                NOPE_D=nope_width, ROPE_D=rope_width, BLOCK_N=block_n, BLOCK_R=block_r
+                NOPE_D=nope_width,
+                ROPE_D=rope_width,
+                BLOCK_N=block_n,
+                BLOCK_R=block_r,
             )
             if n <= _ROWS_U1_MAX:
                 _scatter_rows_u1[(n,)](
-                    out, loc, cache_k_nope, cache_k_rope, *tail, num_warps=4, **shapes
+                    out,
+                    loc,
+                    cache_k_nope,
+                    cache_k_rope,
+                    *tail,
+                    num_warps=4,
+                    **shapes,
                 )
             elif n <= _ROWS_U4_MAX:
                 _scatter_rows_u4[(triton.cdiv(n, 4),)](
-                    out, loc, cache_k_nope, cache_k_rope, *tail, num_warps=4, **shapes
+                    out,
+                    loc,
+                    cache_k_nope,
+                    cache_k_rope,
+                    *tail,
+                    num_warps=4,
+                    **shapes,
                 )
             elif n <= _ROWS_U8_MAX:
                 _scatter_rows_u8[(triton.cdiv(n, 8),)](
-                    out, loc, cache_k_nope, cache_k_rope, *tail, num_warps=4, **shapes
+                    out,
+                    loc,
+                    cache_k_nope,
+                    cache_k_rope,
+                    *tail,
+                    num_warps=4,
+                    **shapes,
                 )
             else:
                 _scatter_rows_persistent[(_PERSISTENT_GRID,)](

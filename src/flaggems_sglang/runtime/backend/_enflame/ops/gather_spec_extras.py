@@ -717,13 +717,24 @@ def gather_spec_extras(
             # five views can be skipped and the originals passed straight
             # to the C launcher.
             run(
-                grid[0], 1, 1,
+                grid[0],
+                1,
+                1,
                 _current_raw_stream(device_index),
                 function,
                 packed_metadata,
-                None, None, None,
-                idx_t, p_buf, i_t, t_t, h_buf,
-                out_p, out_i, out_t, out_h,
+                None,
+                None,
+                None,
+                idx_t,
+                p_buf,
+                i_t,
+                t_t,
+                h_buf,
+                out_p,
+                out_i,
+                out_t,
+                out_h,
                 *tail,
             )
             return result
@@ -749,9 +760,7 @@ def gather_spec_extras(
         out_h,
         *tail,
     )
-    compiled = kernel.run(
-        *args, grid=grid, warmup=False, num_warps=_NUM_WARPS
-    )
+    compiled = kernel.run(*args, grid=grid, warmup=False, num_warps=_NUM_WARPS)
     if entry is None and compiled is not None:
         try:
             _LAUNCH_CACHE[key] = (

@@ -112,9 +112,21 @@ def _embedding_lora_a_kernel(
                 row = tok0 + i
                 if row < end:
                     _token_generic(
-                        rr, row, ids_ptr, w_ptr, extra_ptr, out_ptr, wi,
-                        active_rank, VOCAB, RANK, RANK_ACT, EXTRA_COUNT,
-                        HAS_EXTRA, NEED_MASK, IDS_STRIDE,
+                        rr,
+                        row,
+                        ids_ptr,
+                        w_ptr,
+                        extra_ptr,
+                        out_ptr,
+                        wi,
+                        active_rank,
+                        VOCAB,
+                        RANK,
+                        RANK_ACT,
+                        EXTRA_COUNT,
+                        HAS_EXTRA,
+                        NEED_MASK,
+                        IDS_STRIDE,
                     )
         elif tok0 + TPP <= end:
             wbase = (wi * RANK_ACT + rr) * VOCAB
@@ -709,9 +721,21 @@ def _embedding_lora_a_kernel(
                 row = tok0 + i
                 if row < end:
                     _token_generic(
-                        rr, row, ids_ptr, w_ptr, extra_ptr, out_ptr, wi,
-                        active_rank, VOCAB, RANK, RANK_ACT, EXTRA_COUNT,
-                        HAS_EXTRA, NEED_MASK, IDS_STRIDE,
+                        rr,
+                        row,
+                        ids_ptr,
+                        w_ptr,
+                        extra_ptr,
+                        out_ptr,
+                        wi,
+                        active_rank,
+                        VOCAB,
+                        RANK,
+                        RANK_ACT,
+                        EXTRA_COUNT,
+                        HAS_EXTRA,
+                        NEED_MASK,
+                        IDS_STRIDE,
                     )
 
 
@@ -740,9 +764,8 @@ def _ids_int32_words(input_ids):
     if stride is None:
         probe = torch.arange(4, device=device, dtype=torch.int64)
         words = probe.view(torch.int32)
-        if (
-            words.numel() == 8
-            and bool((words[::2].cpu() == torch.arange(4)).all())
+        if words.numel() == 8 and bool(
+            (words[::2].cpu() == torch.arange(4)).all()
         ):
             stride = 2
         else:

@@ -100,8 +100,9 @@ def _zero_experts_identity_kernel(
         # Fold this token's routing slots into one fp32 scale total:
         # identity slots (idx >= num_experts) keep their scale, others 0.
         idx = tl.load(idx_ptr + token * TOPK + offs_k, mask=kmask, other=-1)
-        scale = tl.load(scale_ptr + token * TOPK + offs_k, mask=kmask,
-                        other=0.0)
+        scale = tl.load(
+            scale_ptr + token * TOPK + offs_k, mask=kmask, other=0.0
+        )
         total_scale = tl.sum(tl.where(idx >= num_experts, scale, 0.0), axis=0)
         h = tl.load(hidden_ptr + token * HIDDEN + cols, mask=mask, other=0.0)
         tl.store(
@@ -154,18 +155,26 @@ def _zero_experts_identity_batched_kernel(
         w1 = tl.sum(tl.where(i1 >= num_experts, s1, 0.0), axis=0)
         w2 = tl.sum(tl.where(i2 >= num_experts, s2, 0.0), axis=0)
         w3 = tl.sum(tl.where(i3 >= num_experts, s3, 0.0), axis=0)
-        tl.store(out_ptr + t0 * HIDDEN + cols,
-                 (h0.to(tl.float32) * w0).to(out_ptr.dtype.element_ty),
-                 mask=mask)
-        tl.store(out_ptr + t1 * HIDDEN + cols,
-                 (h1.to(tl.float32) * w1).to(out_ptr.dtype.element_ty),
-                 mask=mask)
-        tl.store(out_ptr + t2 * HIDDEN + cols,
-                 (h2.to(tl.float32) * w2).to(out_ptr.dtype.element_ty),
-                 mask=mask)
-        tl.store(out_ptr + t3 * HIDDEN + cols,
-                 (h3.to(tl.float32) * w3).to(out_ptr.dtype.element_ty),
-                 mask=mask)
+        tl.store(
+            out_ptr + t0 * HIDDEN + cols,
+            (h0.to(tl.float32) * w0).to(out_ptr.dtype.element_ty),
+            mask=mask,
+        )
+        tl.store(
+            out_ptr + t1 * HIDDEN + cols,
+            (h1.to(tl.float32) * w1).to(out_ptr.dtype.element_ty),
+            mask=mask,
+        )
+        tl.store(
+            out_ptr + t2 * HIDDEN + cols,
+            (h2.to(tl.float32) * w2).to(out_ptr.dtype.element_ty),
+            mask=mask,
+        )
+        tl.store(
+            out_ptr + t3 * HIDDEN + cols,
+            (h3.to(tl.float32) * w3).to(out_ptr.dtype.element_ty),
+            mask=mask,
+        )
 
 
 def zero_experts_identity(

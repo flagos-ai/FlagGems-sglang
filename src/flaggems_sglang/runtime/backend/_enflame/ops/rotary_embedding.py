@@ -96,7 +96,11 @@ def _rotary_gcu_v5(
         off_a = ts[:, None] * STRIDE_W_S + hh * STRIDE_W_H + pair[None, :]
         wa = tl.load(w_ptr + off_a, mask=cs_mask, other=0)
         if hh + 1 < NUM_HEADS:
-            off_b = ts[:, None] * STRIDE_W_S + (hh + 1) * STRIDE_W_H + pair[None, :]
+            off_b = (
+                ts[:, None] * STRIDE_W_S
+                + (hh + 1) * STRIDE_W_H
+                + pair[None, :]
+            )
             wb = tl.load(w_ptr + off_b, mask=cs_mask, other=0)
         a1 = (wa << 16).to(tl.float32, bitcast=True)
         a2 = (wa & -65536).to(tl.float32, bitcast=True)
@@ -142,14 +146,16 @@ def _rotary_gcu_v6(
     p_ok = pair < HALF
     mask3d = t_ok[:, None, None] & h_ok[None, :, None] & p_ok[None, None, :]
     cos = tl.load(
-        cos_ptr + ts[:, None, None] * STRIDE_COS_S
+        cos_ptr
+        + ts[:, None, None] * STRIDE_COS_S
         + 0 * hs[None, :, None]
         + pair[None, None, :] * STRIDE_COS_D,
         mask=mask3d,
         other=0.0,
     ).to(tl.float32)
     sin = tl.load(
-        sin_ptr + ts[:, None, None] * STRIDE_SIN_S
+        sin_ptr
+        + ts[:, None, None] * STRIDE_SIN_S
         + 0 * hs[None, :, None]
         + pair[None, None, :] * STRIDE_SIN_D,
         mask=mask3d,
@@ -195,12 +201,14 @@ def _rotary_gcu_v6_exact(
     hs = tl.arange(0, PAD_H)
     pair = tl.arange(0, PAD_HALF)
     cos = tl.load(
-        cos_ptr + ts[:, None, None] * STRIDE_COS_S
+        cos_ptr
+        + ts[:, None, None] * STRIDE_COS_S
         + 0 * hs[None, :, None]
         + pair[None, None, :] * STRIDE_COS_D,
     ).to(tl.float32)
     sin = tl.load(
-        sin_ptr + ts[:, None, None] * STRIDE_SIN_S
+        sin_ptr
+        + ts[:, None, None] * STRIDE_SIN_S
         + 0 * hs[None, :, None]
         + pair[None, None, :] * STRIDE_SIN_D,
     ).to(tl.float32)

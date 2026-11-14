@@ -404,13 +404,12 @@ def _packed_grid_y(n_slices, out_dim, max_dim, block_n, blocks_n_max):
     """
     bound = min(
         n_slices * blocks_n_max,
-        blocks_n_max
-        + -(-(out_dim - max_dim) // block_n)
-        + n_slices
-        - 1,
-        n_slices + -(-(out_dim - n_slices) // block_n)
-        if out_dim >= n_slices
-        else n_slices,
+        blocks_n_max + -(-(out_dim - max_dim) // block_n) + n_slices - 1,
+        (
+            n_slices + -(-(out_dim - n_slices) // block_n)
+            if out_dim >= n_slices
+            else n_slices
+        ),
     )
     packed = bound < n_slices * blocks_n_max and bound <= 255
     return (bound if packed else n_slices * blocks_n_max), packed

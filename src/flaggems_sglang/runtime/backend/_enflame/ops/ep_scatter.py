@@ -116,14 +116,18 @@ def _serial_scatter8(
         for base in range(0, count_e, 128):
             r = base + m
             tl.store(
-                M + (start_e + r) * MS, tl.where(r < valid_e, ei, -1), r < count_e
+                M + (start_e + r) * MS,
+                tl.where(r < valid_e, ei, -1),
+                r < count_e,
             )
     # ---- block prefix scan: live entries before this program's block ----
     tpp = (T + nprog - 1) // nprog
     tb0 = pid * tpp
     tb1 = tl.minimum(tb0 + tpp, T)
     scan_end = tl.where(tb0 < T, tb0 * NK, 0)
-    starts_vec = tl.sum(tl.where(es[None, :] < es[:, None], counts[None, :], 0), 1)
+    starts_vec = tl.sum(
+        tl.where(es[None, :] < es[:, None], counts[None, :], 0), 1
+    )
     scan_cnt = tl.zeros([BE], dtype=tl.int32)
     for c0 in range(0, scan_end, CHUNK):
         cp = c0 + tl.arange(0, CHUNK)
@@ -159,7 +163,9 @@ def _serial_scatter8(
         if ROW_FULL:
             row = tl.load(X + token * X0 + (cols // Q) * X1 + cols % Q)
         else:
-            row = tl.load(X + token * X0 + (cols // Q) * X1 + cols % Q, cmask, 0)
+            row = tl.load(
+                X + token * X0 + (cols // Q) * X1 + cols % Q, cmask, 0
+            )
         if HAS_SCALE:
             if SCALE_FULL:
                 srow = tl.load(XS + token * XS0 + scales * XS1)
@@ -192,7 +198,9 @@ def _serial_scatter8(
                                 tl.where(
                                     e == 4,
                                     d4,
-                                    tl.where(e == 5, d5, tl.where(e == 6, d6, d7)),
+                                    tl.where(
+                                        e == 5, d5, tl.where(e == 6, d6, d7)
+                                    ),
                                 ),
                             ),
                         ),
@@ -202,7 +210,9 @@ def _serial_scatter8(
                 if ROW_FULL:
                     tl.store(Y + d64 * Y0 + (cols // Q) * Y1 + cols % Q, row)
                 else:
-                    tl.store(Y + d64 * Y0 + (cols // Q) * Y1 + cols % Q, row, cmask)
+                    tl.store(
+                        Y + d64 * Y0 + (cols // Q) * Y1 + cols % Q, row, cmask
+                    )
                 if HAS_SCALE:
                     if SCALE_FULL:
                         tl.store(YS + d64 * YS0 + scales * YS1, srow)
@@ -288,13 +298,17 @@ def _serial_scatter(
         for base in range(0, count_e, 128):
             r = base + m
             tl.store(
-                M + (start_e + r) * MS, tl.where(r < valid_e, ei, -1), r < count_e
+                M + (start_e + r) * MS,
+                tl.where(r < valid_e, ei, -1),
+                r < count_e,
             )
     tpp = (T + nprog - 1) // nprog
     tb0 = pid * tpp
     tb1 = tl.minimum(tb0 + tpp, T)
     scan_end = tl.where(tb0 < T, tb0 * NK, 0)
-    starts_vec = tl.sum(tl.where(es[None, :] < es[:, None], counts[None, :], 0), 1)
+    starts_vec = tl.sum(
+        tl.where(es[None, :] < es[:, None], counts[None, :], 0), 1
+    )
     scan_cnt = tl.zeros([BE], dtype=tl.int32)
     for c0 in range(0, scan_end, CHUNK):
         cp = c0 + tl.arange(0, CHUNK)
@@ -315,7 +329,9 @@ def _serial_scatter(
             if e >= 0:
                 dest = tl.sum(tl.where(es == e, nxt, 0))
                 d64 = dest.to(tl.int64)
-                tl.store(Y + d64 * Y0 + (cols // Q) * Y1 + cols % Q, row, cmask)
+                tl.store(
+                    Y + d64 * Y0 + (cols // Q) * Y1 + cols % Q, row, cmask
+                )
                 if HAS_SCALE:
                     tl.store(YS + d64 * YS0 + scales * YS1, srow, smask)
                 tl.store(O + token * O0 + j * O1, dest)
@@ -431,10 +447,9 @@ def ep_scatter(
         and t * k <= _MAX_SERIAL_ENTRIES
     ):
         programs = _SMALL_PROGRAMS if t <= _SMALL_T_TOKENS else _LARGE_PROGRAMS
-        flat_ids = (
-            recv_topk.stride(1) == 1
-            and recv_topk.stride(0) == k * recv_topk.stride(1)
-        )
+        flat_ids = recv_topk.stride(1) == 1 and recv_topk.stride(
+            0
+        ) == k * recv_topk.stride(1)
         row_full = triton.next_power_of_2(h * q) == h * q
         scale_full = has_scale and triton.next_power_of_2(max(d, 1)) == d
         _serial_args = (

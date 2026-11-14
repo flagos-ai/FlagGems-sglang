@@ -157,8 +157,9 @@ def _qk_head_ln_kernel(
 
 
 @triton.jit
-def _ln_subtile(xb, DH: tl.constexpr, eps, BLOCK: tl.constexpr,
-                ROWS: tl.constexpr, out_ty):
+def _ln_subtile(
+    xb, DH: tl.constexpr, eps, BLOCK: tl.constexpr, ROWS: tl.constexpr, out_ty
+):
     # One flat (ROWS * BLOCK)-element subtile: reshape to (ROWS, BLOCK),
     # single-pass moments (same math and op order as the single-chunk
     # FLAT_OK arm, so results are bit-identical), normalize, cast.
@@ -215,61 +216,119 @@ def _qk_head_ln_multi(
             xa = tl.load(src + base * DH + col, cache_modifier=".cg")
             xb = tl.load(src + (base + ROWS) * DH + col, cache_modifier=".cg")
             ya = _ln_subtile(xa, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + base * DH + col, tl.reshape(ya, (ROWS * BLOCK,)),
-                     cache_modifier=".cg")
+            tl.store(
+                dst + base * DH + col,
+                tl.reshape(ya, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             yb = _ln_subtile(xb, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + ROWS) * DH + col,
-                     tl.reshape(yb, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + ROWS) * DH + col,
+                tl.reshape(yb, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
         elif MULT == 4:
             xa = tl.load(src + base * DH + col, cache_modifier=".cg")
             xb = tl.load(src + (base + ROWS) * DH + col, cache_modifier=".cg")
-            xc = tl.load(src + (base + 2 * ROWS) * DH + col, cache_modifier=".cg")
-            xd = tl.load(src + (base + 3 * ROWS) * DH + col, cache_modifier=".cg")
+            xc = tl.load(
+                src + (base + 2 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            xd = tl.load(
+                src + (base + 3 * ROWS) * DH + col, cache_modifier=".cg"
+            )
             ya = _ln_subtile(xa, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + base * DH + col, tl.reshape(ya, (ROWS * BLOCK,)),
-                     cache_modifier=".cg")
+            tl.store(
+                dst + base * DH + col,
+                tl.reshape(ya, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             yb = _ln_subtile(xb, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + ROWS) * DH + col,
-                     tl.reshape(yb, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + ROWS) * DH + col,
+                tl.reshape(yb, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             yc = _ln_subtile(xc, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 2 * ROWS) * DH + col,
-                     tl.reshape(yc, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 2 * ROWS) * DH + col,
+                tl.reshape(yc, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             yd = _ln_subtile(xd, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 3 * ROWS) * DH + col,
-                     tl.reshape(yd, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 3 * ROWS) * DH + col,
+                tl.reshape(yd, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
         else:
             x0 = tl.load(src + base * DH + col, cache_modifier=".cg")
             x1 = tl.load(src + (base + ROWS) * DH + col, cache_modifier=".cg")
-            x2 = tl.load(src + (base + 2 * ROWS) * DH + col, cache_modifier=".cg")
-            x3 = tl.load(src + (base + 3 * ROWS) * DH + col, cache_modifier=".cg")
-            x4 = tl.load(src + (base + 4 * ROWS) * DH + col, cache_modifier=".cg")
-            x5 = tl.load(src + (base + 5 * ROWS) * DH + col, cache_modifier=".cg")
-            x6 = tl.load(src + (base + 6 * ROWS) * DH + col, cache_modifier=".cg")
-            x7 = tl.load(src + (base + 7 * ROWS) * DH + col, cache_modifier=".cg")
+            x2 = tl.load(
+                src + (base + 2 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            x3 = tl.load(
+                src + (base + 3 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            x4 = tl.load(
+                src + (base + 4 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            x5 = tl.load(
+                src + (base + 5 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            x6 = tl.load(
+                src + (base + 6 * ROWS) * DH + col, cache_modifier=".cg"
+            )
+            x7 = tl.load(
+                src + (base + 7 * ROWS) * DH + col, cache_modifier=".cg"
+            )
             y0 = _ln_subtile(x0, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + base * DH + col, tl.reshape(y0, (ROWS * BLOCK,)),
-                     cache_modifier=".cg")
+            tl.store(
+                dst + base * DH + col,
+                tl.reshape(y0, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y1 = _ln_subtile(x1, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + ROWS) * DH + col,
-                     tl.reshape(y1, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + ROWS) * DH + col,
+                tl.reshape(y1, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y2 = _ln_subtile(x2, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 2 * ROWS) * DH + col,
-                     tl.reshape(y2, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 2 * ROWS) * DH + col,
+                tl.reshape(y2, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y3 = _ln_subtile(x3, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 3 * ROWS) * DH + col,
-                     tl.reshape(y3, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 3 * ROWS) * DH + col,
+                tl.reshape(y3, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y4 = _ln_subtile(x4, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 4 * ROWS) * DH + col,
-                     tl.reshape(y4, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 4 * ROWS) * DH + col,
+                tl.reshape(y4, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y5 = _ln_subtile(x5, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 5 * ROWS) * DH + col,
-                     tl.reshape(y5, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 5 * ROWS) * DH + col,
+                tl.reshape(y5, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y6 = _ln_subtile(x6, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 6 * ROWS) * DH + col,
-                     tl.reshape(y6, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 6 * ROWS) * DH + col,
+                tl.reshape(y6, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
             y7 = _ln_subtile(x7, DH, eps, BLOCK, ROWS, dst.dtype.element_ty)
-            tl.store(dst + (base + 7 * ROWS) * DH + col,
-                     tl.reshape(y7, (ROWS * BLOCK,)), cache_modifier=".cg")
+            tl.store(
+                dst + (base + 7 * ROWS) * DH + col,
+                tl.reshape(y7, (ROWS * BLOCK,)),
+                cache_modifier=".cg",
+            )
 
 
 def qk_head_layernorm(q, k, eps):
@@ -316,8 +375,10 @@ def qk_head_layernorm(q, k, eps):
     # subtile tree compute. MULT is picked by the larger tensor's row
     # count and clamped by the smaller one (keeps the group anchor
     # non-negative for both tensors).
-    if dh == block and flat_rows * block <= _FLAT_ELEMS_MAX and (
-        min_rows >= 2 * flat_rows
+    if (
+        dh == block
+        and flat_rows * block <= _FLAT_ELEMS_MAX
+        and (min_rows >= 2 * flat_rows)
     ):
         if n_rows < 32768:
             mult = 2

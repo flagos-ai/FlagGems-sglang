@@ -87,7 +87,9 @@ def _gelu_tanh_and_mul_kernel(
             gate = x1 * tl.sigmoid(t)
             x3 = tl.load(x_ptr + base + D, mask=msk, other=0.0).to(tl.float32)
             tl.store(
-                out_ptr + offs, (gate * x3).to(out_ptr.dtype.element_ty), mask=msk
+                out_ptr + offs,
+                (gate * x3).to(out_ptr.dtype.element_ty),
+                mask=msk,
             )
 
 
@@ -121,7 +123,9 @@ def _gelu_tanh_and_mul_i64_kernel(
             gate = x1 * tl.sigmoid(t)
             x3 = tl.load(x_ptr + base + D, mask=msk, other=0.0).to(tl.float32)
             tl.store(
-                out_ptr + offs, (gate * x3).to(out_ptr.dtype.element_ty), mask=msk
+                out_ptr + offs,
+                (gate * x3).to(out_ptr.dtype.element_ty),
+                mask=msk,
             )
 
 

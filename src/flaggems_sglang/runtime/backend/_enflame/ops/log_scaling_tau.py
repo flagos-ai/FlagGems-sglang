@@ -109,9 +109,7 @@ def _row_scaled(
                 base = r * INNER + col
                 if EVEN_N:
                     x = tl.load(X + base)
-                    tl.store(
-                        Y + base, (x * tau).to(Y.dtype.element_ty)
-                    )
+                    tl.store(Y + base, (x * tau).to(Y.dtype.element_ty))
                 else:
                     m = col < INNER
                     x = tl.load(X + base, mask=m, other=0.0)

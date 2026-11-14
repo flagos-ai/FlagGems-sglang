@@ -42,7 +42,9 @@ def _per_token_quant_int8(
         amax = tl.maximum(tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10)
         scale = amax / 127.0
         inv = 127.0 / amax
-        q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(tl.int8)
+        q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(
+            tl.int8
+        )
         tl.store(q_ptr + offs, q)
         tl.store(s_ptr + rows, scale)
     else:
@@ -51,7 +53,9 @@ def _per_token_quant_int8(
         amax = tl.maximum(tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10)
         scale = amax / 127.0
         inv = 127.0 / amax
-        q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(tl.int8)
+        q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(
+            tl.int8
+        )
         tl.store(q_ptr + offs, q, mask=rmask[:, None])
         tl.store(s_ptr + rows, scale, mask=rmask)
 
@@ -76,19 +80,27 @@ def _per_token_quant_int8_persistent(
         offs = rows[:, None] * N + cols[None, :]
         if EVEN_M:
             x = tl.load(x_ptr + offs)
-            amax = tl.maximum(tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10)
+            amax = tl.maximum(
+                tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10
+            )
             scale = amax / 127.0
             inv = 127.0 / amax
-            q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(tl.int8)
+            q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(
+                tl.int8
+            )
             tl.store(q_ptr + offs, q)
             tl.store(s_ptr + rows, scale)
         else:
             rmask = rows < M
             x = tl.load(x_ptr + offs, mask=rmask[:, None], other=0.0)
-            amax = tl.maximum(tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10)
+            amax = tl.maximum(
+                tl.max(tl.abs(x), axis=1).to(tl.float32), 1.0e-10
+            )
             scale = amax / 127.0
             inv = 127.0 / amax
-            q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(tl.int8)
+            q = tl.clamp(x.to(tl.float32) * inv[:, None], -128.0, 127.0).to(
+                tl.int8
+            )
             tl.store(q_ptr + offs, q, mask=rmask[:, None])
             tl.store(s_ptr + rows, scale, mask=rmask)
 
@@ -156,7 +168,7 @@ def per_token_quant_int8(x):
         return q, scales
     bm = _block_m_for(M, N)
     num_warps = 4 if bm * N >= _MAX_TILE_ELEMS else 2
-    even_m = (M % bm == 0)
+    even_m = M % bm == 0
     if triton.cdiv(M, bm) >= _PERSIST_MIN_TILES:
         _per_token_quant_int8_persistent[(_PERSIST_PROGRAMS,)](
             x,
@@ -206,7 +218,9 @@ def _install_gcuir_text_compat():
         from triton.backends.enflame import toolkit
     except ImportError:
         return
-    if getattr(toolkit.gcu_compiler_opt, "_per_token_quant_int8_gcu_compat", False):
+    if getattr(
+        toolkit.gcu_compiler_opt, "_per_token_quant_int8_gcu_compat", False
+    ):
         return
     chain = toolkit.gcu_compiler_opt
 

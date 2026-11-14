@@ -205,7 +205,9 @@ def _rmsnorm_scale_shift_rows_kernel(
                 x = tl.load(x_ptr + row * N + offs).to(tl.float32)
                 variance = tl.sum(x * x, axis=0) / N + eps
                 inv = tl.rsqrt(variance)
-                value = _scale_shift(x * inv * w, sc, sh, out_ptr, scale_ptr, False)
+                value = _scale_shift(
+                    x * inv * w, sc, sh, out_ptr, scale_ptr, False
+                )
                 tl.store(out_ptr + row * N + offs, value)
             else:
                 m = offs < N
@@ -214,7 +216,9 @@ def _rmsnorm_scale_shift_rows_kernel(
                 )
                 variance = tl.sum(x * x, axis=0) / N + eps
                 inv = tl.rsqrt(variance)
-                value = _scale_shift(x * inv * w, sc, sh, out_ptr, scale_ptr, False)
+                value = _scale_shift(
+                    x * inv * w, sc, sh, out_ptr, scale_ptr, False
+                )
                 tl.store(out_ptr + row * N + offs, value, mask=m)
 
 

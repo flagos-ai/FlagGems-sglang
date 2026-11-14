@@ -25,7 +25,10 @@ _GRID_X_MAX = 65535
 
 
 def _int64_env_enabled():
-    return os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "0") not in ("", "0")
+    return os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "0") not in (
+        "",
+        "0",
+    )
 
 
 @triton.jit

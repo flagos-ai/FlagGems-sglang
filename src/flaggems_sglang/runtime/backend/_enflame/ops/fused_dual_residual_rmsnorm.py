@@ -183,7 +183,9 @@ def _fused_dual_residual_rmsnorm_tile_kernel(
             elif EXACT_COLS:
                 tile_mask = (row_ids < batch)[:, None]
             else:
-                tile_mask = (row_ids < batch)[:, None] & (cols < hidden)[None, :]
+                tile_mask = (row_ids < batch)[:, None] & (cols < hidden)[
+                    None, :
+                ]
             x = tl.load(x_ptr + offsets, mask=tile_mask, other=0.0).to(
                 tl.float32
             )
@@ -242,25 +244,28 @@ def _fused_dual_residual_rmsnorm_persist_kernel(
             base = row * hidden
             x = tl.load(x_ptr + base + cols).to(tl.float32)
             residual = tl.load(residual_ptr + base + cols)
-            inv_rms1 = tl.rsqrt(
-                tl.sum(x * x, axis=0) * inv_hidden + eps
-            ) * RMS1_INV_SCALE
+            inv_rms1 = (
+                tl.rsqrt(tl.sum(x * x, axis=0) * inv_hidden + eps)
+                * RMS1_INV_SCALE
+            )
             normalized1 = (x * inv_rms1 * weight1).to(
                 residual_ptr.dtype.element_ty
             )
             mid = (residual + normalized1).to(residual_ptr.dtype.element_ty)
             tl.store(mid_ptr + base + cols, mid)
             mid32 = mid.to(tl.float32)
-            inv_rms2 = tl.rsqrt(tl.sum(mid32 * mid32, axis=0) * inv_hidden + eps)
+            inv_rms2 = tl.rsqrt(
+                tl.sum(mid32 * mid32, axis=0) * inv_hidden + eps
+            )
             tl.store(output_ptr + base + cols, mid32 * inv_rms2 * weight2)
     else:
         col_mask = cols < hidden
-        weight1 = tl.load(
-            weight1_ptr + cols, mask=col_mask, other=0.0
-        ).to(tl.float32)
-        weight2 = tl.load(
-            weight2_ptr + cols, mask=col_mask, other=0.0
-        ).to(tl.float32)
+        weight1 = tl.load(weight1_ptr + cols, mask=col_mask, other=0.0).to(
+            tl.float32
+        )
+        weight2 = tl.load(weight2_ptr + cols, mask=col_mask, other=0.0).to(
+            tl.float32
+        )
         for row in range(lo, hi):
             base = row * hidden
             x = tl.load(x_ptr + base + cols, mask=col_mask, other=0.0).to(
@@ -269,18 +274,22 @@ def _fused_dual_residual_rmsnorm_persist_kernel(
             residual = tl.load(
                 residual_ptr + base + cols, mask=col_mask, other=0.0
             )
-            inv_rms1 = tl.rsqrt(
-                tl.sum(x * x, axis=0) * inv_hidden + eps
-            ) * RMS1_INV_SCALE
+            inv_rms1 = (
+                tl.rsqrt(tl.sum(x * x, axis=0) * inv_hidden + eps)
+                * RMS1_INV_SCALE
+            )
             normalized1 = (x * inv_rms1 * weight1).to(
                 residual_ptr.dtype.element_ty
             )
             mid = (residual + normalized1).to(residual_ptr.dtype.element_ty)
             tl.store(mid_ptr + base + cols, mid, mask=col_mask)
             mid32 = mid.to(tl.float32)
-            inv_rms2 = tl.rsqrt(tl.sum(mid32 * mid32, axis=0) * inv_hidden + eps)
+            inv_rms2 = tl.rsqrt(
+                tl.sum(mid32 * mid32, axis=0) * inv_hidden + eps
+            )
             tl.store(
-                output_ptr + base + cols, mid32 * inv_rms2 * weight2,
+                output_ptr + base + cols,
+                mid32 * inv_rms2 * weight2,
                 mask=col_mask,
             )
 

@@ -1478,7 +1478,13 @@ def _sign_matrix(W: tl.constexpr):
 
 @triton.jit
 def _gcu_hadamard_planes(
-    X, Y, M, N: tl.constexpr, SCALE: tl.constexpr, W: tl.constexpr, R: tl.constexpr
+    X,
+    Y,
+    M,
+    N: tl.constexpr,
+    SCALE: tl.constexpr,
+    W: tl.constexpr,
+    R: tl.constexpr,
 ):
     rows = tl.program_id(0) * R + tl.arange(0, R)
     rmask = rows < M

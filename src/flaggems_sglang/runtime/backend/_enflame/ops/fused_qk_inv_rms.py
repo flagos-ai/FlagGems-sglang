@@ -19,8 +19,15 @@ import triton.language as tl
 
 @triton.jit
 def _qk_inv_rms_tile(
-    X, Q, K, M, EPS: tl.constexpr, C: tl.constexpr, RT: tl.constexpr,
-    INV_C: tl.constexpr, FULL_BLOCKS,
+    X,
+    Q,
+    K,
+    M,
+    EPS: tl.constexpr,
+    C: tl.constexpr,
+    RT: tl.constexpr,
+    INV_C: tl.constexpr,
+    FULL_BLOCKS,
 ):
     """2D tile path (power-of-two C): [RT, C] block_ptr loads of the q/k
     planes lower to the ``tops_slice_async`` DMA (vs the per-512B
@@ -32,24 +39,40 @@ def _qk_inv_rms_tile(
     if pid < FULL_BLOCKS:
         row0 = pid * RT
         qbp = tl.make_block_ptr(
-            base=X, shape=(M, 3 * C), strides=(3 * C, 1),
-            offsets=(row0, 0), block_shape=(RT, C), order=(1, 0),
+            base=X,
+            shape=(M, 3 * C),
+            strides=(3 * C, 1),
+            offsets=(row0, 0),
+            block_shape=(RT, C),
+            order=(1, 0),
         )
         kbp = tl.make_block_ptr(
-            base=X, shape=(M, 3 * C), strides=(3 * C, 1),
-            offsets=(row0, C), block_shape=(RT, C), order=(1, 0),
+            base=X,
+            shape=(M, 3 * C),
+            strides=(3 * C, 1),
+            offsets=(row0, C),
+            block_shape=(RT, C),
+            order=(1, 0),
         )
         qv = tl.load(qbp).to(tl.float32)
         kv = tl.load(kbp).to(tl.float32)
         qi = tl.rsqrt(tl.sum(qv * qv, 1) * INV_C + EPS)
         ki = tl.rsqrt(tl.sum(kv * kv, 1) * INV_C + EPS)
         qobp = tl.make_block_ptr(
-            base=Q, shape=(M,), strides=(1,), offsets=(row0,),
-            block_shape=(RT,), order=(0,),
+            base=Q,
+            shape=(M,),
+            strides=(1,),
+            offsets=(row0,),
+            block_shape=(RT,),
+            order=(0,),
         )
         kobp = tl.make_block_ptr(
-            base=K, shape=(M,), strides=(1,), offsets=(row0,),
-            block_shape=(RT,), order=(0,),
+            base=K,
+            shape=(M,),
+            strides=(1,),
+            offsets=(row0,),
+            block_shape=(RT,),
+            order=(0,),
         )
         tl.store(qobp, qi)
         tl.store(kobp, ki)
@@ -69,8 +92,16 @@ def _qk_inv_rms_tile(
 
 @triton.jit
 def _qk_inv_rms_row(
-    X, Q, K, M, EPS: tl.constexpr, C: tl.constexpr, BLOCK: tl.constexpr,
-    RT: tl.constexpr, INV_C: tl.constexpr, EVEN_N: tl.constexpr,
+    X,
+    Q,
+    K,
+    M,
+    EPS: tl.constexpr,
+    C: tl.constexpr,
+    BLOCK: tl.constexpr,
+    RT: tl.constexpr,
+    INV_C: tl.constexpr,
+    EVEN_N: tl.constexpr,
     EVEN_M: tl.constexpr,
 ):
     """1D row-batch path (non-power-of-two C fallback): per-row affine
@@ -87,7 +118,9 @@ def _qk_inv_rms_row(
             else:
                 cmask = cols < C
                 qv = tl.load(X + (row * 3) * C + cols, cmask, 0).to(tl.float32)
-                kv = tl.load(X + (row * 3 + 1) * C + cols, cmask, 0).to(tl.float32)
+                kv = tl.load(X + (row * 3 + 1) * C + cols, cmask, 0).to(
+                    tl.float32
+                )
             qi = tl.rsqrt(tl.sum(qv * qv, 0) * INV_C + EPS)
             ki = tl.rsqrt(tl.sum(kv * kv, 0) * INV_C + EPS)
             tl.store(Q + row, qi)

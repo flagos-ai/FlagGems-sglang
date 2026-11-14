@@ -198,9 +198,7 @@ def fused_rmsnorm(
     block_size = triton.next_power_of_2(row_width)
     if row_count >= _TILE_MIN_ROWS and block_size <= 8192:
         tile_elems = (
-            _TILE_ELEMS_NARROW
-            if x.element_size() < 4
-            else _TILE_ELEMS_WIDE
+            _TILE_ELEMS_NARROW if x.element_size() < 4 else _TILE_ELEMS_WIDE
         )
         rows_per_cta = min(_TILE_MAX_ROWS, tile_elems // block_size)
         while (
@@ -227,7 +225,9 @@ def fused_rmsnorm(
         )
     elif row_count >= _ROWS_MIN_ROWS and block_size <= 8192:
         exact_cols = block_size == row_width
-        rows_per_cta, num_warps = _rows_config(row_count, block_size, exact_cols)
+        rows_per_cta, num_warps = _rows_config(
+            row_count, block_size, exact_cols
+        )
         num_blocks = triton.cdiv(row_count, rows_per_cta)
         grid = (min(_NUM_SPC, num_blocks),)
         _fused_rmsnorm_rows_kernel[grid](

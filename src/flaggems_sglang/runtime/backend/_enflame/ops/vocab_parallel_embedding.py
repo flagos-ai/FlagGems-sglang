@@ -441,7 +441,9 @@ def vocab_parallel_embedding(
     if hidden <= 8192:
         block = triton.next_power_of_2(hidden)
         even_h = block == hidden
-        idx32 = weight.shape[0] * weight.stride(0) < 2**31 and m * hidden < 2**31
+        idx32 = (
+            weight.shape[0] * weight.stride(0) < 2**31 and m * hidden < 2**31
+        )
         narrow = even_h and block <= 2048
         if m <= 48:
             unroll = 1

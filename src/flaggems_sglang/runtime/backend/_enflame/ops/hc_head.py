@@ -704,17 +704,17 @@ def _hc_head_kernel_v8(
             tl.float32
         )
         if HC_MULT > 1:
-            w1 = tl.load(
-                hc_fn_ptr + 1 * K + k_off, mask=k_mask, other=0.0
-            ).to(tl.float32)
+            w1 = tl.load(hc_fn_ptr + 1 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
         if HC_MULT > 2:
-            w2 = tl.load(
-                hc_fn_ptr + 2 * K + k_off, mask=k_mask, other=0.0
-            ).to(tl.float32)
+            w2 = tl.load(hc_fn_ptr + 2 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
         if HC_MULT > 3:
-            w3 = tl.load(
-                hc_fn_ptr + 3 * K + k_off, mask=k_mask, other=0.0
-            ).to(tl.float32)
+            w3 = tl.load(hc_fn_ptr + 3 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
 
         xk0 = tl.load(x_ptr + xb0 + k_off, mask=k_mask, other=0.0).to(
             tl.float32

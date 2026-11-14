@@ -153,41 +153,87 @@ def _silu_and_mul_masked_flat_kernel(
         if m0:
             gf0 = g0.to(tl.float32)
             uf0 = u0.to(tl.float32)
-            tl.store(ob0 + c0 + offs, (tl.fdiv(gf0, 1.0 + tl.exp(-gf0)) * uf0).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob0 + c0 + offs,
+                (tl.fdiv(gf0, 1.0 + tl.exp(-gf0)) * uf0).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m1:
             gf1 = g1.to(tl.float32)
             uf1 = u1.to(tl.float32)
-            tl.store(ob1 + c1 + offs, (tl.fdiv(gf1, 1.0 + tl.exp(-gf1)) * uf1).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob1 + c1 + offs,
+                (tl.fdiv(gf1, 1.0 + tl.exp(-gf1)) * uf1).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m2:
             gf2 = g2.to(tl.float32)
             uf2 = u2.to(tl.float32)
-            tl.store(ob2 + c2 + offs, (tl.fdiv(gf2, 1.0 + tl.exp(-gf2)) * uf2).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob2 + c2 + offs,
+                (tl.fdiv(gf2, 1.0 + tl.exp(-gf2)) * uf2).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m3:
             gf3 = g3.to(tl.float32)
             uf3 = u3.to(tl.float32)
-            tl.store(ob3 + c3 + offs, (tl.fdiv(gf3, 1.0 + tl.exp(-gf3)) * uf3).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob3 + c3 + offs,
+                (tl.fdiv(gf3, 1.0 + tl.exp(-gf3)) * uf3).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m4:
             gf4 = g4.to(tl.float32)
             uf4 = u4.to(tl.float32)
-            tl.store(ob4 + c4 + offs, (tl.fdiv(gf4, 1.0 + tl.exp(-gf4)) * uf4).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob4 + c4 + offs,
+                (tl.fdiv(gf4, 1.0 + tl.exp(-gf4)) * uf4).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m5:
             gf5 = g5.to(tl.float32)
             uf5 = u5.to(tl.float32)
-            tl.store(ob5 + c5 + offs, (tl.fdiv(gf5, 1.0 + tl.exp(-gf5)) * uf5).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob5 + c5 + offs,
+                (tl.fdiv(gf5, 1.0 + tl.exp(-gf5)) * uf5).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m6:
             gf6 = g6.to(tl.float32)
             uf6 = u6.to(tl.float32)
-            tl.store(ob6 + c6 + offs, (tl.fdiv(gf6, 1.0 + tl.exp(-gf6)) * uf6).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob6 + c6 + offs,
+                (tl.fdiv(gf6, 1.0 + tl.exp(-gf6)) * uf6).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
         if m7:
             gf7 = g7.to(tl.float32)
             uf7 = u7.to(tl.float32)
-            tl.store(ob7 + c7 + offs, (tl.fdiv(gf7, 1.0 + tl.exp(-gf7)) * uf7).to(out_ptr.dtype.element_ty))
+            tl.store(
+                ob7 + c7 + offs,
+                (tl.fdiv(gf7, 1.0 + tl.exp(-gf7)) * uf7).to(
+                    out_ptr.dtype.element_ty
+                ),
+            )
 
 
 _FALLBACK_CONFIGS = [
-    triton.Config({"BLOCK_ROW": 16, "BLOCK_H": 2048}, num_warps=4, num_stages=1),
-    triton.Config({"BLOCK_ROW": 32, "BLOCK_H": 2048}, num_warps=4, num_stages=1),
-    triton.Config({"BLOCK_ROW": 64, "BLOCK_H": 2048}, num_warps=4, num_stages=1),
+    triton.Config(
+        {"BLOCK_ROW": 16, "BLOCK_H": 2048}, num_warps=4, num_stages=1
+    ),
+    triton.Config(
+        {"BLOCK_ROW": 32, "BLOCK_H": 2048}, num_warps=4, num_stages=1
+    ),
+    triton.Config(
+        {"BLOCK_ROW": 64, "BLOCK_H": 2048}, num_warps=4, num_stages=1
+    ),
 ]
 
 
@@ -214,7 +260,12 @@ def _silu_and_mul_masked_fallback_kernel(
     row_off = pid_row * BLOCK_ROW
     col_off = pid_col * BLOCK_H
     in_gate = tl.make_block_ptr(
-        in_ptr, (n_rows, H), (H, 1), (row_off, col_off), (BLOCK_ROW, BLOCK_H), (1, 0)
+        in_ptr,
+        (n_rows, H),
+        (H, 1),
+        (row_off, col_off),
+        (BLOCK_ROW, BLOCK_H),
+        (1, 0),
     )
     in_up = tl.make_block_ptr(
         in_ptr,
@@ -225,10 +276,19 @@ def _silu_and_mul_masked_fallback_kernel(
         (1, 0),
     )
     out_block = tl.make_block_ptr(
-        out_ptr, (n_rows, half), (half, 1), (row_off, col_off), (BLOCK_ROW, BLOCK_H), (1, 0)
+        out_ptr,
+        (n_rows, half),
+        (half, 1),
+        (row_off, col_off),
+        (BLOCK_ROW, BLOCK_H),
+        (1, 0),
     )
-    gate = tl.load(in_gate, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
-    up = tl.load(in_up, boundary_check=(0, 1), padding_option="zero").to(tl.float32)
+    gate = tl.load(in_gate, boundary_check=(0, 1), padding_option="zero").to(
+        tl.float32
+    )
+    up = tl.load(in_up, boundary_check=(0, 1), padding_option="zero").to(
+        tl.float32
+    )
     val = (gate * tl.sigmoid(gate) * up).to(out_ptr.dtype.element_ty)
     tl.store(out_block, val, boundary_check=(0, 1))
 

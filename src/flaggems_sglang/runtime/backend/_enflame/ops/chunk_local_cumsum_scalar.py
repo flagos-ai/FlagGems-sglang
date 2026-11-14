@@ -116,7 +116,11 @@ def chunk_local_cumsum_scalar(g, chunk_size, reverse=False, scale=None):
     num_col_blocks = triton.cdiv(heads, block_h)
 
     out = torch.empty_like(g, dtype=torch.float32)
-    grid = (grid_chunks,) if num_col_blocks == 1 else (grid_chunks, num_col_blocks)
+    grid = (
+        (grid_chunks,)
+        if num_col_blocks == 1
+        else (grid_chunks, num_col_blocks)
+    )
     _scan_persistent[grid](
         g,
         out,

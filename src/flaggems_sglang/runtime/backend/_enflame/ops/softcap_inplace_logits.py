@@ -57,9 +57,16 @@ def _fix_gcu_attr(attr_match, line, op_name):
                 return f" <{{operandSegmentSizes = {new_seg}, {rest}}}>"
             return f" <{{operandSegmentSizes = {new_seg}}}>"
         return attr_match.group(0)
-    if op_name in ("memref.reinterpret_cast", "memref.subview") and not seg_match:
+    if (
+        op_name in ("memref.reinterpret_cast", "memref.subview")
+        and not seg_match
+    ):
         opers = re.search(r"\(([^()]*)\)\s*<\{", line)
-        n_ops = len([x for x in opers.group(1).split(",") if x.strip()]) if opers else 1
+        n_ops = (
+            len([x for x in opers.group(1).split(",") if x.strip()])
+            if opers
+            else 1
+        )
         offs = re.search(r"static_offsets = array<i64: ([^>]*)>", line)
         sizes = re.search(r"static_sizes = array<i64: ([^>]*)>", line)
         strides = re.search(r"static_strides = array<i64: ([^>]*)>", line)
@@ -103,7 +110,9 @@ def _patch_gcu_compiler_opt():
 
     def _shim(content, *args):
         if isinstance(content, str) and "operandSegmentSizes" in content:
-            content = "\n".join(_fix_gcu_dialect_line(l) for l in content.split("\n"))
+            content = "\n".join(
+                _fix_gcu_dialect_line(line) for line in content.split("\n")
+            )
         return _orig(content, *args)
 
     _shim._flaggems_dialect_shim = True

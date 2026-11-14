@@ -179,7 +179,9 @@ def chunk_gated_delta_rule_fused_cumsum_kkt_solve_tril(
     if cu_seqlens is not None and cu_seqlens.dtype == torch.int64:
         cu_seqlens = cu_seqlens.to(torch.int32)
     chunk_indices = (
-        prepare_chunk_indices(cu_seqlens, BT) if cu_seqlens is not None else None
+        prepare_chunk_indices(cu_seqlens, BT)
+        if cu_seqlens is not None
+        else None
     )
     if chunk_indices is not None and chunk_indices.dtype == torch.int64:
         chunk_indices = chunk_indices.to(torch.int32)

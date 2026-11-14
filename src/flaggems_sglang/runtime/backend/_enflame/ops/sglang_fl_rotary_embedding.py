@@ -98,7 +98,10 @@ def _positions_as_int32_payload(positions):
         return positions
     if not positions.is_contiguous():
         positions = positions.contiguous()
-    if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "") in ("1", "true"):
+    if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "") in (
+        "1",
+        "true",
+    ):
         return positions
     return positions.view(torch.int32)
 
@@ -153,7 +156,9 @@ def _rope_flat_kernel(
     for hb in range(0, H_Q, HBQ):
         off = qoff + hb * HEAD_SIZE
         x1 = tl.load(q_ld1_ptr + off, mask=tqm, other=0.0).to(tl.float32)
-        x2 = tl.load(q_ld2_ptr + off + HALF, mask=tqm, other=0.0).to(tl.float32)
+        x2 = tl.load(q_ld2_ptr + off + HALF, mask=tqm, other=0.0).to(
+            tl.float32
+        )
         tl.store(
             q_st1_ptr + off,
             (x1 * cosq - x2 * sinq).to(q_st1_ptr.dtype.element_ty),
@@ -182,7 +187,9 @@ def _rope_flat_kernel(
     for hb in range(0, H_K, HBK):
         off = koff + hb * HEAD_SIZE
         x1 = tl.load(k_ld1_ptr + off, mask=tkm, other=0.0).to(tl.float32)
-        x2 = tl.load(k_ld2_ptr + off + HALF, mask=tkm, other=0.0).to(tl.float32)
+        x2 = tl.load(k_ld2_ptr + off + HALF, mask=tkm, other=0.0).to(
+            tl.float32
+        )
         tl.store(
             k_st1_ptr + off,
             (x1 * cosk - x2 * sink).to(k_st1_ptr.dtype.element_ty),
@@ -227,9 +234,9 @@ def _rope_kernel(
             x1 = tl.load(q_ptr + base + hoff, mask=lane_ok, other=0.0).to(
                 tl.float32
             )
-            x2 = tl.load(q_ptr + base + HALF + hoff, mask=lane_ok, other=0.0).to(
-                tl.float32
-            )
+            x2 = tl.load(
+                q_ptr + base + HALF + hoff, mask=lane_ok, other=0.0
+            ).to(tl.float32)
             tl.store(
                 q_ptr + base + hoff,
                 (x1 * c - x2 * s).to(q_ptr.dtype.element_ty),
@@ -263,9 +270,9 @@ def _rope_kernel(
             x1 = tl.load(k_ptr + base + hoff, mask=lane_ok, other=0.0).to(
                 tl.float32
             )
-            x2 = tl.load(k_ptr + base + HALF + hoff, mask=lane_ok, other=0.0).to(
-                tl.float32
-            )
+            x2 = tl.load(
+                k_ptr + base + HALF + hoff, mask=lane_ok, other=0.0
+            ).to(tl.float32)
             tl.store(
                 k_ptr + base + hoff,
                 (x1 * c - x2 * s).to(k_ptr.dtype.element_ty),

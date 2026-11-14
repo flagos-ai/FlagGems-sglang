@@ -216,12 +216,12 @@ def _pool_rows_tile(X, Y, N, K: tl.constexpr, D: tl.constexpr):
     krows = tl.arange(0, K)
     for b in tl.range(pid, N, nprog):
         base = X + b * K * 2 * D
-        s = tl.load(
-            base + krows[:, None] * (2 * D) + D + cols[None, :]
-        ).to(tl.float32)
-        v = tl.load(
-            base + krows[:, None] * (2 * D) + cols[None, :]
-        ).to(tl.float32)
+        s = tl.load(base + krows[:, None] * (2 * D) + D + cols[None, :]).to(
+            tl.float32
+        )
+        v = tl.load(base + krows[:, None] * (2 * D) + cols[None, :]).to(
+            tl.float32
+        )
         m = tl.max(s, axis=0)
         w = tl.exp(s - m[None, :])
         acc = tl.sum(v * w, axis=0)

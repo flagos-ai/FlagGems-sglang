@@ -46,7 +46,16 @@ def _flat(X, R, W, Y, RO, N: tl.constexpr, EPS: tl.constexpr, B: tl.constexpr):
 
 @triton.jit
 def _persist(
-    X, R, W, Y, RO, M, RPG, N: tl.constexpr, EPS: tl.constexpr, B: tl.constexpr,
+    X,
+    R,
+    W,
+    Y,
+    RO,
+    M,
+    RPG,
+    N: tl.constexpr,
+    EPS: tl.constexpr,
+    B: tl.constexpr,
 ):
     # Persistent 1-D row-stream: GRID programs each own a contiguous block of
     # RPG rows and stream them as scalar-base 1-D affine tiles. The pre-scaled
@@ -80,12 +89,12 @@ def _persist(
         hi = tl.minimum(lo + RPG, M)
         for row in range(lo, hi):
             base = row * N
-            x = tl.load(
-                X + base + c, m, other=0, cache_modifier=".cg"
-            ).to(tl.float32)
-            r = tl.load(
-                R + base + c, m, other=0, cache_modifier=".cg"
-            ).to(tl.float32)
+            x = tl.load(X + base + c, m, other=0, cache_modifier=".cg").to(
+                tl.float32
+            )
+            r = tl.load(R + base + c, m, other=0, cache_modifier=".cg").to(
+                tl.float32
+            )
             s = x + r
             y = s * tl.rsqrt(tl.sum(s * s, 0) / N + EPS) * wp
             tl.store(Y + base + c, y, m, cache_modifier=".cs")
@@ -94,10 +103,20 @@ def _persist(
 
 @triton.jit
 def _tile(
-    X, R, W, Y, RO, M, NUM_BLOCKS,
-    N: tl.constexpr, EPS: tl.constexpr, B: tl.constexpr,
-    RT: tl.constexpr, NPROG: tl.constexpr,
-    EVEN_ROWS: tl.constexpr, EXACT_COLS: tl.constexpr,
+    X,
+    R,
+    W,
+    Y,
+    RO,
+    M,
+    NUM_BLOCKS,
+    N: tl.constexpr,
+    EPS: tl.constexpr,
+    B: tl.constexpr,
+    RT: tl.constexpr,
+    NPROG: tl.constexpr,
+    EVEN_ROWS: tl.constexpr,
+    EXACT_COLS: tl.constexpr,
 ):
     # Persistent [RT, B] row-tile kernel (2026-11-13 E-1 second round; the
     # first round was forced into the 1-D _persist form by the since-resolved

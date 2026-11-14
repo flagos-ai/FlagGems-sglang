@@ -104,46 +104,89 @@ _MAX_TOPK_UNROLL = 16
 
 
 @triton.jit
-def _row8_slots(I, E, W, tbi, tbe, tbw, NLE, ROWS, sd, scale):
-    v = tl.load(I + tbi + 0).to(tl.int32)
+def _row8_slots(Idx, E, W, tbi, tbe, tbw, NLE, ROWS, sd, scale):
+    v = tl.load(Idx + tbi + 0).to(tl.int32)
     d0 = tl.where(v < 0, v + ROWS, v) * sd
-    w0 = tl.where(tl.load(E + tbe + 0).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 0).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 1).to(tl.int32)
+    w0 = tl.where(
+        tl.load(E + tbe + 0).to(tl.int32) != NLE,
+        tl.load(W + tbw + 0).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 1).to(tl.int32)
     d1 = tl.where(v < 0, v + ROWS, v) * sd
-    w1 = tl.where(tl.load(E + tbe + 1).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 1).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 2).to(tl.int32)
+    w1 = tl.where(
+        tl.load(E + tbe + 1).to(tl.int32) != NLE,
+        tl.load(W + tbw + 1).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 2).to(tl.int32)
     d2 = tl.where(v < 0, v + ROWS, v) * sd
-    w2 = tl.where(tl.load(E + tbe + 2).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 2).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 3).to(tl.int32)
+    w2 = tl.where(
+        tl.load(E + tbe + 2).to(tl.int32) != NLE,
+        tl.load(W + tbw + 2).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 3).to(tl.int32)
     d3 = tl.where(v < 0, v + ROWS, v) * sd
-    w3 = tl.where(tl.load(E + tbe + 3).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 3).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 4).to(tl.int32)
+    w3 = tl.where(
+        tl.load(E + tbe + 3).to(tl.int32) != NLE,
+        tl.load(W + tbw + 3).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 4).to(tl.int32)
     d4 = tl.where(v < 0, v + ROWS, v) * sd
-    w4 = tl.where(tl.load(E + tbe + 4).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 4).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 5).to(tl.int32)
+    w4 = tl.where(
+        tl.load(E + tbe + 4).to(tl.int32) != NLE,
+        tl.load(W + tbw + 4).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 5).to(tl.int32)
     d5 = tl.where(v < 0, v + ROWS, v) * sd
-    w5 = tl.where(tl.load(E + tbe + 5).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 5).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 6).to(tl.int32)
+    w5 = tl.where(
+        tl.load(E + tbe + 5).to(tl.int32) != NLE,
+        tl.load(W + tbw + 5).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 6).to(tl.int32)
     d6 = tl.where(v < 0, v + ROWS, v) * sd
-    w6 = tl.where(tl.load(E + tbe + 6).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 6).to(tl.float32) * scale, 0.0)
-    v = tl.load(I + tbi + 7).to(tl.int32)
+    w6 = tl.where(
+        tl.load(E + tbe + 6).to(tl.int32) != NLE,
+        tl.load(W + tbw + 6).to(tl.float32) * scale,
+        0.0,
+    )
+    v = tl.load(Idx + tbi + 7).to(tl.int32)
     d7 = tl.where(v < 0, v + ROWS, v) * sd
-    w7 = tl.where(tl.load(E + tbe + 7).to(tl.int32) != NLE,
-                  tl.load(W + tbw + 7).to(tl.float32) * scale, 0.0)
-    return (d0, d1, d2, d3, d4, d5, d6, d7,
-            w0, w1, w2, w3, w4, w5, w6, w7)
+    w7 = tl.where(
+        tl.load(E + tbe + 7).to(tl.int32) != NLE,
+        tl.load(W + tbw + 7).to(tl.float32) * scale,
+        0.0,
+    )
+    return (d0, d1, d2, d3, d4, d5, d6, d7, w0, w1, w2, w3, w4, w5, w6, w7)
 
 
 @triton.jit
-def _row8_fma(D, O, obase, offs, d0, d1, d2, d3, d4, d5, d6, d7,
-              w0, w1, w2, w3, w4, w5, w6, w7):
+def _row8_fma(
+    D,
+    O,
+    obase,
+    offs,
+    d0,
+    d1,
+    d2,
+    d3,
+    d4,
+    d5,
+    d6,
+    d7,
+    w0,
+    w1,
+    w2,
+    w3,
+    w4,
+    w5,
+    w6,
+    w7,
+):
     r0 = tl.load(D + d0 + offs)
     r1 = tl.load(D + d1 + offs)
     r2 = tl.load(D + d2 + offs)
@@ -163,8 +206,29 @@ def _row8_fma(D, O, obase, offs, d0, d1, d2, d3, d4, d5, d6, d7,
 
 
 @triton.jit
-def _row8_fma_m(D, O, obase, offs, m, d0, d1, d2, d3, d4, d5, d6, d7,
-                w0, w1, w2, w3, w4, w5, w6, w7):
+def _row8_fma_m(
+    D,
+    O,
+    obase,
+    offs,
+    m,
+    d0,
+    d1,
+    d2,
+    d3,
+    d4,
+    d5,
+    d6,
+    d7,
+    w0,
+    w1,
+    w2,
+    w3,
+    w4,
+    w5,
+    w6,
+    w7,
+):
     r0 = tl.load(D + d0 + offs, m, other=0)
     r1 = tl.load(D + d1 + offs, m, other=0)
     r2 = tl.load(D + d2 + offs, m, other=0)
@@ -206,20 +270,60 @@ def _reorder_row8(
     """topk==8 fast path: one program per token, hoisted slot scalars,
     NF unmasked BLOCK_H column chunks + one masked tail chunk."""
     t = tl.program_id(0)
-    (d0, d1, d2, d3, d4, d5, d6, d7,
-     w0, w1, w2, w3, w4, w5, w6, w7) = _row8_slots(
-        I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale
+    (d0, d1, d2, d3, d4, d5, d6, d7, w0, w1, w2, w3, w4, w5, w6, w7) = (
+        _row8_slots(I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale)
     )
     obase = t * so
     for j in tl.static_range(NF):
         offs = j * BLOCK_H + tl.arange(0, BLOCK_H)
-        _row8_fma(D, O, obase, offs, d0, d1, d2, d3, d4, d5, d6, d7,
-                  w0, w1, w2, w3, w4, w5, w6, w7)
+        _row8_fma(
+            D,
+            O,
+            obase,
+            offs,
+            d0,
+            d1,
+            d2,
+            d3,
+            d4,
+            d5,
+            d6,
+            d7,
+            w0,
+            w1,
+            w2,
+            w3,
+            w4,
+            w5,
+            w6,
+            w7,
+        )
     if TAIL:
         offs = NF * BLOCK_H + tl.arange(0, BLOCK_H)
         m = offs < H
-        _row8_fma_m(D, O, obase, offs, m, d0, d1, d2, d3, d4, d5, d6, d7,
-                    w0, w1, w2, w3, w4, w5, w6, w7)
+        _row8_fma_m(
+            D,
+            O,
+            obase,
+            offs,
+            m,
+            d0,
+            d1,
+            d2,
+            d3,
+            d4,
+            d5,
+            d6,
+            d7,
+            w0,
+            w1,
+            w2,
+            w3,
+            w4,
+            w5,
+            w6,
+            w7,
+        )
 
 
 @triton.jit
@@ -249,20 +353,60 @@ def _reorder_row8_persist(
     pid = tl.program_id(0)
     nprog = tl.num_programs(0)
     for t in range(pid, TT, nprog):
-        (d0, d1, d2, d3, d4, d5, d6, d7,
-         w0, w1, w2, w3, w4, w5, w6, w7) = _row8_slots(
-            I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale
+        (d0, d1, d2, d3, d4, d5, d6, d7, w0, w1, w2, w3, w4, w5, w6, w7) = (
+            _row8_slots(I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale)
         )
         obase = t * so
         for j in tl.static_range(NF):
             offs = j * BLOCK_H + tl.arange(0, BLOCK_H)
-            _row8_fma(D, O, obase, offs, d0, d1, d2, d3, d4, d5, d6, d7,
-                      w0, w1, w2, w3, w4, w5, w6, w7)
+            _row8_fma(
+                D,
+                O,
+                obase,
+                offs,
+                d0,
+                d1,
+                d2,
+                d3,
+                d4,
+                d5,
+                d6,
+                d7,
+                w0,
+                w1,
+                w2,
+                w3,
+                w4,
+                w5,
+                w6,
+                w7,
+            )
         if TAIL:
             offs = NF * BLOCK_H + tl.arange(0, BLOCK_H)
             m = offs < H
-            _row8_fma_m(D, O, obase, offs, m, d0, d1, d2, d3, d4, d5, d6, d7,
-                        w0, w1, w2, w3, w4, w5, w6, w7)
+            _row8_fma_m(
+                D,
+                O,
+                obase,
+                offs,
+                m,
+                d0,
+                d1,
+                d2,
+                d3,
+                d4,
+                d5,
+                d6,
+                d7,
+                w0,
+                w1,
+                w2,
+                w3,
+                w4,
+                w5,
+                w6,
+                w7,
+            )
 
 
 @triton.jit
@@ -289,9 +433,8 @@ def _reorder_row8_colsplit(
     per-CTA work when too few tokens exist to fill the device; the tail
     chunk takes the masked helper via a per-program branch."""
     t = tl.program_id(0)
-    (d0, d1, d2, d3, d4, d5, d6, d7,
-     w0, w1, w2, w3, w4, w5, w6, w7) = _row8_slots(
-        I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale
+    (d0, d1, d2, d3, d4, d5, d6, d7, w0, w1, w2, w3, w4, w5, w6, w7) = (
+        _row8_slots(I, E, W, t * si, t * se, t * sw, NLE, ROWS, sd, scale)
     )
     obase = t * so
     partial = 0
@@ -300,12 +443,53 @@ def _reorder_row8_colsplit(
     if partial:
         offs = NC1 * BLOCK_H + tl.arange(0, BLOCK_H)
         m = offs < H
-        _row8_fma_m(D, O, obase, offs, m, d0, d1, d2, d3, d4, d5, d6, d7,
-                    w0, w1, w2, w3, w4, w5, w6, w7)
+        _row8_fma_m(
+            D,
+            O,
+            obase,
+            offs,
+            m,
+            d0,
+            d1,
+            d2,
+            d3,
+            d4,
+            d5,
+            d6,
+            d7,
+            w0,
+            w1,
+            w2,
+            w3,
+            w4,
+            w5,
+            w6,
+            w7,
+        )
     else:
         offs = tl.program_id(1) * BLOCK_H + tl.arange(0, BLOCK_H)
-        _row8_fma(D, O, obase, offs, d0, d1, d2, d3, d4, d5, d6, d7,
-                  w0, w1, w2, w3, w4, w5, w6, w7)
+        _row8_fma(
+            D,
+            O,
+            obase,
+            offs,
+            d0,
+            d1,
+            d2,
+            d3,
+            d4,
+            d5,
+            d6,
+            d7,
+            w0,
+            w1,
+            w2,
+            w3,
+            w4,
+            w5,
+            w6,
+            w7,
+        )
 
 
 @triton.jit

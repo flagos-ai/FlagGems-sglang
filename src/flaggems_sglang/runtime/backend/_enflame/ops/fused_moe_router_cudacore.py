@@ -73,24 +73,62 @@ def _router_kernel(
     for h0 in range(0, H, BLOCK_H):
         offs_h = h0 + tl.arange(0, BLOCK_H)
         h_live = offs_h < H
-        xb0 = tl.load(x_ptr + t0 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t0 < BS) & h_live, other=0.0)
-        xb1 = tl.load(x_ptr + t1 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t1 < BS) & h_live, other=0.0)
-        xb2 = tl.load(x_ptr + t2 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t2 < BS) & h_live, other=0.0)
-        xb3 = tl.load(x_ptr + t3 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t3 < BS) & h_live, other=0.0)
+        xb0 = tl.load(
+            x_ptr + t0 * STRIDE_X_B + offs_h * STRIDE_X_H,
+            mask=(t0 < BS) & h_live,
+            other=0.0,
+        )
+        xb1 = tl.load(
+            x_ptr + t1 * STRIDE_X_B + offs_h * STRIDE_X_H,
+            mask=(t1 < BS) & h_live,
+            other=0.0,
+        )
+        xb2 = tl.load(
+            x_ptr + t2 * STRIDE_X_B + offs_h * STRIDE_X_H,
+            mask=(t2 < BS) & h_live,
+            other=0.0,
+        )
+        xb3 = tl.load(
+            x_ptr + t3 * STRIDE_X_B + offs_h * STRIDE_X_H,
+            mask=(t3 < BS) & h_live,
+            other=0.0,
+        )
         for e in tl.static_range(BLOCK_E):
-            w_e = tl.load(w_ptr + e * STRIDE_W_E + offs_h * STRIDE_W_H, mask=(e < E) & h_live, other=0.0)
+            w_e = tl.load(
+                w_ptr + e * STRIDE_W_E + offs_h * STRIDE_W_H,
+                mask=(e < E) & h_live,
+                other=0.0,
+            )
             sel = offs_e == e
-            acc0 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb0.to(tl.float32), axis=0), 0.0)
-            acc1 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb1.to(tl.float32), axis=0), 0.0)
-            acc2 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb2.to(tl.float32), axis=0), 0.0)
-            acc3 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb3.to(tl.float32), axis=0), 0.0)
+            acc0 += tl.where(
+                sel,
+                tl.sum(w_e.to(tl.float32) * xb0.to(tl.float32), axis=0),
+                0.0,
+            )
+            acc1 += tl.where(
+                sel,
+                tl.sum(w_e.to(tl.float32) * xb1.to(tl.float32), axis=0),
+                0.0,
+            )
+            acc2 += tl.where(
+                sel,
+                tl.sum(w_e.to(tl.float32) * xb2.to(tl.float32), axis=0),
+                0.0,
+            )
+            acc3 += tl.where(
+                sel,
+                tl.sum(w_e.to(tl.float32) * xb3.to(tl.float32), axis=0),
+                0.0,
+            )
     if HAS_CAP:
         acc0 = (2.0 * tl.sigmoid(2.0 * (acc0 / CAP)) - 1.0) * CAP
         acc1 = (2.0 * tl.sigmoid(2.0 * (acc1 / CAP)) - 1.0) * CAP
         acc2 = (2.0 * tl.sigmoid(2.0 * (acc2 / CAP)) - 1.0) * CAP
         acc3 = (2.0 * tl.sigmoid(2.0 * (acc3 / CAP)) - 1.0) * CAP
     if HAS_BIAS:
-        bias = tl.load(bias_ptr + offs_e, mask=e_live, other=0.0).to(tl.float32)
+        bias = tl.load(bias_ptr + offs_e, mask=e_live, other=0.0).to(
+            tl.float32
+        )
         acc0 += bias
         acc1 += bias
         acc2 += bias
@@ -104,7 +142,11 @@ def _router_kernel(
         sel = tl.max(rem0, axis=0)
         expert = tl.min(tl.where(rem0 == sel, offs_e, BLOCK_E), axis=0)
         tl.store(ids_ptr + t0 * TOPK + slot, expert, mask=t0 < BS)
-        tl.store(weights_ptr + t0 * TOPK + slot, tl.exp(sel - top0) * inv0, mask=t0 < BS)
+        tl.store(
+            weights_ptr + t0 * TOPK + slot,
+            tl.exp(sel - top0) * inv0,
+            mask=t0 < BS,
+        )
         rem0 = tl.where(offs_e == expert, NEG, rem0)
 
     logits1 = tl.where(e_live, acc1, NEG)
@@ -115,7 +157,11 @@ def _router_kernel(
         sel = tl.max(rem1, axis=0)
         expert = tl.min(tl.where(rem1 == sel, offs_e, BLOCK_E), axis=0)
         tl.store(ids_ptr + t1 * TOPK + slot, expert, mask=t1 < BS)
-        tl.store(weights_ptr + t1 * TOPK + slot, tl.exp(sel - top1) * inv1, mask=t1 < BS)
+        tl.store(
+            weights_ptr + t1 * TOPK + slot,
+            tl.exp(sel - top1) * inv1,
+            mask=t1 < BS,
+        )
         rem1 = tl.where(offs_e == expert, NEG, rem1)
 
     logits2 = tl.where(e_live, acc2, NEG)
@@ -126,7 +172,11 @@ def _router_kernel(
         sel = tl.max(rem2, axis=0)
         expert = tl.min(tl.where(rem2 == sel, offs_e, BLOCK_E), axis=0)
         tl.store(ids_ptr + t2 * TOPK + slot, expert, mask=t2 < BS)
-        tl.store(weights_ptr + t2 * TOPK + slot, tl.exp(sel - top2) * inv2, mask=t2 < BS)
+        tl.store(
+            weights_ptr + t2 * TOPK + slot,
+            tl.exp(sel - top2) * inv2,
+            mask=t2 < BS,
+        )
         rem2 = tl.where(offs_e == expert, NEG, rem2)
 
     logits3 = tl.where(e_live, acc3, NEG)
@@ -137,7 +187,11 @@ def _router_kernel(
         sel = tl.max(rem3, axis=0)
         expert = tl.min(tl.where(rem3 == sel, offs_e, BLOCK_E), axis=0)
         tl.store(ids_ptr + t3 * TOPK + slot, expert, mask=t3 < BS)
-        tl.store(weights_ptr + t3 * TOPK + slot, tl.exp(sel - top3) * inv3, mask=t3 < BS)
+        tl.store(
+            weights_ptr + t3 * TOPK + slot,
+            tl.exp(sel - top3) * inv3,
+            mask=t3 < BS,
+        )
         rem3 = tl.where(offs_e == expert, NEG, rem3)
 
 
@@ -171,22 +225,44 @@ def _logits_kernel(
     for h0 in range(0, H, BLOCK_H):
         offs_h = h0 + tl.arange(0, BLOCK_H)
         h_live = offs_h < H
-        xb0 = tl.load(x_ptr + t0 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t0 < BS) & h_live, other=0.0)
+        xb0 = tl.load(
+            x_ptr + t0 * STRIDE_X_B + offs_h * STRIDE_X_H,
+            mask=(t0 < BS) & h_live,
+            other=0.0,
+        )
         if BLOCK_M == 2:
             t1 = t0 + 1
-            xb1 = tl.load(x_ptr + t1 * STRIDE_X_B + offs_h * STRIDE_X_H, mask=(t1 < BS) & h_live, other=0.0)
+            xb1 = tl.load(
+                x_ptr + t1 * STRIDE_X_B + offs_h * STRIDE_X_H,
+                mask=(t1 < BS) & h_live,
+                other=0.0,
+            )
         for e in tl.static_range(BLOCK_E):
             e_abs = expert_block * BLOCK_E + e
-            w_e = tl.load(w_ptr + e_abs * STRIDE_W_E + offs_h * STRIDE_W_H, mask=(e_abs < E) & h_live, other=0.0)
+            w_e = tl.load(
+                w_ptr + e_abs * STRIDE_W_E + offs_h * STRIDE_W_H,
+                mask=(e_abs < E) & h_live,
+                other=0.0,
+            )
             sel = offs_e == e_abs
-            acc0 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb0.to(tl.float32), axis=0), 0.0)
+            acc0 += tl.where(
+                sel,
+                tl.sum(w_e.to(tl.float32) * xb0.to(tl.float32), axis=0),
+                0.0,
+            )
             if BLOCK_M == 2:
-                acc1 += tl.where(sel, tl.sum(w_e.to(tl.float32) * xb1.to(tl.float32), axis=0), 0.0)
+                acc1 += tl.where(
+                    sel,
+                    tl.sum(w_e.to(tl.float32) * xb1.to(tl.float32), axis=0),
+                    0.0,
+                )
     if HAS_CAP:
         acc0 = (2.0 * tl.sigmoid(2.0 * (acc0 / CAP)) - 1.0) * CAP
         acc1 = (2.0 * tl.sigmoid(2.0 * (acc1 / CAP)) - 1.0) * CAP
     if HAS_BIAS:
-        bias = tl.load(bias_ptr + offs_e, mask=e_live, other=0.0).to(tl.float32)
+        bias = tl.load(bias_ptr + offs_e, mask=e_live, other=0.0).to(
+            tl.float32
+        )
         acc0 += bias
         acc1 += bias
     tl.store(logits_ptr + t0 * E + offs_e, acc0, mask=e_live & (t0 < BS))
@@ -247,9 +323,9 @@ def _logits_dot_kernel(
             acc = (2.0 * tl.sigmoid(2.0 * (acc / CAP)) - 1.0) * CAP
         if HAS_BIAS:
             offs_nb = n0 + tl.arange(0, BLOCK_N)
-            bias = tl.load(
-                bias_ptr + offs_nb, mask=offs_nb < E, other=0.0
-            ).to(tl.float32)
+            bias = tl.load(bias_ptr + offs_nb, mask=offs_nb < E, other=0.0).to(
+                tl.float32
+            )
             acc += bias[None, :]
         offs_m = m0 + tl.arange(0, PAD_M)
         offs_n = n0 + tl.arange(0, BLOCK_N)
@@ -308,7 +384,9 @@ def _topk_kernel_m(
     for m in tl.static_range(BLOCK_M):
         token = pid * BLOCK_M + m
         live = token < BS
-        logits = tl.load(logits_ptr + token * E + offs_e, mask=e_live & live, other=NEG)
+        logits = tl.load(
+            logits_ptr + token * E + offs_e, mask=e_live & live, other=NEG
+        )
         logits = tl.where(e_live, logits, NEG)
         row_max = tl.max(logits, axis=0)
         inv = 1.0 / tl.sum(tl.exp(logits - row_max), axis=0)

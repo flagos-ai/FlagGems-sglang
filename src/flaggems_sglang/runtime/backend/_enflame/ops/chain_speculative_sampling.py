@@ -78,7 +78,9 @@ def _accept_kernel(
     for step in tl.static_range(1, S):
         active = still != 0
         draft_token = tl.load(
-            candidates_ptr + b * stride_cand_b + step * stride_cand_s, active, 0
+            candidates_ptr + b * stride_cand_b + step * stride_cand_s,
+            active,
+            0,
         )
         p = tl.load(
             target_ptr
@@ -97,14 +99,18 @@ def _accept_kernel(
             0,
         )
         coin = tl.load(
-            uniform_ptr + b * stride_uni_b + (step - 1) * stride_uni_s, active, 0
+            uniform_ptr + b * stride_uni_b + (step - 1) * stride_uni_s,
+            active,
+            0,
         )
         ok = (active & (coin * q < p)).to(tl.int32)
         num_accept = num_accept + ok
         tl.store(predicts_ptr + last_slot, draft_token, ok != 0)
         cur_row = tl.where(ok != 0, step, cur_row)
         curr_slot = tl.load(
-            retrive_index_ptr + b * stride_idx_b + step * stride_idx_s, ok != 0, 0
+            retrive_index_ptr + b * stride_idx_b + step * stride_idx_s,
+            ok != 0,
+            0,
         )
         tl.store(
             accept_index_ptr + b * stride_acc_b + num_accept * stride_acc_s,
@@ -596,7 +602,9 @@ def _crossing_kernel(
             left_end = tl.max(
                 tl.where((mvec == mhat - 1) & mok, ends, float("-inf")), 0
             )
-            right_end = tl.max(tl.where((mvec == mhat) & mok, ends, float("-inf")), 0)
+            right_end = tl.max(
+                tl.where((mvec == mhat) & mok, ends, float("-inf")), 0
+            )
             if left_end >= threshold - band:
                 lidx = (mhat - 1) * BLOCK + tl.arange(0, BLOCK)
                 lm = (lidx >= 0) & (lidx < V)

@@ -42,16 +42,24 @@ def _apply_token_bitmask_kernel(
         base = b * V
         if EXACT:
             words = tl.load(bitmask_ptr + b * NW + j * WORDS + woffs)
-            keep = tl.reshape((words[:, None] << inv_bits[None, :]) < 0, (BLOCK,))
+            keep = tl.reshape(
+                (words[:, None] << inv_bits[None, :]) < 0, (BLOCK,)
+            )
             vals = tl.load(logits_ptr + base + j * BLOCK + eoffs)
             res = tl.where(keep, vals, float("-inf"))
             tl.store(out_ptr + base + j * BLOCK + eoffs, res)
         else:
             m_w = (j * WORDS + woffs) < NW
-            words = tl.load(bitmask_ptr + b * NW + j * WORDS + woffs, mask=m_w, other=0)
-            keep = tl.reshape((words[:, None] << inv_bits[None, :]) < 0, (BLOCK,))
+            words = tl.load(
+                bitmask_ptr + b * NW + j * WORDS + woffs, mask=m_w, other=0
+            )
+            keep = tl.reshape(
+                (words[:, None] << inv_bits[None, :]) < 0, (BLOCK,)
+            )
             m_v = (j * BLOCK + eoffs) < V
-            vals = tl.load(logits_ptr + base + j * BLOCK + eoffs, mask=m_v, other=0.0)
+            vals = tl.load(
+                logits_ptr + base + j * BLOCK + eoffs, mask=m_v, other=0.0
+            )
             res = tl.where(keep, vals, float("-inf"))
             tl.store(out_ptr + base + j * BLOCK + eoffs, res, mask=m_v)
 

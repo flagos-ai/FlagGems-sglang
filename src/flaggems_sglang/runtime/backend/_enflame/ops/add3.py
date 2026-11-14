@@ -65,9 +65,9 @@ def _add3_flat_kernel(
         result = (a + b) + c
     else:
         ab = (a.to(tl.float32) + b.to(tl.float32)).to(a_ptr.dtype.element_ty)
-        result = (
-            ab.to(tl.float32) + c.to(tl.float32)
-        ).to(a_ptr.dtype.element_ty)
+        result = (ab.to(tl.float32) + c.to(tl.float32)).to(
+            a_ptr.dtype.element_ty
+        )
     tl.store(out_ptr + offsets, result, mask=mask)
 
 
@@ -95,9 +95,9 @@ def _add3_persistent_kernel(
                 ab = (a.to(tl.float32) + b.to(tl.float32)).to(
                     a_ptr.dtype.element_ty
                 )
-                result = (
-                    ab.to(tl.float32) + c.to(tl.float32)
-                ).to(a_ptr.dtype.element_ty)
+                result = (ab.to(tl.float32) + c.to(tl.float32)).to(
+                    a_ptr.dtype.element_ty
+                )
             tl.store(out_ptr + offsets, result)
         else:
             mask = offsets < n_elements
@@ -110,9 +110,9 @@ def _add3_persistent_kernel(
                 ab = (a.to(tl.float32) + b.to(tl.float32)).to(
                     a_ptr.dtype.element_ty
                 )
-                result = (
-                    ab.to(tl.float32) + c.to(tl.float32)
-                ).to(a_ptr.dtype.element_ty)
+                result = (ab.to(tl.float32) + c.to(tl.float32)).to(
+                    a_ptr.dtype.element_ty
+                )
             tl.store(out_ptr + offsets, result, mask=mask)
 
 

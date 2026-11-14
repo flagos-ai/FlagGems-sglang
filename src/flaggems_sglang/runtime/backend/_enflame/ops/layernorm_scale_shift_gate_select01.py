@@ -538,9 +538,11 @@ def _dual_tabs(S0, T0, G0, S1, T1, G1, b, cc, c0, c1, m1):
 
 
 @triton.jit
-def _dual_row(X, I, Y, G, row, cc, c0, c1, m1, v0, v1, tabs, EPS: tl.constexpr):
+def _dual_row(
+    X, Sel, Y, G, row, cc, c0, c1, m1, v0, v1, tabs, EPS: tl.constexpr
+):
     (s1a, t1a, g1a, s1b, t1b, g1b, s0a, t0a, g0a, s0b, t0b, g0b) = tabs
-    sel = tl.load(I + row) != 0
+    sel = tl.load(Sel + row) != 0
     mean = (tl.sum(v0, 0) + tl.sum(v1, 0)) / cc
     z0 = v0 - mean
     z1 = tl.where(m1, v1 - mean, 0.0)

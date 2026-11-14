@@ -109,9 +109,7 @@ def _mrope_qk_flat_kernel(
     t = m >> LOG_HALF
     p = m & (HALF - 1)
     tok = tok0 + t
-    row = tl.where(
-        p < SECTION_T, 0, tl.where(p < SECTION_T + SECTION_H, 1, 2)
-    )
+    row = tl.where(p < SECTION_T, 0, tl.where(p < SECTION_T + SECTION_H, 1, 2))
     pos_sel = tl.load(positions_ptr + row * num_tokens + tok)
     cos = tl.load(cos_ptr + pos_sel * ROTARY_DIM + p).to(tl.float32)
     sin = tl.load(sin_ptr + pos_sel * ROTARY_DIM + p).to(tl.float32)
@@ -137,10 +135,18 @@ def _mrope_qk_flat_kernel(
         tok2 = tok0 + t2
         for h in range(0, NUM_Q_HEADS):
             off2 = tok2 * RS_Q + h * HEAD_SIZE + ROTARY_DIM + c2
-            tl.store(q_out_lo_ptr + off2, tl.load(q_lo_ptr + off2, mask=tlm), mask=tlm)
+            tl.store(
+                q_out_lo_ptr + off2,
+                tl.load(q_lo_ptr + off2, mask=tlm),
+                mask=tlm,
+            )
         for h in range(0, NUM_K_HEADS):
             off2 = tok2 * RS_K + h * HEAD_SIZE + ROTARY_DIM + c2
-            tl.store(k_out_lo_ptr + off2, tl.load(k_lo_ptr + off2, mask=tlm), mask=tlm)
+            tl.store(
+                k_out_lo_ptr + off2,
+                tl.load(k_lo_ptr + off2, mask=tlm),
+                mask=tlm,
+            )
 
 
 @triton.jit
@@ -182,9 +188,9 @@ def _mrope_qk_strided_kernel(
             pos_t,
             tl.where(pair < SECTION_T + SECTION_H, pos_h, pos_w),
         )
-        cos = tl.load(cos_ptr + pos_sel * ROTARY_DIM + pair, mask=lm, other=0.0).to(
-            tl.float32
-        )
+        cos = tl.load(
+            cos_ptr + pos_sel * ROTARY_DIM + pair, mask=lm, other=0.0
+        ).to(tl.float32)
         sin = tl.load(
             sin_ptr + pos_sel * ROTARY_DIM + pair, mask=lm, other=0.0
         ).to(tl.float32)
@@ -192,7 +198,9 @@ def _mrope_qk_strided_kernel(
         k_row = tok * RS_K
         for h in range(0, NUM_Q_HEADS):
             base = q_row + h * HEAD_SIZE
-            x1 = tl.load(q_lo_ptr + base + pair, mask=lm, other=0.0).to(tl.float32)
+            x1 = tl.load(q_lo_ptr + base + pair, mask=lm, other=0.0).to(
+                tl.float32
+            )
             x2 = tl.load(q_hi_ptr + base + HALF + pair, mask=lm, other=0.0).to(
                 tl.float32
             )
@@ -202,7 +210,9 @@ def _mrope_qk_strided_kernel(
             )
         for h in range(0, NUM_K_HEADS):
             base = k_row + h * HEAD_SIZE
-            x1 = tl.load(k_lo_ptr + base + pair, mask=lm, other=0.0).to(tl.float32)
+            x1 = tl.load(k_lo_ptr + base + pair, mask=lm, other=0.0).to(
+                tl.float32
+            )
             x2 = tl.load(k_hi_ptr + base + HALF + pair, mask=lm, other=0.0).to(
                 tl.float32
             )
@@ -216,12 +226,16 @@ def _mrope_qk_strided_kernel(
             for h in range(0, NUM_Q_HEADS):
                 off = q_row + h * HEAD_SIZE + ROTARY_DIM + tail
                 tl.store(
-                    q_out_lo_ptr + off, tl.load(q_lo_ptr + off, mask=tm), mask=tm
+                    q_out_lo_ptr + off,
+                    tl.load(q_lo_ptr + off, mask=tm),
+                    mask=tm,
                 )
             for h in range(0, NUM_K_HEADS):
                 off = k_row + h * HEAD_SIZE + ROTARY_DIM + tail
                 tl.store(
-                    k_out_lo_ptr + off, tl.load(k_lo_ptr + off, mask=tm), mask=tm
+                    k_out_lo_ptr + off,
+                    tl.load(k_lo_ptr + off, mask=tm),
+                    mask=tm,
                 )
 
 

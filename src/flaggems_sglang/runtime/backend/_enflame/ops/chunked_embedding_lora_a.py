@@ -107,10 +107,9 @@ def _int64_true8(device):
             # [0, 1, ...].
             _I64_TRUE8 = bool(len(raw) >= 4 and raw[1] == 0 and raw[2] == 1)
         except Exception:
-            _I64_TRUE8 = (
-                os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "")
-                not in ("", "0")
-            )
+            _I64_TRUE8 = os.environ.get(
+                "TORCH_GCU_ENABLE_INT64_AND_UINT64", ""
+            ) not in ("", "0")
     return _I64_TRUE8
 
 

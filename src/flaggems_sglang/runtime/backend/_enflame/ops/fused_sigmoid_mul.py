@@ -23,7 +23,7 @@ import triton.language as tl
 def _gate_kernel(
     A,
     G,
-    O,
+    Out,
     N: tl.constexpr,
     HIDDEN: tl.constexpr,
     DIM: tl.constexpr,
@@ -45,28 +45,28 @@ def _gate_kernel(
         other=0,
     ).to(tl.float32)
     value = av * (1.0 / (1.0 + tl.exp(-gv)))
-    tl.store(O + i, value, valid)
+    tl.store(Out + i, value, valid)
 
 
 @triton.jit
-def _gate_flat_kernel(A, G, O, N, BLOCK: tl.constexpr):
+def _gate_flat_kernel(A, G, Out, N, BLOCK: tl.constexpr):
     i = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
     valid = i < N
     av = tl.load(A + i, valid, other=0).to(tl.float32)
     gv = tl.load(G + i, valid, other=0).to(tl.float32)
     value = av * (1.0 / (1.0 + tl.exp(-gv)))
-    tl.store(O + i, value, valid)
+    tl.store(Out + i, value, valid)
 
 
 @triton.jit
-def _gate_flat_wide_kernel(A, G, O, N, BLOCK: tl.constexpr, P: tl.constexpr):
+def _gate_flat_wide_kernel(A, G, Out, N, BLOCK: tl.constexpr, P: tl.constexpr):
     for tile in range(tl.program_id(0), tl.cdiv(N, BLOCK), P):
         i = tile * BLOCK + tl.arange(0, BLOCK)
         valid = i < N
         av = tl.load(A + i, valid, other=0).to(tl.float32)
         gv = tl.load(G + i, valid, other=0).to(tl.float32)
         value = av * (1.0 / (1.0 + tl.exp(-gv)))
-        tl.store(O + i, value, valid)
+        tl.store(Out + i, value, valid)
 
 
 def fused_sigmoid_mul(attn_output, gate):

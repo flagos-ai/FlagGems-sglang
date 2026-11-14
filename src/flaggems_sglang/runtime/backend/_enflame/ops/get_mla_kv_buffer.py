@@ -13,10 +13,11 @@
 # limitations under the License.
 """Triton implementation of kvcache/get_mla_kv_buffer."""
 
+import os
+
 import torch
 import triton
 import triton.language as tl
-import os
 
 # GCU launch limit (triton.backends.enflame.backend.GcuLauncher): grid.x
 # must stay within 65535; beyond that the row blocks are walked by a
@@ -55,8 +56,12 @@ def _gather_split_row(
     # (ROWS, BLOCK) 2D tile form fails to freshly compile on the current
     # GCU toolchain (memref_ext.slice_deslice_start/slice_start segment
     # mismatch, see compiler_issues/sglang_get_mla_kv_buffer.md).
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     # loc enters as an int32 word view (host-side, zero-copy; see the host
     # comment): the scalar load reads the true 4-byte slot words. int64 loc
     # tensors are either silently stored as compact int32 words (env gate
@@ -70,7 +75,9 @@ def _gather_split_row(
     if BLOCK_N == NOPE_D:
         vals_n = tl.load(kv_ptr + src * stride_kv + d_n)
     else:
-        vals_n = tl.load(kv_ptr + src * stride_kv + d_n, mask=d_n < NOPE_D, other=0)
+        vals_n = tl.load(
+            kv_ptr + src * stride_kv + d_n, mask=d_n < NOPE_D, other=0
+        )
     if BLOCK_R == ROPE_D:
         vals_r = tl.load(kv_ptr + (src * stride_kv + NOPE_D) + d_r)
     else:
@@ -81,7 +88,10 @@ def _gather_split_row(
         )
 
     if BLOCK_N == NOPE_D:
-        tl.store(nope_ptr + row * stride_n + d_n, vals_n.to(nope_ptr.dtype.element_ty))
+        tl.store(
+            nope_ptr + row * stride_n + d_n,
+            vals_n.to(nope_ptr.dtype.element_ty),
+        )
     else:
         tl.store(
             nope_ptr + row * stride_n + d_n,
@@ -89,7 +99,10 @@ def _gather_split_row(
             mask=d_n < NOPE_D,
         )
     if BLOCK_R == ROPE_D:
-        tl.store(rope_ptr + row * stride_r + d_r, vals_r.to(rope_ptr.dtype.element_ty))
+        tl.store(
+            rope_ptr + row * stride_r + d_r,
+            vals_r.to(rope_ptr.dtype.element_ty),
+        )
     else:
         tl.store(
             rope_ptr + row * stride_r + d_r,
@@ -197,7 +210,9 @@ def _row_slot(loc_ptr, row, N, stride_loc):
 
 
 @triton.jit
-def _load_nope(kv_ptr, s, stride_kv, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr):
+def _load_nope(
+    kv_ptr, s, stride_kv, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr
+):
     if BLOCK_N == NOPE_D:
         return tl.load(kv_ptr + s * stride_kv + d_n)
     return tl.load(kv_ptr + s * stride_kv + d_n, mask=d_n < NOPE_D, other=0)
@@ -205,7 +220,13 @@ def _load_nope(kv_ptr, s, stride_kv, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.cons
 
 @triton.jit
 def _load_rope(
-    kv_ptr, s, stride_kv, d_r, NOPE_D: tl.constexpr, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr
+    kv_ptr,
+    s,
+    stride_kv,
+    d_r,
+    NOPE_D: tl.constexpr,
+    ROPE_D: tl.constexpr,
+    BLOCK_R: tl.constexpr,
 ):
     if BLOCK_R == ROPE_D:
         return tl.load(kv_ptr + (s * stride_kv + NOPE_D) + d_r)
@@ -215,9 +236,13 @@ def _load_rope(
 
 
 @triton.jit
-def _store_nope(nope_ptr, c, v, stride_n, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr):
+def _store_nope(
+    nope_ptr, c, v, stride_n, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl.constexpr
+):
     if BLOCK_N == NOPE_D:
-        tl.store(nope_ptr + c * stride_n + d_n, v.to(nope_ptr.dtype.element_ty))
+        tl.store(
+            nope_ptr + c * stride_n + d_n, v.to(nope_ptr.dtype.element_ty)
+        )
     else:
         tl.store(
             nope_ptr + c * stride_n + d_n,
@@ -227,9 +252,13 @@ def _store_nope(nope_ptr, c, v, stride_n, d_n, NOPE_D: tl.constexpr, BLOCK_N: tl
 
 
 @triton.jit
-def _store_rope(rope_ptr, c, v, stride_r, d_r, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr):
+def _store_rope(
+    rope_ptr, c, v, stride_r, d_r, ROPE_D: tl.constexpr, BLOCK_R: tl.constexpr
+):
     if BLOCK_R == ROPE_D:
-        tl.store(rope_ptr + c * stride_r + d_r, v.to(rope_ptr.dtype.element_ty))
+        tl.store(
+            rope_ptr + c * stride_r + d_r, v.to(rope_ptr.dtype.element_ty)
+        )
     else:
         tl.store(
             rope_ptr + c * stride_r + d_r,
@@ -255,8 +284,12 @@ def _gather_split_rows_u1(
     BLOCK_R: tl.constexpr,
 ):
     base = tl.program_id(0) * 1
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     c0, s0 = _row_slot(loc_ptr, base + 0, N, stride_loc)
     v0n = _load_nope(kv_ptr, s0, stride_kv, d_n, NOPE_D, BLOCK_N)
     v0r = _load_rope(kv_ptr, s0, stride_kv, d_r, NOPE_D, ROPE_D, BLOCK_R)
@@ -292,8 +325,12 @@ def _gather_split_rows_u8ps(
     # u4/u16/u32 batchings all measured worse. Same three-segment batching
     # discipline (slot scalars first) and min-clamp tails as the historical
     # form.
-    d_n = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N)
-    d_r = tl.max_contiguous(tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R)
+    d_n = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_N), BLOCK_N), BLOCK_N
+    )
+    d_r = tl.max_contiguous(
+        tl.multiple_of(tl.arange(0, BLOCK_R), BLOCK_R), BLOCK_R
+    )
     for blk in range(tl.program_id(0), N_BLOCKS, tl.num_programs(0)):
         base = blk * 8
         c0, s0 = _row_slot(loc_ptr, base + 0, N, stride_loc)
@@ -363,12 +400,16 @@ def get_mla_kv_buffer(kv_buffer, loc, cache_k_nope, cache_k_rope):
     if loc.dtype == torch.int64:
         loc = loc.contiguous().view(torch.int32)
         loc_word_stride = (
-            2 if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1" else 1
+            2
+            if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1"
+            else 1
         )
 
     block_n = triton.next_power_of_2(nope_dim)
     block_r = triton.next_power_of_2(rope_dim)
-    shapes = dict(NOPE_D=nope_dim, ROPE_D=rope_dim, BLOCK_N=block_n, BLOCK_R=block_r)
+    shapes = dict(
+        NOPE_D=nope_dim, ROPE_D=rope_dim, BLOCK_N=block_n, BLOCK_R=block_r
+    )
     tail = (
         n_loc,
         kv_buffer.stride(0),
@@ -401,7 +442,9 @@ def get_mla_kv_buffer(kv_buffer, loc, cache_k_nope, cache_k_rope):
             def grid(meta):
                 return (triton.cdiv(n_loc, meta["ROWS"]),)
 
-            _gather_split_rows_kernel[grid](kv_buffer, loc, nope, rope, *tail, **shapes)
+            _gather_split_rows_kernel[grid](
+                kv_buffer, loc, nope, rope, *tail, **shapes
+            )
         return nope, rope
 
     # Explicitly unrolled batches (slot scalars -> row loads -> stores):

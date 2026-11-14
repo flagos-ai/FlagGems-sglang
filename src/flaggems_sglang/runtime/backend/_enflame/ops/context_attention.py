@@ -140,13 +140,11 @@ def _attn_m_tile(
     mask_m = offs_m < seq_length
 
     # Load Q tile: [BLOCK_M, BLOCK_D]
-    q_ptrs = (
-        q_base
-        + offs_m[:, None] * stride_qt
-        + offs_d[None, :] * stride_qd
-    )
+    q_ptrs = q_base + offs_m[:, None] * stride_qt + offs_d[None, :] * stride_qd
     if EXACT_D:
-        q_tile = tl.load(q_ptrs, mask=mask_m[:, None], other=0.0).to(tl.float32)
+        q_tile = tl.load(q_ptrs, mask=mask_m[:, None], other=0.0).to(
+            tl.float32
+        )
     else:
         q_tile = tl.load(
             q_ptrs, mask=mask_m[:, None] & mask_d[None, :], other=0.0
@@ -179,22 +177,18 @@ def _attn_m_tile(
         # covers both DMA latencies (measured +6-9% vs loading V after
         # the softmax on this backend).
         k_ptrs = (
-            k_base
-            + offs_n[:, None] * stride_kt
-            + offs_d[None, :] * stride_kd
+            k_base + offs_n[:, None] * stride_kt + offs_d[None, :] * stride_kd
         )
         v_ptrs = (
-            v_base
-            + offs_n[:, None] * stride_vt
-            + offs_d[None, :] * stride_vd
+            v_base + offs_n[:, None] * stride_vt + offs_d[None, :] * stride_vd
         )
         if EXACT_D:
-            k_tile = tl.load(
-                k_ptrs, mask=mask_n[:, None], other=0.0
-            ).to(tl.float32)
-            v_tile = tl.load(
-                v_ptrs, mask=mask_n[:, None], other=0.0
-            ).to(tl.float32)
+            k_tile = tl.load(k_ptrs, mask=mask_n[:, None], other=0.0).to(
+                tl.float32
+            )
+            v_tile = tl.load(v_ptrs, mask=mask_n[:, None], other=0.0).to(
+                tl.float32
+            )
         else:
             k_tile = tl.load(
                 k_ptrs, mask=mask_n[:, None] & mask_d[None, :], other=0.0
@@ -236,11 +230,7 @@ def _attn_m_tile(
     acc = acc / l_i[:, None]
 
     # Store output tile: [BLOCK_M, BLOCK_D]
-    o_ptrs = (
-        o_base
-        + offs_m[:, None] * stride_ot
-        + offs_d[None, :] * stride_od
-    )
+    o_ptrs = o_base + offs_m[:, None] * stride_ot + offs_d[None, :] * stride_od
     if EXACT_D:
         tl.store(o_ptrs, acc, mask=mask_m[:, None])
     else:
@@ -417,7 +407,9 @@ def context_attention(
     #   serial in-program. Minimal metadata; best for large batches.
     if max_input_len is None:
         max_input_len = total_tokens
-    max_len_bound = min(int(max_input_len), total_tokens) if total_tokens > 0 else 0
+    max_len_bound = (
+        min(int(max_input_len), total_tokens) if total_tokens > 0 else 0
+    )
     m_tiles = max(1, (max_len_bound + BLOCK_M - 1) // BLOCK_M)
     m_split = total_items <= SPLIT_ITEMS and m_tiles >= SPLIT_MIN_TILES
     if m_split:

@@ -65,10 +65,12 @@ def _rms_norm_row(
             rrms = tl.rsqrt(var + eps)
             tl.store(Y + base + offs, (c0 * rrms * w0).to(Y.dtype.element_ty))
             tl.store(
-                Y + base + CHUNK + offs, (c1 * rrms * w1).to(Y.dtype.element_ty)
+                Y + base + CHUNK + offs,
+                (c1 * rrms * w1).to(Y.dtype.element_ty),
             )
             tl.store(
-                Y + base + 2 * CHUNK + offs, (c2 * rrms * w2).to(Y.dtype.element_ty)
+                Y + base + 2 * CHUNK + offs,
+                (c2 * rrms * w2).to(Y.dtype.element_ty),
             )
     else:
         offs = tl.arange(0, B)
@@ -83,13 +85,17 @@ def _rms_norm_row(
                 x = tl.load(X + base + offs).to(tl.float32)
                 var = tl.sum(x * x, axis=0) / N
                 rrms = tl.rsqrt(var + eps)
-                tl.store(Y + base + offs, (x * rrms * w).to(Y.dtype.element_ty))
+                tl.store(
+                    Y + base + offs, (x * rrms * w).to(Y.dtype.element_ty)
+                )
             else:
                 x = tl.load(X + base + offs, mask=cm, other=0.0).to(tl.float32)
                 var = tl.sum(x * x, axis=0) / N
                 rrms = tl.rsqrt(var + eps)
                 tl.store(
-                    Y + base + offs, (x * rrms * w).to(Y.dtype.element_ty), mask=cm
+                    Y + base + offs,
+                    (x * rrms * w).to(Y.dtype.element_ty),
+                    mask=cm,
                 )
 
 
@@ -143,9 +149,12 @@ def _rms_norm_rows_c3_ub(
         ) / N
         rr = tl.rsqrt(var + eps)
         tl.store(Y + base0 + offs, (c0_0 * rr * w0).to(Y.dtype.element_ty))
-        tl.store(Y + base0 + CHUNK + offs, (c0_1 * rr * w1).to(Y.dtype.element_ty))
         tl.store(
-            Y + base0 + 2 * CHUNK + offs, (c0_2 * rr * w2).to(Y.dtype.element_ty)
+            Y + base0 + CHUNK + offs, (c0_1 * rr * w1).to(Y.dtype.element_ty)
+        )
+        tl.store(
+            Y + base0 + 2 * CHUNK + offs,
+            (c0_2 * rr * w2).to(Y.dtype.element_ty),
         )
         var = (
             tl.sum(c1_0 * c1_0, 0)
@@ -155,7 +164,8 @@ def _rms_norm_rows_c3_ub(
         rr = tl.rsqrt(var + eps)
         tl.store(Y + base0 + N + offs, (c1_0 * rr * w0).to(Y.dtype.element_ty))
         tl.store(
-            Y + base0 + N + CHUNK + offs, (c1_1 * rr * w1).to(Y.dtype.element_ty)
+            Y + base0 + N + CHUNK + offs,
+            (c1_1 * rr * w1).to(Y.dtype.element_ty),
         )
         tl.store(
             Y + base0 + N + 2 * CHUNK + offs,
@@ -167,7 +177,9 @@ def _rms_norm_rows_c3_ub(
             + tl.sum(c2_2 * c2_2, 0)
         ) / N
         rr = tl.rsqrt(var + eps)
-        tl.store(Y + base0 + 2 * N + offs, (c2_0 * rr * w0).to(Y.dtype.element_ty))
+        tl.store(
+            Y + base0 + 2 * N + offs, (c2_0 * rr * w0).to(Y.dtype.element_ty)
+        )
         tl.store(
             Y + base0 + 2 * N + CHUNK + offs,
             (c2_1 * rr * w1).to(Y.dtype.element_ty),
@@ -182,7 +194,9 @@ def _rms_norm_rows_c3_ub(
             + tl.sum(c3_2 * c3_2, 0)
         ) / N
         rr = tl.rsqrt(var + eps)
-        tl.store(Y + base0 + 3 * N + offs, (c3_0 * rr * w0).to(Y.dtype.element_ty))
+        tl.store(
+            Y + base0 + 3 * N + offs, (c3_0 * rr * w0).to(Y.dtype.element_ty)
+        )
         tl.store(
             Y + base0 + 3 * N + CHUNK + offs,
             (c3_1 * rr * w1).to(Y.dtype.element_ty),
@@ -230,25 +244,39 @@ def _rms_norm_rows_exact_ub(
             tl.store(Y + base0 + offs, (x0 * rr * w).to(Y.dtype.element_ty))
             var = tl.sum(x1 * x1, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + N + offs, (x1 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + N + offs, (x1 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x2 * x2, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 2 * N + offs, (x2 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 2 * N + offs, (x2 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x3 * x3, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 3 * N + offs, (x3 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 3 * N + offs, (x3 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x4 * x4, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 4 * N + offs, (x4 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 4 * N + offs, (x4 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x5 * x5, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 5 * N + offs, (x5 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 5 * N + offs, (x5 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x6 * x6, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 6 * N + offs, (x6 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 6 * N + offs, (x6 * rr * w).to(Y.dtype.element_ty)
+            )
             var = tl.sum(x7 * x7, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + 7 * N + offs, (x7 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + 7 * N + offs, (x7 * rr * w).to(Y.dtype.element_ty)
+            )
         else:
             x0 = tl.load(X + base0 + offs).to(tl.float32)
             x1 = tl.load(X + base0 + N + offs).to(tl.float32)
@@ -257,7 +285,9 @@ def _rms_norm_rows_exact_ub(
             tl.store(Y + base0 + offs, (x0 * rr * w).to(Y.dtype.element_ty))
             var = tl.sum(x1 * x1, 0) / N
             rr = tl.rsqrt(var + eps)
-            tl.store(Y + base0 + N + offs, (x1 * rr * w).to(Y.dtype.element_ty))
+            tl.store(
+                Y + base0 + N + offs, (x1 * rr * w).to(Y.dtype.element_ty)
+            )
 
 
 @triton.jit
@@ -283,12 +313,19 @@ def _rms_norm_whole_row(
         c1 = tl.load(X + base + CHUNK + offs).to(tl.float32)
         c2 = tl.load(X + base + 2 * CHUNK + offs).to(tl.float32)
         var = (
-            tl.sum(c0 * c0, axis=0) + tl.sum(c1 * c1, axis=0) + tl.sum(c2 * c2, axis=0)
+            tl.sum(c0 * c0, axis=0)
+            + tl.sum(c1 * c1, axis=0)
+            + tl.sum(c2 * c2, axis=0)
         ) / N
         rrms = tl.rsqrt(var + eps)
         tl.store(Y + base + offs, (c0 * rrms * w0).to(Y.dtype.element_ty))
-        tl.store(Y + base + CHUNK + offs, (c1 * rrms * w1).to(Y.dtype.element_ty))
-        tl.store(Y + base + 2 * CHUNK + offs, (c2 * rrms * w2).to(Y.dtype.element_ty))
+        tl.store(
+            Y + base + CHUNK + offs, (c1 * rrms * w1).to(Y.dtype.element_ty)
+        )
+        tl.store(
+            Y + base + 2 * CHUNK + offs,
+            (c2 * rrms * w2).to(Y.dtype.element_ty),
+        )
     elif ARM == 1:
         offs = tl.arange(0, B)
         w = tl.load(W + offs).to(tl.float32)
@@ -305,7 +342,9 @@ def _rms_norm_whole_row(
         x = tl.load(X + base + offs, mask=cm, other=0.0).to(tl.float32)
         var = tl.sum(x * x, axis=0) / N
         rrms = tl.rsqrt(var + eps)
-        tl.store(Y + base + offs, (x * rrms * w).to(Y.dtype.element_ty), mask=cm)
+        tl.store(
+            Y + base + offs, (x * rrms * w).to(Y.dtype.element_ty), mask=cm
+        )
 
 
 # Column-arm dispatch (gcu400/Libra-class 48 SPs, bf16, do_bench median).
@@ -408,7 +447,11 @@ def one_pass_rms_norm(x, w, eps):
                 U=8,
                 num_warps=1,
             )
-        elif arm == _ARM_EXACT and block == _UB_EXACT2_BLOCK and m >= _UB_EXACT2_ROWS:
+        elif (
+            arm == _ARM_EXACT
+            and block == _UB_EXACT2_BLOCK
+            and m >= _UB_EXACT2_ROWS
+        ):
             groups = (m + 1) // 2
             _rms_norm_rows_exact_ub[(min(_NUM_SPC, groups),)](
                 values,

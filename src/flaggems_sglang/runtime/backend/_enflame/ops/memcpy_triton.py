@@ -113,7 +113,10 @@ def _frozen_fast(dst, src, dim, offset, sz, offset_src):
     n = min(dst.shape[0], src.shape[0]) * w
     if n:
         if dst.is_contiguous() and src.is_contiguous():
-            b = min(_MAX_TILE_BYTES // dst.element_size(), triton.next_power_of_2(n))
+            b = min(
+                _MAX_TILE_BYTES // dst.element_size(),
+                triton.next_power_of_2(n),
+            )
             b = max(b, _MIN_TILE_ELEMS)
             tiles = triton.cdiv(n, b)
             narrow = max(dst.numel(), src.numel()) + b < 2**31

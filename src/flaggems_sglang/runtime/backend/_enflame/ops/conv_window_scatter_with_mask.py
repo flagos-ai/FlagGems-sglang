@@ -31,7 +31,7 @@ and each segment issues one wide gather plus one wide scatter.  Segment tiles ar
 capped at 8192 lanes (DSM budget) by shrinking DBLK then LBLK; when the resulting
 segment count cannot fill the 48 free dispatch slots (S < 32) LBLK is halved further
 to trade tile width for CTA parallelism.  Per-segment masks are constexpr-bounded
-(l/L, d/DIM, w/WIN) combined with the scalar `step >= 0` validity, and row bases stay
+(lidx/L, d/DIM, w/WIN) combined with the scalar `step >= 0` validity, and row bases stay
 pure arithmetic (scalar base + arange affine offsets) to keep DMA lowering vectorized.
 A host guard grows the grid past 48 only when a CTA would exceed 128 loop iterations,
 staying clear of the 2D-affine-index long-loop device abort threshold.
@@ -74,16 +74,16 @@ def _cws_persist(
 ):
     pid = tl.program_id(0)
     nprog = tl.num_programs(0)
-    l = tl.arange(0, LBLK)
+    lidx = tl.arange(0, LBLK)
     d = tl.arange(0, DBLK)
     w = tl.arange(0, WBLK)
     m0 = (
-        (l < L)[:, None, None]
+        (lidx < L)[:, None, None]
         & (d < DIM)[None, :, None]
         & (w < WIN)[None, None, :]
     )
-    so_l = l[:, None, None] * s_stride_l
-    do_l = l[:, None, None] * d_stride_l
+    so_l = lidx[:, None, None] * s_stride_l
+    do_l = lidx[:, None, None] * d_stride_l
     so_d = d[None, :, None] * s_stride_dim
     do_d = d[None, :, None] * d_stride_dim
     so_w = w[None, None, :] * s_stride_win
@@ -147,10 +147,7 @@ def conv_window_scatter_with_mask(dst, src, dst_indices_raw, step_indices_raw):
     # Top up CTA parallelism when the segment count cannot fill the free
     # dispatch slots: halve the layer tile (more segments, same scalars
     # per request) until S >= 32.
-    while (
-        rows * -(-L // lb) * -(-DIM // db) < _MIN_SEGMENTS
-        and lb > 1
-    ):
+    while rows * -(-L // lb) * -(-DIM // db) < _MIN_SEGMENTS and lb > 1:
         lb //= 2
     lc = -(-L // lb)
     dc = -(-DIM // db)

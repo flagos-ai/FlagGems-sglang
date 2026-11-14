@@ -115,7 +115,9 @@ def _wsr_partial_1d(
         if K >= 2:
             cols1 = cb1c * BLOCK_V + ar
             cm1 = cols1 < V
-            x1 = tl.load(logits_ptr + lbase + tl.where(cm1, cols1, V - 1) * L_S1)
+            x1 = tl.load(
+                logits_ptr + lbase + tl.where(cm1, cols1, V - 1) * L_S1
+            )
         if HAS_TEMP:
             x0 = x0 * inv_t
             if K >= 2:
@@ -199,7 +201,9 @@ def _wsr_norm_1d(
         if K >= 2:
             cols1 = cb1c * BLOCK_V + ar
             cm1 = cols1 < V
-            x1 = tl.load(logits_ptr + lbase + tl.where(cm1, cols1, V - 1) * L_S1)
+            x1 = tl.load(
+                logits_ptr + lbase + tl.where(cm1, cols1, V - 1) * L_S1
+            )
         if HAS_TEMP:
             x0 = x0 * inv_t
             if K >= 2:
@@ -249,11 +253,14 @@ def _wsr_partial_2d(
         cm = cols < V
         lmask = rmask[:, None] & cm[None, :]
         x = tl.load(
-            logits_ptr + rsafe[:, None] * L_S0
+            logits_ptr
+            + rsafe[:, None] * L_S0
             + tl.where(cm, cols, V - 1)[None, :] * L_S1
         )
         if HAS_TEMP:
-            inv_t = (1.0 / tl.load(temp_ptr + rows, mask=rmask, other=1.0))[:, None]
+            inv_t = (1.0 / tl.load(temp_ptr + rows, mask=rmask, other=1.0))[
+                :, None
+            ]
             x = x * inv_t
         x = tl.where(lmask, x, NEG_INF)
         lm = tl.max(x, axis=1)
@@ -292,11 +299,13 @@ def _wsr_norm_2d(
     rmask = rows < B
     mo = offs < C
     mmask = rmask[:, None] & mo[None, :]
-    pm = tl.load(pmax_ptr + rows[:, None] * C + offs[None, :],
-                 mask=mmask, other=NEG_INF)
+    pm = tl.load(
+        pmax_ptr + rows[:, None] * C + offs[None, :], mask=mmask, other=NEG_INF
+    )
     gmax = tl.max(pm, axis=1)
-    ps = tl.load(psum_ptr + rows[:, None] * C + offs[None, :],
-                 mask=mmask, other=0.0)
+    ps = tl.load(
+        psum_ptr + rows[:, None] * C + offs[None, :], mask=mmask, other=0.0
+    )
     gsum = tl.sum(ps * tl.exp(pm - gmax[:, None]), axis=1)
     inv = (1.0 / gsum)[:, None]
     if EXACT:
@@ -313,15 +322,21 @@ def _wsr_norm_2d(
         cm = cols < V
         lmask = rmask[:, None] & cm[None, :]
         x = tl.load(
-            logits_ptr + rsafe[:, None] * L_S0
+            logits_ptr
+            + rsafe[:, None] * L_S0
             + tl.where(cm, cols, V - 1)[None, :] * L_S1
         )
         if HAS_TEMP:
-            inv_t = (1.0 / tl.load(temp_ptr + rows, mask=rmask, other=1.0))[:, None]
+            inv_t = (1.0 / tl.load(temp_ptr + rows, mask=rmask, other=1.0))[
+                :, None
+            ]
             x = x * inv_t
         y = tl.exp(x - gmax[:, None]) * inv
-        tl.store(out_ptr + rows[:, None] * O_S0 + cols[None, :] * O_S1,
-                 y, mask=lmask)
+        tl.store(
+            out_ptr + rows[:, None] * O_S0 + cols[None, :] * O_S1,
+            y,
+            mask=lmask,
+        )
 
 
 _GRID_X_MAX = 65535

@@ -389,7 +389,6 @@ def _post_reorder_kernel_row_persist(
             )
 
 
-
 # Legacy fallback domain (non-8 topk): hidden wider than this (or not a
 # multiple of the fallback tile) takes the masked chunk-loop kernel.
 _FALLBACK_MAX_HIDDEN = 8192
@@ -563,5 +562,6 @@ def _post_reorder_kernel_padded(
         out_ptr + t * stride_out_m + offs,
         acc.to(out_ptr.dtype.element_ty),
     )
+
 
 __all__ = ["deepep_post_reorder"]

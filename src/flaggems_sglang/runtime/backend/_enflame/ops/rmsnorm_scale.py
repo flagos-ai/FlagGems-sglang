@@ -288,12 +288,7 @@ def rmsnorm_scale(x, weight, scale, eps):
     )
     b = 1 << max(6, (d - 1).bit_length())
     if m:
-        if (
-            xc
-            and sc
-            and torch.version.hip is None
-            and m >= _ROWS_MIN_ROWS
-        ):
+        if xc and sc and torch.version.hip is None and m >= _ROWS_MIN_ROWS:
             if m >= _TILE_MIN_ROWS:
                 tile_elems = (
                     _TILE_ELEMS_LARGE

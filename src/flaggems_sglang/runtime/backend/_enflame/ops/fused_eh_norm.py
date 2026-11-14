@@ -94,18 +94,18 @@ def _norm_tiled(
     if EXACT:
         w = tl.load(W + cols[None, :]).to(tl.float32)
     else:
-        w = tl.load(
-            W + cols[None, :], mask=col_mask[None, :], other=0.0
-        ).to(tl.float32)
+        w = tl.load(W + cols[None, :], mask=col_mask[None, :], other=0.0).to(
+            tl.float32
+        )
     for tile in tl.range(pid, TILES, nprog):
         rows = tile * R + tl.arange(0, R)
         x_ptrs = X + rows[:, None] * D + cols[None, :]
         if EXACT:
             x = tl.load(x_ptrs).to(tl.float32)
         else:
-            x = tl.load(
-                x_ptrs, mask=col_mask[None, :], other=0.0
-            ).to(tl.float32)
+            x = tl.load(x_ptrs, mask=col_mask[None, :], other=0.0).to(
+                tl.float32
+            )
         inv = tl.rsqrt(tl.sum(x * x, 1) / D + EPS)
         value = x * inv[:, None] * w
         o_ptrs = OUT + rows[:, None] * (2 * D) + cols[None, :]

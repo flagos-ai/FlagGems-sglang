@@ -292,8 +292,16 @@ def _ln_mod_rows(
 
 
 @triton.jit
-def _l4_loads(P, r, D: tl.constexpr, CW: tl.constexpr, NC: tl.constexpr,
-              c, ct, HAS_TAIL: tl.constexpr):
+def _l4_loads(
+    P,
+    r,
+    D: tl.constexpr,
+    CW: tl.constexpr,
+    NC: tl.constexpr,
+    c,
+    ct,
+    HAS_TAIL: tl.constexpr,
+):
     x0 = tl.load(P + r * D + c).to(tl.float32)
     x1 = tl.zeros_like(x0)
     x2 = tl.zeros_like(x0)
@@ -310,8 +318,17 @@ def _l4_loads(P, r, D: tl.constexpr, CW: tl.constexpr, NC: tl.constexpr,
 
 
 @triton.jit
-def _l4_ah(PA, PH, b, D: tl.constexpr, CW: tl.constexpr, NC: tl.constexpr,
-           c, ct, HAS_TAIL: tl.constexpr):
+def _l4_ah(
+    PA,
+    PH,
+    b,
+    D: tl.constexpr,
+    CW: tl.constexpr,
+    NC: tl.constexpr,
+    c,
+    ct,
+    HAS_TAIL: tl.constexpr,
+):
     a0 = tl.load(PA + b * D + c).to(tl.float32)
     h0 = tl.load(PH + b * D + c).to(tl.float32)
     a1 = tl.zeros_like(a0)
@@ -337,8 +354,17 @@ def _l4_ah(PA, PH, b, D: tl.constexpr, CW: tl.constexpr, NC: tl.constexpr,
 
 
 @triton.jit
-def _l4_stat(x0, x1, x2, x3, xt, NC: tl.constexpr, HAS_TAIL: tl.constexpr,
-             D: tl.constexpr, eps):
+def _l4_stat(
+    x0,
+    x1,
+    x2,
+    x3,
+    xt,
+    NC: tl.constexpr,
+    HAS_TAIL: tl.constexpr,
+    D: tl.constexpr,
+    eps,
+):
     # Same accumulation order as _ln_mod_rows (chunk-serial, left-assoc).
     sx = tl.sum(x0, 0)
     sxx = tl.sum(x0 * x0, 0)
@@ -359,9 +385,33 @@ def _l4_stat(x0, x1, x2, x3, xt, NC: tl.constexpr, HAS_TAIL: tl.constexpr,
 
 
 @triton.jit
-def _l4_out(x0, x1, x2, x3, xt, a0, a1, a2, a3, at, h0, h1, h2, h3, ht,
-            Y, r, D: tl.constexpr, CW: tl.constexpr, NC: tl.constexpr,
-            c, ct, HAS_TAIL: tl.constexpr, mean, rstd):
+def _l4_out(
+    x0,
+    x1,
+    x2,
+    x3,
+    xt,
+    a0,
+    a1,
+    a2,
+    a3,
+    at,
+    h0,
+    h1,
+    h2,
+    h3,
+    ht,
+    Y,
+    r,
+    D: tl.constexpr,
+    CW: tl.constexpr,
+    NC: tl.constexpr,
+    c,
+    ct,
+    HAS_TAIL: tl.constexpr,
+    mean,
+    rstd,
+):
     y0 = (x0 - mean) * rstd
     tl.store(Y + r * D + c, y0 * (1.0 + a0) + h0)
     if NC >= 2:
@@ -408,33 +458,147 @@ def _ln_mod_rows4(
         # Tail-anchored group (idempotent rewrite of the last <=3 rows).
         r0 = tl.minimum(g * 4, ROWS - 4)
         xa0, xa1, xa2, xa3, xat = _l4_loads(X, r0, D, CW, NC, c, ct, HAS_TAIL)
-        xb0, xb1, xb2, xb3, xbt = _l4_loads(X, r0 + 1, D, CW, NC, c, ct, HAS_TAIL)
-        xc0, xc1, xc2, xc3, xct = _l4_loads(X, r0 + 2, D, CW, NC, c, ct, HAS_TAIL)
-        xd0, xd1, xd2, xd3, xdt = _l4_loads(X, r0 + 3, D, CW, NC, c, ct, HAS_TAIL)
+        xb0, xb1, xb2, xb3, xbt = _l4_loads(
+            X, r0 + 1, D, CW, NC, c, ct, HAS_TAIL
+        )
+        xc0, xc1, xc2, xc3, xct = _l4_loads(
+            X, r0 + 2, D, CW, NC, c, ct, HAS_TAIL
+        )
+        xd0, xd1, xd2, xd3, xdt = _l4_loads(
+            X, r0 + 3, D, CW, NC, c, ct, HAS_TAIL
+        )
         aa0, aa1, aa2, aa3, aat, ha0, ha1, ha2, ha3, hat = _l4_ah(
-            A, H, r0 // S, D, CW, NC, c, ct, HAS_TAIL)
+            A, H, r0 // S, D, CW, NC, c, ct, HAS_TAIL
+        )
         ab0, ab1, ab2, ab3, abt, hb0, hb1, hb2, hb3, hbt = _l4_ah(
-            A, H, (r0 + 1) // S, D, CW, NC, c, ct, HAS_TAIL)
+            A, H, (r0 + 1) // S, D, CW, NC, c, ct, HAS_TAIL
+        )
         ac0, ac1, ac2, ac3, act, hc0, hc1, hc2, hc3, hct = _l4_ah(
-            A, H, (r0 + 2) // S, D, CW, NC, c, ct, HAS_TAIL)
+            A, H, (r0 + 2) // S, D, CW, NC, c, ct, HAS_TAIL
+        )
         ad0, ad1, ad2, ad3, adt, hd0, hd1, hd2, hd3, hdt = _l4_ah(
-            A, H, (r0 + 3) // S, D, CW, NC, c, ct, HAS_TAIL)
-        mean_a, rstd_a = _l4_stat(xa0, xa1, xa2, xa3, xat, NC, HAS_TAIL, D, eps)
-        _l4_out(xa0, xa1, xa2, xa3, xat, aa0, aa1, aa2, aa3, aat,
-                ha0, ha1, ha2, ha3, hat, Y, r0, D, CW, NC, c, ct,
-                HAS_TAIL, mean_a, rstd_a)
-        mean_b, rstd_b = _l4_stat(xb0, xb1, xb2, xb3, xbt, NC, HAS_TAIL, D, eps)
-        _l4_out(xb0, xb1, xb2, xb3, xbt, ab0, ab1, ab2, ab3, abt,
-                hb0, hb1, hb2, hb3, hbt, Y, r0 + 1, D, CW, NC, c, ct,
-                HAS_TAIL, mean_b, rstd_b)
-        mean_c, rstd_c = _l4_stat(xc0, xc1, xc2, xc3, xct, NC, HAS_TAIL, D, eps)
-        _l4_out(xc0, xc1, xc2, xc3, xct, ac0, ac1, ac2, ac3, act,
-                hc0, hc1, hc2, hc3, hct, Y, r0 + 2, D, CW, NC, c, ct,
-                HAS_TAIL, mean_c, rstd_c)
-        mean_d, rstd_d = _l4_stat(xd0, xd1, xd2, xd3, xdt, NC, HAS_TAIL, D, eps)
-        _l4_out(xd0, xd1, xd2, xd3, xdt, ad0, ad1, ad2, ad3, adt,
-                hd0, hd1, hd2, hd3, hdt, Y, r0 + 3, D, CW, NC, c, ct,
-                HAS_TAIL, mean_d, rstd_d)
+            A, H, (r0 + 3) // S, D, CW, NC, c, ct, HAS_TAIL
+        )
+        mean_a, rstd_a = _l4_stat(
+            xa0, xa1, xa2, xa3, xat, NC, HAS_TAIL, D, eps
+        )
+        _l4_out(
+            xa0,
+            xa1,
+            xa2,
+            xa3,
+            xat,
+            aa0,
+            aa1,
+            aa2,
+            aa3,
+            aat,
+            ha0,
+            ha1,
+            ha2,
+            ha3,
+            hat,
+            Y,
+            r0,
+            D,
+            CW,
+            NC,
+            c,
+            ct,
+            HAS_TAIL,
+            mean_a,
+            rstd_a,
+        )
+        mean_b, rstd_b = _l4_stat(
+            xb0, xb1, xb2, xb3, xbt, NC, HAS_TAIL, D, eps
+        )
+        _l4_out(
+            xb0,
+            xb1,
+            xb2,
+            xb3,
+            xbt,
+            ab0,
+            ab1,
+            ab2,
+            ab3,
+            abt,
+            hb0,
+            hb1,
+            hb2,
+            hb3,
+            hbt,
+            Y,
+            r0 + 1,
+            D,
+            CW,
+            NC,
+            c,
+            ct,
+            HAS_TAIL,
+            mean_b,
+            rstd_b,
+        )
+        mean_c, rstd_c = _l4_stat(
+            xc0, xc1, xc2, xc3, xct, NC, HAS_TAIL, D, eps
+        )
+        _l4_out(
+            xc0,
+            xc1,
+            xc2,
+            xc3,
+            xct,
+            ac0,
+            ac1,
+            ac2,
+            ac3,
+            act,
+            hc0,
+            hc1,
+            hc2,
+            hc3,
+            hct,
+            Y,
+            r0 + 2,
+            D,
+            CW,
+            NC,
+            c,
+            ct,
+            HAS_TAIL,
+            mean_c,
+            rstd_c,
+        )
+        mean_d, rstd_d = _l4_stat(
+            xd0, xd1, xd2, xd3, xdt, NC, HAS_TAIL, D, eps
+        )
+        _l4_out(
+            xd0,
+            xd1,
+            xd2,
+            xd3,
+            xdt,
+            ad0,
+            ad1,
+            ad2,
+            ad3,
+            adt,
+            hd0,
+            hd1,
+            hd2,
+            hd3,
+            hdt,
+            Y,
+            r0 + 3,
+            D,
+            CW,
+            NC,
+            c,
+            ct,
+            HAS_TAIL,
+            mean_d,
+            rstd_d,
+        )
 
 
 def layernorm_modulate(x, scale, shift, eps):

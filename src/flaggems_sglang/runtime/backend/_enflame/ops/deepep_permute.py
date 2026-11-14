@@ -194,7 +194,9 @@ def _permute_kernel(
                         if EVEN:
                             tl.store(out_ptr + dst * H + offs, src)
                         else:
-                            tl.store(out_ptr + dst * H + offs, src, mask=offs < H)
+                            tl.store(
+                                out_ptr + dst * H + offs, src, mask=offs < H
+                            )
 
 
 @triton.jit

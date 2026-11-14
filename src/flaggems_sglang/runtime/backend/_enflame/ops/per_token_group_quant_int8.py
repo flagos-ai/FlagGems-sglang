@@ -53,8 +53,11 @@ def _prev_pow2(n):
 
 @triton.jit
 def _quant_single(
-    x_ptr, q_ptr, s_ptr,
-    GROUP_SIZE: tl.constexpr, BLOCK: tl.constexpr,
+    x_ptr,
+    q_ptr,
+    s_ptr,
+    GROUP_SIZE: tl.constexpr,
+    BLOCK: tl.constexpr,
 ):
     g = tl.program_id(0)
     offs = g.to(tl.int64) * GROUP_SIZE + tl.arange(0, BLOCK)
@@ -143,7 +146,9 @@ def per_token_group_quant_int8(x, group_size, dtype=torch.int8):
     if triton.cdiv(num_groups, gpp) > _GRID_EXTEND and cap_ext > gpp:
         gpp = min(cap_ext, gpp * 2)
     if triton.cdiv(num_groups, gpp) > _GRID_X_CAP:
-        gpp = max(gpp, triton.next_power_of_2(triton.cdiv(num_groups, _GRID_X_CAP)))
+        gpp = max(
+            gpp, triton.next_power_of_2(triton.cdiv(num_groups, _GRID_X_CAP))
+        )
 
     grid = (triton.cdiv(num_groups, gpp),)
     lanes = gpp * block

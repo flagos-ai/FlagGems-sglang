@@ -169,9 +169,8 @@ def _rows_kernel_eligible(num_cols):
     # 2D 行批整块免 mask 装载 [BLOCK_M, N]，要求 N 为 2 幂；N>=16 避开
     # 窄向量病理区，N<=512 维持 BM*N<=16384 的 DSM 舒适预算（topk_softmax
     # 同界）。其余形状走 1D 兜底。
-    return (
-        16 <= num_cols <= 512
-        and num_cols == triton.next_power_of_2(num_cols)
+    return 16 <= num_cols <= 512 and num_cols == triton.next_power_of_2(
+        num_cols
     )
 
 
@@ -262,7 +261,9 @@ def gate_topk(x, k):
             # fp32 tile 集（x/cand + 归约临时量）守住 ~448KB 双 program
             # DSM 预算（BLOCK_N=512 时 BM=64 会超界）。
             block_m, rows_warps = 32, 4
-        if _launch_rows_kernel(x, values, indices, M, N, k, block_m, wide, rows_warps):
+        if _launch_rows_kernel(
+            x, values, indices, M, N, k, block_m, wide, rows_warps
+        ):
             return values, indices
 
     _launch_row_kernel(x, values, indices, M, N, k, wide)

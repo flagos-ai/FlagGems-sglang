@@ -101,9 +101,9 @@ def _cached_norm(
         k2 = tl.load(KV + base + half + p[None, None, :], mp, 0).to(tl.float32)
         squares = tl.sum(k1 * k1, 2) + tl.sum(k2 * k2, 2)
         if D > RD:
-            kt = tl.load(
-                KV + base + RD + tail[None, None, :], mt, 0
-            ).to(tl.float32)
+            kt = tl.load(KV + base + RD + tail[None, None, :], mt, 0).to(
+                tl.float32
+            )
             squares += tl.sum(kt * kt, 2)
         inv = tl.rsqrt(squares / D + epsilon)
         out = (layer * T + token[:, None, None]) * H * D + hs[
@@ -186,16 +186,16 @@ def _cached_norm_direct(
             cos = tl.load(C + pos[:, None] * SC + p[None, :], mc, 0).to(
                 tl.float32
             )
-            sin = tl.load(
-                C + pos[:, None] * SC + half + p[None, :], mc, 0
-            ).to(tl.float32)
+            sin = tl.load(C + pos[:, None] * SC + half + p[None, :], mc, 0).to(
+                tl.float32
+            )
         k1 = tl.load(KV + base + p[None, None, :], mp, 0).to(tl.float32)
         k2 = tl.load(KV + base + half + p[None, None, :], mp, 0).to(tl.float32)
         squares = tl.sum(k1 * k1, 2) + tl.sum(k2 * k2, 2)
         if D > RD:
-            kt = tl.load(
-                KV + base + RD + tail[None, None, :], mt, 0
-            ).to(tl.float32)
+            kt = tl.load(KV + base + RD + tail[None, None, :], mt, 0).to(
+                tl.float32
+            )
             squares += tl.sum(kt * kt, 2)
         inv = tl.rsqrt(squares / D + epsilon)
         out = (layer * T + token[:, None, None]) * H * D + hs[

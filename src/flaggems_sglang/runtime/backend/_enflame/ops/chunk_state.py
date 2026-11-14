@@ -305,10 +305,18 @@ def _chunk_state_fallback_kernel(
         offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
         offs_k = tl.arange(0, BLOCK_K)
 
-        x_base = x_ptr + b * stride_xb + (c * chunk_size) * stride_xt \
+        x_base = (
+            x_ptr
+            + b * stride_xb
+            + (c * chunk_size) * stride_xt
             + h * stride_xh
-        b_base = b_ptr + b * stride_bb + (c * chunk_size) * stride_bt \
+        )
+        b_base = (
+            b_ptr
+            + b * stride_bb
+            + (c * chunk_size) * stride_bt
             + grp * stride_bg
+        )
         dt_base = dt_ptr + b * stride_dtb + h * stride_dth + c * stride_dtc
         da_base = dA_ptr + b * stride_dab + h * stride_dah + c * stride_dac
         o_base = states_ptr + b * stride_sb + c * stride_sc + h * stride_sh
@@ -317,10 +325,12 @@ def _chunk_state_fallback_kernel(
             tl.float32
         )
 
-        x_ptrs = x_base + offs_m[:, None] * stride_xp \
-            + offs_k[None, :] * stride_xt
-        b_ptrs = b_base + offs_k[:, None] * stride_bt \
-            + offs_n[None, :] * stride_bn
+        x_ptrs = (
+            x_base + offs_m[:, None] * stride_xp + offs_k[None, :] * stride_xt
+        )
+        b_ptrs = (
+            b_base + offs_k[:, None] * stride_bt + offs_n[None, :] * stride_bn
+        )
         dt_ptrs = dt_base + offs_k * stride_dtt
         da_ptrs = da_base + offs_k * stride_dat
 
@@ -340,9 +350,7 @@ def _chunk_state_fallback_kernel(
             dtv = tl.load(dt_ptrs, mask=k_ok, other=0.0).to(tl.float32)
             dav = tl.load(da_ptrs, mask=k_ok, other=0.0).to(tl.float32)
             scale = tl.where(k_ok, tl.exp(dA_last - dav) * dtv, 0.0)
-            acc += tl.dot(
-                x * scale[None, :], bmat, input_precision="ieee"
-            )
+            acc += tl.dot(x * scale[None, :], bmat, input_precision="ieee")
             x_ptrs += BLOCK_K * stride_xt
             b_ptrs += BLOCK_K * stride_bt
             dt_ptrs += BLOCK_K * stride_dtt

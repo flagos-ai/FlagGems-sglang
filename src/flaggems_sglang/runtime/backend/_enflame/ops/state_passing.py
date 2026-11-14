@@ -414,11 +414,29 @@ def _state_passing_kernel(
                         other=0.0,
                     )
                 _state_passing_pair(
-                    out_ptr, final_ptr, states_ptr, dA_ptr, init_ptr,
-                    nheads, bh, s, dv, dim_offs, dim_mask,
-                    dA_sb, dA_sh, dA_sc,
-                    LAST, HAS_INIT, OUT_FP32, OUT_BF16, OUT_FP16,
-                    NCHUNKS, DIM, BLOCK_DIM, DIM_FULL,
+                    out_ptr,
+                    final_ptr,
+                    states_ptr,
+                    dA_ptr,
+                    init_ptr,
+                    nheads,
+                    bh,
+                    s,
+                    dv,
+                    dim_offs,
+                    dim_mask,
+                    dA_sb,
+                    dA_sh,
+                    dA_sc,
+                    LAST,
+                    HAS_INIT,
+                    OUT_FP32,
+                    OUT_BF16,
+                    OUT_FP16,
+                    NCHUNKS,
+                    DIM,
+                    BLOCK_DIM,
+                    DIM_FULL,
                 )
                 # Next pair's chunk-0 decay, one k iteration ahead. The
                 # address is clamped so the last iteration's (dead) load
@@ -434,11 +452,27 @@ def _state_passing_kernel(
         else:
             for k in range(0, BLOCK_BH):
                 _state_passing_pair_selfload(
-                    out_ptr, final_ptr, states_ptr, dA_ptr, init_ptr,
-                    nheads, bh_start + k, dim_offs, dim_mask,
-                    dA_sb, dA_sh, dA_sc,
-                    LAST, HAS_INIT, OUT_FP32, OUT_BF16, OUT_FP16,
-                    NCHUNKS, DIM, BLOCK_DIM, DIM_FULL,
+                    out_ptr,
+                    final_ptr,
+                    states_ptr,
+                    dA_ptr,
+                    init_ptr,
+                    nheads,
+                    bh_start + k,
+                    dim_offs,
+                    dim_mask,
+                    dA_sb,
+                    dA_sh,
+                    dA_sc,
+                    LAST,
+                    HAS_INIT,
+                    OUT_FP32,
+                    OUT_BF16,
+                    OUT_FP16,
+                    NCHUNKS,
+                    DIM,
+                    BLOCK_DIM,
+                    DIM_FULL,
                 )
     else:
         # Partial tail group: keep the per-pair guard.
@@ -446,11 +480,27 @@ def _state_passing_kernel(
             bh = bh_start + k
             if bh < nbh:
                 _state_passing_pair_selfload(
-                    out_ptr, final_ptr, states_ptr, dA_ptr, init_ptr,
-                    nheads, bh, dim_offs, dim_mask,
-                    dA_sb, dA_sh, dA_sc,
-                    LAST, HAS_INIT, OUT_FP32, OUT_BF16, OUT_FP16,
-                    NCHUNKS, DIM, BLOCK_DIM, DIM_FULL,
+                    out_ptr,
+                    final_ptr,
+                    states_ptr,
+                    dA_ptr,
+                    init_ptr,
+                    nheads,
+                    bh,
+                    dim_offs,
+                    dim_mask,
+                    dA_sb,
+                    dA_sh,
+                    dA_sc,
+                    LAST,
+                    HAS_INIT,
+                    OUT_FP32,
+                    OUT_BF16,
+                    OUT_FP16,
+                    NCHUNKS,
+                    DIM,
+                    BLOCK_DIM,
+                    DIM_FULL,
                 )
 
 

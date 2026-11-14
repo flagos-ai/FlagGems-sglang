@@ -46,8 +46,12 @@ _INT32_MAX_ELEMS = 1 << 31
 #   wall time).
 _SMALL_T = 8
 _MID_T = 128  # <=: wide-chunk 2D-tile kernel; >: whole-row per-slot kernel
-_PERSIST_CTAS = 48  # one wave on the 48-SPC GCU (see knowledge/perf_playbook.md)
-_MAX_ROW_CHUNKS = 3  # whole-row kernel widths C0/C1/C2; more chunks -> tile form
+_PERSIST_CTAS = (
+    48  # one wave on the 48-SPC GCU (see knowledge/perf_playbook.md)
+)
+_MAX_ROW_CHUNKS = (
+    3  # whole-row kernel widths C0/C1/C2; more chunks -> tile form
+)
 # Whole-row kernel DSM: all NC chunk buffers coexist, ~1.75B per hidden
 # element (measured: hidden 524288 required 917632B vs the 917504B hardware
 # limit, 2026-11-13). 131072 keeps the footprint ~229KB (4x headroom);
@@ -104,7 +108,9 @@ def _pre_reorder_scatter_grid2d(
         # Token row, dequantized once and reused for all of the token's slots.
         if INT64:
             if EVEN_H:
-                x = tl.load(input_ptr + t.to(tl.int64) * HIDDEN + cols.to(tl.int64))
+                x = tl.load(
+                    input_ptr + t.to(tl.int64) * HIDDEN + cols.to(tl.int64)
+                )
             else:
                 x = tl.load(
                     input_ptr + t.to(tl.int64) * HIDDEN + cols.to(tl.int64),
@@ -117,7 +123,9 @@ def _pre_reorder_scatter_grid2d(
                 x = tl.load(input_ptr + t * HIDDEN + cols)
             else:
                 x = tl.load(
-                    input_ptr + t * HIDDEN + cols, mask=cols < HIDDEN, other=0.0
+                    input_ptr + t * HIDDEN + cols,
+                    mask=cols < HIDDEN,
+                    other=0.0,
                 )
             off = dst_v[:, None] * HIDDEN + cols[None, :]
         x = x.to(tl.float32)
@@ -203,7 +211,9 @@ def _pre_reorder_scatter_tokgrid(
                     )
                 else:
                     x = tl.load(
-                        input_ptr + t.to(tl.int64) * HIDDEN + cols.to(tl.int64),
+                        input_ptr
+                        + t.to(tl.int64) * HIDDEN
+                        + cols.to(tl.int64),
                         mask=cols < HIDDEN,
                         other=0.0,
                     )
@@ -427,8 +437,11 @@ def _pre_reorder_scatter_wchunk(
                 if all_live:
                     tl.store(out_ptr + o, x[None, :], mask=cmask[None, :])
                 else:
-                    tl.store(out_ptr + o, x[None, :],
-                             mask=live[:, None] & cmask[None, :])
+                    tl.store(
+                        out_ptr + o,
+                        x[None, :],
+                        mask=live[:, None] & cmask[None, :],
+                    )
 
 
 def _block_h_grid2d(hidden_size, num_tokens):
@@ -532,10 +545,7 @@ def pre_reorder_cutlass(
         return out
 
     chunks = _row_chunks(hidden_size)
-    if (
-        len(chunks) <= _MAX_ROW_CHUNKS
-        and hidden_size <= _ROWCHUNKS_MAX_HIDDEN
-    ):
+    if len(chunks) <= _MAX_ROW_CHUNKS and hidden_size <= _ROWCHUNKS_MAX_HIDDEN:
         widths = [c for c, _ in chunks]
         offsets = [o for _, o in chunks]
         widths += [1] * (_MAX_ROW_CHUNKS - len(widths))

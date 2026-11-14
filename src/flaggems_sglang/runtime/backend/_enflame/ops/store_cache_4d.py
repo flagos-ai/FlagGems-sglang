@@ -24,7 +24,10 @@ def _loc_arg(loc):
         return loc
     if loc.dtype != torch.int64:
         return loc.to(torch.int32)
-    if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "") in ("1", "true"):
+    if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "") in (
+        "1",
+        "true",
+    ):
         return loc
     view = torch.empty(0, dtype=torch.int32, device=loc.device)
     view.set_(

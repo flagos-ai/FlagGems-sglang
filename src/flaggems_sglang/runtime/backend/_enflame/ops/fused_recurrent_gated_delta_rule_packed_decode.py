@@ -187,7 +187,11 @@ def _packed_decode_kernel(
     EVEN_K: tl.constexpr,
     USE_L2NORM: tl.constexpr,
 ):
-    pid = tl.program_id(0) + tl.program_id(1) * grid_x + tl.program_id(2) * grid_xy
+    pid = (
+        tl.program_id(0)
+        + tl.program_id(1) * grid_x
+        + tl.program_id(2) * grid_xy
+    )
     if pid >= num_programs:
         return
     pid_v = pid % NV
@@ -222,7 +226,9 @@ def _packed_decode_kernel(
             + slot.to(tl.int64) * stride_state_slot
             + i_hv * stride_state_hv
         )
-        offs = v_idx[:, None] * stride_state_v + k_idx[None, :] * stride_state_k
+        offs = (
+            v_idx[:, None] * stride_state_v + k_idx[None, :] * stride_state_k
+        )
         if EVEN_V and EVEN_K:
             h = tl.load(s_base + offs).to(tl.float32)
         elif EVEN_V:

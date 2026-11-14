@@ -129,10 +129,15 @@ def _silu_and_mul_pair_kernel(
         base2 = x_ptr + r2.to(tl.int64) * (2 * d)
         x1b = tl.load(base2 + offs, mask=mask, other=0.0).to(tl.float32)
         x2b = tl.load(base2 + d + offs, mask=mask, other=0.0).to(tl.float32)
-        tl.store(out_ptr + r.to(tl.int64) * d + offs,
-                 tl.fdiv(x1a, 1.0 + tl.exp(-x1a)) * x2a)
-        tl.store(out_ptr + r2.to(tl.int64) * d + offs,
-                 tl.fdiv(x1b, 1.0 + tl.exp(-x1b)) * x2b, mask=mask)
+        tl.store(
+            out_ptr + r.to(tl.int64) * d + offs,
+            tl.fdiv(x1a, 1.0 + tl.exp(-x1a)) * x2a,
+        )
+        tl.store(
+            out_ptr + r2.to(tl.int64) * d + offs,
+            tl.fdiv(x1b, 1.0 + tl.exp(-x1b)) * x2b,
+            mask=mask,
+        )
 
 
 @triton.jit

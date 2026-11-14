@@ -241,19 +241,27 @@ def _gelu_and_mul_rg4_kernel(
         ob0 = r0 * D
         tl.store(
             o_ptr + ob0 + offs,
-            (_gelu6(ga0.to(tl.float32)) * up0.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga0.to(tl.float32)) * up0.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
         tl.store(
             o_ptr + ob0 + D + offs,
-            (_gelu6(ga1.to(tl.float32)) * up1.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga1.to(tl.float32)) * up1.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
         tl.store(
             o_ptr + ob0 + 2 * D + offs,
-            (_gelu6(ga2.to(tl.float32)) * up2.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga2.to(tl.float32)) * up2.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
         tl.store(
             o_ptr + ob0 + 3 * D + offs,
-            (_gelu6(ga3.to(tl.float32)) * up3.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga3.to(tl.float32)) * up3.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
 
 
@@ -283,11 +291,15 @@ def _gelu_and_mul_rg2_kernel(
         ob0 = r0 * D
         tl.store(
             o_ptr + ob0 + offs,
-            (_gelu6(ga0.to(tl.float32)) * up0.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga0.to(tl.float32)) * up0.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
         tl.store(
             o_ptr + ob0 + D + offs,
-            (_gelu6(ga1.to(tl.float32)) * up1.to(tl.float32)).to(o_ptr.dtype.element_ty),
+            (_gelu6(ga1.to(tl.float32)) * up1.to(tl.float32)).to(
+                o_ptr.dtype.element_ty
+            ),
         )
 
 
@@ -359,7 +371,9 @@ def gelu_and_mul(hidden_states):
             # (measured crossover at d=1024: bs=64 -> 1-D wins, bs>=96 ->
             # grouped wins).
             if even and block <= 1024 and batch_size >= 4 and tiles >= 96:
-                grid = (min(_PERSISTENT_CTAS, triton.cdiv(batch_size, 4) * nct),)
+                grid = (
+                    min(_PERSISTENT_CTAS, triton.cdiv(batch_size, 4) * nct),
+                )
                 _gelu_and_mul_rg4_kernel[grid](
                     hidden_states,
                     output,
@@ -371,7 +385,9 @@ def gelu_and_mul(hidden_states):
                 )
                 return output
             if even and block == 2048 and batch_size >= 2 and tiles >= 96:
-                grid = (min(_PERSISTENT_CTAS, triton.cdiv(batch_size, 2) * nct),)
+                grid = (
+                    min(_PERSISTENT_CTAS, triton.cdiv(batch_size, 2) * nct),
+                )
                 _gelu_and_mul_rg2_kernel[grid](
                     hidden_states,
                     output,

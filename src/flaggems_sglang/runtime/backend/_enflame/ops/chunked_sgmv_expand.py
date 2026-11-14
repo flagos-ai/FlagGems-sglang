@@ -16,7 +16,6 @@ import torch
 import triton
 import triton.language as tl
 
-
 # Pure-1D rewrite (2026-11-08). The previous kunlunxin-recipe grouped-GEMM
 # host loop (index_select packing + per-adapter slice GEMMs, five host syncs
 # and ~15 launches per call) can no longer compile on the 11-07 20:22
@@ -234,147 +233,407 @@ def _sgmv_expand_vec_kernel(
                         wD15 = (hi15 << 16).to(tl.float32, bitcast=True)
                         wC15 = (hi15 & 0xFFFF0000).to(tl.float32, bitcast=True)
                     p_hi = tl.minimum(p_lo + chunk, seg_end)
-                    out_base = out_ptr + (o_start + col_lo + offs_n)
                     for rp in range(p_lo, p_hi):
                         row = tl.load(permutation_ptr + rp)
                         xb = x64 + row * x_wstride0 + slice_id * (RANK // 4)
-                        out_row = out_ptr + row * out_stride0 + (o_start + col_lo + offs_n)
-                        acc = tl.load(
-                            out_row, mask=col_mask, other=0.0
-                        ).to(tl.float32)
+                        out_row = (
+                            out_ptr
+                            + row * out_stride0
+                            + (o_start + col_lo + offs_n)
+                        )
+                        acc = tl.load(out_row, mask=col_mask, other=0.0).to(
+                            tl.float32
+                        )
                         if RANK > 3:
                             xq0 = tl.load(xb + 0)
                             xlo0 = (xq0 & 0xFFFFFFFF).to(tl.uint32)
                             xhi0 = (xq0 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo0 << 16).to(tl.float32, bitcast=True)) * wB0
-                            acc += (scaling * (xlo0 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA0
-                            acc += (scaling * (xhi0 << 16).to(tl.float32, bitcast=True)) * wD0
-                            acc += (scaling * (xhi0 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC0
+                            acc += (
+                                scaling
+                                * (xlo0 << 16).to(tl.float32, bitcast=True)
+                            ) * wB0
+                            acc += (
+                                scaling
+                                * (xlo0 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA0
+                            acc += (
+                                scaling
+                                * (xhi0 << 16).to(tl.float32, bitcast=True)
+                            ) * wD0
+                            acc += (
+                                scaling
+                                * (xhi0 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC0
                         if RANK > 7:
                             xq1 = tl.load(xb + 1)
                             xlo1 = (xq1 & 0xFFFFFFFF).to(tl.uint32)
                             xhi1 = (xq1 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo1 << 16).to(tl.float32, bitcast=True)) * wB1
-                            acc += (scaling * (xlo1 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA1
-                            acc += (scaling * (xhi1 << 16).to(tl.float32, bitcast=True)) * wD1
-                            acc += (scaling * (xhi1 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC1
+                            acc += (
+                                scaling
+                                * (xlo1 << 16).to(tl.float32, bitcast=True)
+                            ) * wB1
+                            acc += (
+                                scaling
+                                * (xlo1 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA1
+                            acc += (
+                                scaling
+                                * (xhi1 << 16).to(tl.float32, bitcast=True)
+                            ) * wD1
+                            acc += (
+                                scaling
+                                * (xhi1 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC1
                         if RANK > 11:
                             xq2 = tl.load(xb + 2)
                             xlo2 = (xq2 & 0xFFFFFFFF).to(tl.uint32)
                             xhi2 = (xq2 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo2 << 16).to(tl.float32, bitcast=True)) * wB2
-                            acc += (scaling * (xlo2 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA2
-                            acc += (scaling * (xhi2 << 16).to(tl.float32, bitcast=True)) * wD2
-                            acc += (scaling * (xhi2 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC2
+                            acc += (
+                                scaling
+                                * (xlo2 << 16).to(tl.float32, bitcast=True)
+                            ) * wB2
+                            acc += (
+                                scaling
+                                * (xlo2 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA2
+                            acc += (
+                                scaling
+                                * (xhi2 << 16).to(tl.float32, bitcast=True)
+                            ) * wD2
+                            acc += (
+                                scaling
+                                * (xhi2 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC2
                         if RANK > 15:
                             xq3 = tl.load(xb + 3)
                             xlo3 = (xq3 & 0xFFFFFFFF).to(tl.uint32)
                             xhi3 = (xq3 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo3 << 16).to(tl.float32, bitcast=True)) * wB3
-                            acc += (scaling * (xlo3 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA3
-                            acc += (scaling * (xhi3 << 16).to(tl.float32, bitcast=True)) * wD3
-                            acc += (scaling * (xhi3 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC3
+                            acc += (
+                                scaling
+                                * (xlo3 << 16).to(tl.float32, bitcast=True)
+                            ) * wB3
+                            acc += (
+                                scaling
+                                * (xlo3 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA3
+                            acc += (
+                                scaling
+                                * (xhi3 << 16).to(tl.float32, bitcast=True)
+                            ) * wD3
+                            acc += (
+                                scaling
+                                * (xhi3 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC3
                         if RANK > 19:
                             xq4 = tl.load(xb + 4)
                             xlo4 = (xq4 & 0xFFFFFFFF).to(tl.uint32)
                             xhi4 = (xq4 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo4 << 16).to(tl.float32, bitcast=True)) * wB4
-                            acc += (scaling * (xlo4 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA4
-                            acc += (scaling * (xhi4 << 16).to(tl.float32, bitcast=True)) * wD4
-                            acc += (scaling * (xhi4 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC4
+                            acc += (
+                                scaling
+                                * (xlo4 << 16).to(tl.float32, bitcast=True)
+                            ) * wB4
+                            acc += (
+                                scaling
+                                * (xlo4 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA4
+                            acc += (
+                                scaling
+                                * (xhi4 << 16).to(tl.float32, bitcast=True)
+                            ) * wD4
+                            acc += (
+                                scaling
+                                * (xhi4 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC4
                         if RANK > 23:
                             xq5 = tl.load(xb + 5)
                             xlo5 = (xq5 & 0xFFFFFFFF).to(tl.uint32)
                             xhi5 = (xq5 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo5 << 16).to(tl.float32, bitcast=True)) * wB5
-                            acc += (scaling * (xlo5 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA5
-                            acc += (scaling * (xhi5 << 16).to(tl.float32, bitcast=True)) * wD5
-                            acc += (scaling * (xhi5 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC5
+                            acc += (
+                                scaling
+                                * (xlo5 << 16).to(tl.float32, bitcast=True)
+                            ) * wB5
+                            acc += (
+                                scaling
+                                * (xlo5 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA5
+                            acc += (
+                                scaling
+                                * (xhi5 << 16).to(tl.float32, bitcast=True)
+                            ) * wD5
+                            acc += (
+                                scaling
+                                * (xhi5 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC5
                         if RANK > 27:
                             xq6 = tl.load(xb + 6)
                             xlo6 = (xq6 & 0xFFFFFFFF).to(tl.uint32)
                             xhi6 = (xq6 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo6 << 16).to(tl.float32, bitcast=True)) * wB6
-                            acc += (scaling * (xlo6 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA6
-                            acc += (scaling * (xhi6 << 16).to(tl.float32, bitcast=True)) * wD6
-                            acc += (scaling * (xhi6 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC6
+                            acc += (
+                                scaling
+                                * (xlo6 << 16).to(tl.float32, bitcast=True)
+                            ) * wB6
+                            acc += (
+                                scaling
+                                * (xlo6 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA6
+                            acc += (
+                                scaling
+                                * (xhi6 << 16).to(tl.float32, bitcast=True)
+                            ) * wD6
+                            acc += (
+                                scaling
+                                * (xhi6 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC6
                         if RANK > 31:
                             xq7 = tl.load(xb + 7)
                             xlo7 = (xq7 & 0xFFFFFFFF).to(tl.uint32)
                             xhi7 = (xq7 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo7 << 16).to(tl.float32, bitcast=True)) * wB7
-                            acc += (scaling * (xlo7 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA7
-                            acc += (scaling * (xhi7 << 16).to(tl.float32, bitcast=True)) * wD7
-                            acc += (scaling * (xhi7 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC7
+                            acc += (
+                                scaling
+                                * (xlo7 << 16).to(tl.float32, bitcast=True)
+                            ) * wB7
+                            acc += (
+                                scaling
+                                * (xlo7 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA7
+                            acc += (
+                                scaling
+                                * (xhi7 << 16).to(tl.float32, bitcast=True)
+                            ) * wD7
+                            acc += (
+                                scaling
+                                * (xhi7 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC7
                         if RANK > 35:
                             xq8 = tl.load(xb + 8)
                             xlo8 = (xq8 & 0xFFFFFFFF).to(tl.uint32)
                             xhi8 = (xq8 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo8 << 16).to(tl.float32, bitcast=True)) * wB8
-                            acc += (scaling * (xlo8 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA8
-                            acc += (scaling * (xhi8 << 16).to(tl.float32, bitcast=True)) * wD8
-                            acc += (scaling * (xhi8 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC8
+                            acc += (
+                                scaling
+                                * (xlo8 << 16).to(tl.float32, bitcast=True)
+                            ) * wB8
+                            acc += (
+                                scaling
+                                * (xlo8 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA8
+                            acc += (
+                                scaling
+                                * (xhi8 << 16).to(tl.float32, bitcast=True)
+                            ) * wD8
+                            acc += (
+                                scaling
+                                * (xhi8 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC8
                         if RANK > 39:
                             xq9 = tl.load(xb + 9)
                             xlo9 = (xq9 & 0xFFFFFFFF).to(tl.uint32)
                             xhi9 = (xq9 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo9 << 16).to(tl.float32, bitcast=True)) * wB9
-                            acc += (scaling * (xlo9 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA9
-                            acc += (scaling * (xhi9 << 16).to(tl.float32, bitcast=True)) * wD9
-                            acc += (scaling * (xhi9 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC9
+                            acc += (
+                                scaling
+                                * (xlo9 << 16).to(tl.float32, bitcast=True)
+                            ) * wB9
+                            acc += (
+                                scaling
+                                * (xlo9 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA9
+                            acc += (
+                                scaling
+                                * (xhi9 << 16).to(tl.float32, bitcast=True)
+                            ) * wD9
+                            acc += (
+                                scaling
+                                * (xhi9 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC9
                         if RANK > 43:
                             xq10 = tl.load(xb + 10)
                             xlo10 = (xq10 & 0xFFFFFFFF).to(tl.uint32)
                             xhi10 = (xq10 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo10 << 16).to(tl.float32, bitcast=True)) * wB10
-                            acc += (scaling * (xlo10 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA10
-                            acc += (scaling * (xhi10 << 16).to(tl.float32, bitcast=True)) * wD10
-                            acc += (scaling * (xhi10 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC10
+                            acc += (
+                                scaling
+                                * (xlo10 << 16).to(tl.float32, bitcast=True)
+                            ) * wB10
+                            acc += (
+                                scaling
+                                * (xlo10 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA10
+                            acc += (
+                                scaling
+                                * (xhi10 << 16).to(tl.float32, bitcast=True)
+                            ) * wD10
+                            acc += (
+                                scaling
+                                * (xhi10 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC10
                         if RANK > 47:
                             xq11 = tl.load(xb + 11)
                             xlo11 = (xq11 & 0xFFFFFFFF).to(tl.uint32)
                             xhi11 = (xq11 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo11 << 16).to(tl.float32, bitcast=True)) * wB11
-                            acc += (scaling * (xlo11 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA11
-                            acc += (scaling * (xhi11 << 16).to(tl.float32, bitcast=True)) * wD11
-                            acc += (scaling * (xhi11 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC11
+                            acc += (
+                                scaling
+                                * (xlo11 << 16).to(tl.float32, bitcast=True)
+                            ) * wB11
+                            acc += (
+                                scaling
+                                * (xlo11 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA11
+                            acc += (
+                                scaling
+                                * (xhi11 << 16).to(tl.float32, bitcast=True)
+                            ) * wD11
+                            acc += (
+                                scaling
+                                * (xhi11 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC11
                         if RANK > 51:
                             xq12 = tl.load(xb + 12)
                             xlo12 = (xq12 & 0xFFFFFFFF).to(tl.uint32)
                             xhi12 = (xq12 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo12 << 16).to(tl.float32, bitcast=True)) * wB12
-                            acc += (scaling * (xlo12 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA12
-                            acc += (scaling * (xhi12 << 16).to(tl.float32, bitcast=True)) * wD12
-                            acc += (scaling * (xhi12 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC12
+                            acc += (
+                                scaling
+                                * (xlo12 << 16).to(tl.float32, bitcast=True)
+                            ) * wB12
+                            acc += (
+                                scaling
+                                * (xlo12 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA12
+                            acc += (
+                                scaling
+                                * (xhi12 << 16).to(tl.float32, bitcast=True)
+                            ) * wD12
+                            acc += (
+                                scaling
+                                * (xhi12 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC12
                         if RANK > 55:
                             xq13 = tl.load(xb + 13)
                             xlo13 = (xq13 & 0xFFFFFFFF).to(tl.uint32)
                             xhi13 = (xq13 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo13 << 16).to(tl.float32, bitcast=True)) * wB13
-                            acc += (scaling * (xlo13 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA13
-                            acc += (scaling * (xhi13 << 16).to(tl.float32, bitcast=True)) * wD13
-                            acc += (scaling * (xhi13 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC13
+                            acc += (
+                                scaling
+                                * (xlo13 << 16).to(tl.float32, bitcast=True)
+                            ) * wB13
+                            acc += (
+                                scaling
+                                * (xlo13 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA13
+                            acc += (
+                                scaling
+                                * (xhi13 << 16).to(tl.float32, bitcast=True)
+                            ) * wD13
+                            acc += (
+                                scaling
+                                * (xhi13 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC13
                         if RANK > 59:
                             xq14 = tl.load(xb + 14)
                             xlo14 = (xq14 & 0xFFFFFFFF).to(tl.uint32)
                             xhi14 = (xq14 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo14 << 16).to(tl.float32, bitcast=True)) * wB14
-                            acc += (scaling * (xlo14 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA14
-                            acc += (scaling * (xhi14 << 16).to(tl.float32, bitcast=True)) * wD14
-                            acc += (scaling * (xhi14 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC14
+                            acc += (
+                                scaling
+                                * (xlo14 << 16).to(tl.float32, bitcast=True)
+                            ) * wB14
+                            acc += (
+                                scaling
+                                * (xlo14 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA14
+                            acc += (
+                                scaling
+                                * (xhi14 << 16).to(tl.float32, bitcast=True)
+                            ) * wD14
+                            acc += (
+                                scaling
+                                * (xhi14 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC14
                         if RANK > 63:
                             xq15 = tl.load(xb + 15)
                             xlo15 = (xq15 & 0xFFFFFFFF).to(tl.uint32)
                             xhi15 = (xq15 >> 32).to(tl.uint32)
-                            acc += (scaling * (xlo15 << 16).to(tl.float32, bitcast=True)) * wB15
-                            acc += (scaling * (xlo15 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wA15
-                            acc += (scaling * (xhi15 << 16).to(tl.float32, bitcast=True)) * wD15
-                            acc += (scaling * (xhi15 & 0xFFFF0000).to(tl.float32, bitcast=True)) * wC15
+                            acc += (
+                                scaling
+                                * (xlo15 << 16).to(tl.float32, bitcast=True)
+                            ) * wB15
+                            acc += (
+                                scaling
+                                * (xlo15 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wA15
+                            acc += (
+                                scaling
+                                * (xhi15 << 16).to(tl.float32, bitcast=True)
+                            ) * wD15
+                            acc += (
+                                scaling
+                                * (xhi15 & 0xFFFF0000).to(
+                                    tl.float32, bitcast=True
+                                )
+                            ) * wC15
                         tl.store(
                             out_row,
                             acc.to(out_ptr.dtype.element_ty),
                             mask=col_mask,
                         )
+
 
 @triton.jit(
     do_not_specialize=[
@@ -435,16 +694,14 @@ def _sgmv_expand_row_kernel(
     row = tl.load(permutation_ptr + p)
     w_cols = w_ptr + w_idx * w_stride0 + (o_start + offs_c) * w_stride1
     x_base = x_ptr + row * x_stride0 + slice_id * RANK * x_stride1
-    out_row = (
-        out_ptr + row * out_stride0 + (o_start + offs_c) * out_stride1
-    )
+    out_row = out_ptr + row * out_stride0 + (o_start + offs_c) * out_stride1
 
     acc = tl.load(out_row, mask=col_mask, other=0.0).to(tl.float32)
     for k in range(RANK):
         x_k = tl.load(x_base + k * x_stride1).to(tl.float32)
-        w_k = tl.load(
-            w_cols + k * w_stride2, mask=col_mask, other=0.0
-        ).to(tl.float32)
+        w_k = tl.load(w_cols + k * w_stride2, mask=col_mask, other=0.0).to(
+            tl.float32
+        )
         acc += (scaling * x_k) * w_k
     tl.store(out_row, acc.to(out_ptr.dtype.element_ty), mask=col_mask)
 

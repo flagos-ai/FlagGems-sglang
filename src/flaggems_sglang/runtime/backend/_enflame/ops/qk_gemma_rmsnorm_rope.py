@@ -181,12 +181,12 @@ def _gemma_rope_row(
         squares = tl.sum(x1 * x1 + x2 * x2, 0)
     else:
         pm = p < HALF
-        x1 = tl.load(
-            X + xbase + i1 * XS1, pm, 0, cache_modifier=".cg"
-        ).to(tl.float32)
-        x2 = tl.load(
-            X + xbase + i2 * XS1, pm, 0, cache_modifier=".cg"
-        ).to(tl.float32)
+        x1 = tl.load(X + xbase + i1 * XS1, pm, 0, cache_modifier=".cg").to(
+            tl.float32
+        )
+        x2 = tl.load(X + xbase + i2 * XS1, pm, 0, cache_modifier=".cg").to(
+            tl.float32
+        )
         squares = tl.sum(x1 * x1 + x2 * x2, 0)
     if RD < D:
         TAIL: tl.constexpr = D - RD
@@ -198,9 +198,9 @@ def _gemma_rope_row(
             squares += tl.sum(xt * xt, 0)
         else:
             tm = t < D
-            xt = tl.load(
-                X + xbase + t * XS1, tm, 0, cache_modifier=".cg"
-            ).to(tl.float32)
+            xt = tl.load(X + xbase + t * XS1, tm, 0, cache_modifier=".cg").to(
+                tl.float32
+            )
             squares += tl.sum(xt * xt, 0)
     inv = tl.rsqrt(squares / D + EPS)
     if RD > 0:
@@ -218,9 +218,9 @@ def _gemma_rope_row(
             n2 = (x2 * inv * (w2 + 1.0)).to(Y.dtype.element_ty).to(tl.float32)
             pos = tl.load(P + token * PS)
             cos = tl.load(C + pos * CS0 + p * CS1, pm, 0).to(tl.float32)
-            sin = tl.load(
-                C + pos * CS0 + (HALF + p) * CS1, pm, 0
-            ).to(tl.float32)
+            sin = tl.load(C + pos * CS0 + (HALF + p) * CS1, pm, 0).to(
+                tl.float32
+            )
             tl.store(Y + out + i1, n1 * cos - n2 * sin, pm)
             tl.store(Y + out + i2, n2 * cos + n1 * sin, pm)
     if RD < D:
@@ -309,13 +309,51 @@ def _fused_qk_gemma_rmsnorm_rope_kernel(
             row = base + r
             if row < NQ_ROWS:
                 _gemma_rope_row(
-                    Q, QW, C, P, QO, row, qw1, qw2, qwt,
-                    NQ, D, RD, NEOX, EPS, QS0, QS1, CS0, CS1, PS, BP, BT,
+                    Q,
+                    QW,
+                    C,
+                    P,
+                    QO,
+                    row,
+                    qw1,
+                    qw2,
+                    qwt,
+                    NQ,
+                    D,
+                    RD,
+                    NEOX,
+                    EPS,
+                    QS0,
+                    QS1,
+                    CS0,
+                    CS1,
+                    PS,
+                    BP,
+                    BT,
                 )
             elif row < total:
                 _gemma_rope_row(
-                    K, KW, C, P, KO, row - NQ_ROWS, kw1, kw2, kwt,
-                    NK, D, RD, NEOX, EPS, KS0, KS1, CS0, CS1, PS, BP, BT,
+                    K,
+                    KW,
+                    C,
+                    P,
+                    KO,
+                    row - NQ_ROWS,
+                    kw1,
+                    kw2,
+                    kwt,
+                    NK,
+                    D,
+                    RD,
+                    NEOX,
+                    EPS,
+                    KS0,
+                    KS1,
+                    CS0,
+                    CS1,
+                    PS,
+                    BP,
+                    BT,
                 )
 
 
@@ -362,9 +400,7 @@ def _rope_group(
     o2 = n2 * cos[None, :] + n1 * sin[None, :]
     out = (token * H + h0 + h) * D + p
     tl.store(Y + out, tl.reshape(o1, (R * HALF,)), cache_modifier=".cg")
-    tl.store(
-        Y + out + HALF, tl.reshape(o2, (R * HALF,)), cache_modifier=".cg"
-    )
+    tl.store(Y + out + HALF, tl.reshape(o2, (R * HALF,)), cache_modifier=".cg")
 
 
 @triton.jit
@@ -430,9 +466,7 @@ def _rope_finish(
     p = j % HALF
     out = (token * H + h0 + h) * D + p
     tl.store(Y + out, tl.reshape(o1, (R * HALF,)), cache_modifier=".cg")
-    tl.store(
-        Y + out + HALF, tl.reshape(o2, (R * HALF,)), cache_modifier=".cg"
-    )
+    tl.store(Y + out + HALF, tl.reshape(o2, (R * HALF,)), cache_modifier=".cg")
 
 
 @triton.jit
@@ -538,8 +572,20 @@ def _fused_qk_gemma_token_kernel(
             cos = tl.load(C + pos * CS0 + pw * CS1).to(tl.float32)
             sin = tl.load(C + pos * CS0 + (HALF + pw) * CS1).to(tl.float32)
             _rope_group(
-                Q, QO, token, h0, qw1, qw2, cos, sin,
-                RQ, NQ, D, HALF, EPS, QS0,
+                Q,
+                QO,
+                token,
+                h0,
+                qw1,
+                qw2,
+                cos,
+                sin,
+                RQ,
+                NQ,
+                D,
+                HALF,
+                EPS,
+                QS0,
             )
         else:
             g2 = grp - q_groups
@@ -549,8 +595,20 @@ def _fused_qk_gemma_token_kernel(
             cos = tl.load(C + pos * CS0 + pw * CS1).to(tl.float32)
             sin = tl.load(C + pos * CS0 + (HALF + pw) * CS1).to(tl.float32)
             _rope_group(
-                K, KO, token, h0, kw1, kw2, cos, sin,
-                RK, NK, D, HALF, EPS, KS0,
+                K,
+                KO,
+                token,
+                h0,
+                kw1,
+                kw2,
+                cos,
+                sin,
+                RK,
+                NK,
+                D,
+                HALF,
+                EPS,
+                KS0,
             )
 
 
@@ -601,12 +659,40 @@ def _fused_qk_gemma_tokf_kernel(
             cos = tl.load(C + pos * CS0 + pw * CS1).to(tl.float32)
             sin = tl.load(C + pos * CS0 + (HALF + pw) * CS1).to(tl.float32)
             _rope_finish(
-                Q, QO, token, 0, qw1, qw2, cos, sin,
-                RQ, NQ, D, HALF, EPS, QS0, qx1, qx2,
+                Q,
+                QO,
+                token,
+                0,
+                qw1,
+                qw2,
+                cos,
+                sin,
+                RQ,
+                NQ,
+                D,
+                HALF,
+                EPS,
+                QS0,
+                qx1,
+                qx2,
             )
             _rope_finish(
-                K, KO, token, 0, kw1, kw2, cos, sin,
-                RK, NK, D, HALF, EPS, KS0, kx1, kx2,
+                K,
+                KO,
+                token,
+                0,
+                kw1,
+                kw2,
+                cos,
+                sin,
+                RK,
+                NK,
+                D,
+                HALF,
+                EPS,
+                KS0,
+                kx1,
+                kx2,
             )
         else:
             pos = tl.load(P + token * PS)
@@ -614,13 +700,37 @@ def _fused_qk_gemma_tokf_kernel(
             sin = tl.load(C + pos * CS0 + (HALF + pw) * CS1).to(tl.float32)
             for hb in tl.static_range(QHB):
                 _rope_group(
-                    Q, QO, token, hb * RQ, qw1, qw2, cos, sin,
-                    RQ, NQ, D, HALF, EPS, QS0,
+                    Q,
+                    QO,
+                    token,
+                    hb * RQ,
+                    qw1,
+                    qw2,
+                    cos,
+                    sin,
+                    RQ,
+                    NQ,
+                    D,
+                    HALF,
+                    EPS,
+                    QS0,
                 )
             for hb in tl.static_range(KHB):
                 _rope_group(
-                    K, KO, token, hb * RK, kw1, kw2, cos, sin,
-                    RK, NK, D, HALF, EPS, KS0,
+                    K,
+                    KO,
+                    token,
+                    hb * RK,
+                    kw1,
+                    kw2,
+                    cos,
+                    sin,
+                    RK,
+                    NK,
+                    D,
+                    HALF,
+                    EPS,
+                    KS0,
                 )
 
 
@@ -680,8 +790,21 @@ def _fused_qk_gemma_tokm_kernel(
         sinr = tl.reshape(sin, (2, 1, HALF))
         for hb in tl.static_range(QHB):
             _rope_merge_group(
-                Q, QO, t0, hb * RQ, qw1, qw2, cosr, sinr,
-                2, RQ, NQ, D, HALF, EPS, QS0,
+                Q,
+                QO,
+                t0,
+                hb * RQ,
+                qw1,
+                qw2,
+                cosr,
+                sinr,
+                2,
+                RQ,
+                NQ,
+                D,
+                HALF,
+                EPS,
+                QS0,
             )
     ckj = tl.arange(0, KM * HALF)
     ckt = ckj // HALF
@@ -698,7 +821,8 @@ def _fused_qk_gemma_tokm_kernel(
             pos2 = tl.load(P + (t0 + 2) * PS)
             pos3 = tl.load(P + (t0 + 3) * PS)
             posv = tl.where(
-                ckt == 0, pos0,
+                ckt == 0,
+                pos0,
                 tl.where(ckt == 1, pos1, tl.where(ckt == 2, pos2, pos3)),
             )
         cos = tl.load(C + posv * CS0 + ckp * CS1).to(tl.float32)
@@ -707,8 +831,21 @@ def _fused_qk_gemma_tokm_kernel(
         sinr = tl.reshape(sin, (KM, 1, HALF))
         for hb in tl.static_range(KHB):
             _rope_merge_group(
-                K, KO, t0, hb * RK, kw1, kw2, cosr, sinr,
-                KM, RK, NK, D, HALF, EPS, KS0,
+                K,
+                KO,
+                t0,
+                hb * RK,
+                kw1,
+                kw2,
+                cosr,
+                sinr,
+                KM,
+                RK,
+                NK,
+                D,
+                HALF,
+                EPS,
+                KS0,
             )
 
 

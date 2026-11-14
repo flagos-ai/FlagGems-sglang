@@ -100,7 +100,6 @@ def _fused_small(
     tl.store(NP + q, grand, q < NN)
 
 
-
 @triton.jit
 def _count_rank_init(
     X,
@@ -516,7 +515,9 @@ def moe_align_block_size(
         cnt = torch.empty(
             (off_base + routed + 2,), dtype=torch.int32, device=topk_ids.device
         )
-        rk = torch.empty((max(n, 1),), dtype=torch.int32, device=topk_ids.device)
+        rk = torch.empty(
+            (max(n, 1),), dtype=torch.int32, device=topk_ids.device
+        )
         contig = 1 if (s0 == k and s1 == 1) else 0
         grid1 = max(ch, triton.cdiv(ns, 8192), triton.cdiv(en, 8192), 1)
         _count_rank_init[grid1,](

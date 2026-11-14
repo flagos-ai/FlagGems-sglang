@@ -125,8 +125,10 @@ def _merge_state_pipe_kernel(
 
     for k in tl.static_range(K):
         if k + 1 < K:
-            rows_next = base_row + (k + 1) * ROWS_PER_PROGRAM + tl.arange(
-                0, ROWS_PER_PROGRAM
+            rows_next = (
+                base_row
+                + (k + 1) * ROWS_PER_PROGRAM
+                + tl.arange(0, ROWS_PER_PROGRAM)
             )
             prefix_lse_next = tl.load(prefix_lse + rows_next).to(tl.float32)
             suffix_lse_next = tl.load(suffix_lse + rows_next).to(tl.float32)
@@ -150,8 +152,8 @@ def _merge_state_pipe_kernel(
         prefix_scale = tl.where(prefix_is_high, inverse_sum, low_scale)
         suffix_scale = tl.where(prefix_is_high, low_scale, inverse_sum)
 
-        rows_cur = base_row + k * ROWS_PER_PROGRAM + tl.arange(
-            0, ROWS_PER_PROGRAM
+        rows_cur = (
+            base_row + k * ROWS_PER_PROGRAM + tl.arange(0, ROWS_PER_PROGRAM)
         )
         tl.store(output_lse + rows_cur, high_lse + log_sum)
         merged = (

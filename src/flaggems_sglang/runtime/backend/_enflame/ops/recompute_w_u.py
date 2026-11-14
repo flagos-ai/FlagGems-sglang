@@ -71,7 +71,8 @@ def _install_rwu_gcuir_compat():
         except Exception as first_error:
             text = content if isinstance(content, str) else str(content)
             if not any(
-                sym in text for sym in ("@_rwu_gqa", "@_compact", "@_recompute")
+                sym in text
+                for sym in ("@_rwu_gqa", "@_compact", "@_recompute")
             ):
                 raise first_error
             try:
@@ -451,7 +452,9 @@ def _rwu_gqa(
         k = tl.load(Kp + ((t + rr[:, None]) * HG + hg) * DK + nk[None, :])
     else:
         k = tl.load(
-            Kp + ((t + rr[:, None]) * HG + hg) * DK + nk[None, :], nk[None, :] < DK, 0
+            Kp + ((t + rr[:, None]) * HG + hg) * DK + nk[None, :],
+            nk[None, :] < DK,
+            0,
         )
     for j in tl.static_range(RPC):
         h = hg * REP + rb * RPC + j
@@ -474,13 +477,17 @@ def _rwu_gqa(
             tl.store(Up + ((t + rr[:, None]) * H + h) * DV + nv[None, :], u)
         else:
             tl.store(
-                Up + ((t + rr[:, None]) * H + h) * DV + nv[None, :], u, nv[None, :] < DV
+                Up + ((t + rr[:, None]) * H + h) * DV + nv[None, :],
+                u,
+                nv[None, :] < DV,
             )
         if DK == BK:
             tl.store(Wp + ((t + rr[:, None]) * H + h) * DK + nk[None, :], w)
         else:
             tl.store(
-                Wp + ((t + rr[:, None]) * H + h) * DK + nk[None, :], w, nk[None, :] < DK
+                Wp + ((t + rr[:, None]) * H + h) * DK + nk[None, :],
+                w,
+                nk[None, :] < DK,
             )
 
 

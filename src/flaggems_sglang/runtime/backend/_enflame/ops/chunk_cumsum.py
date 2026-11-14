@@ -182,9 +182,9 @@ def _chunk_cumsum_dot_kernel(
             valid_t = offs_ts < chunk_size
             valid_s = offs_s < seqlen
             load_mask = valid_t[:, None] & valid_s[:, None]
-            dt = tl.load(
-                dt_ptr + dt_offsets, mask=load_mask, other=0.0
-            ).to(tl.float32)
+            dt = tl.load(dt_ptr + dt_offsets, mask=load_mask, other=0.0).to(
+                tl.float32
+            )
         if HAS_BIAS:
             dt += bias[None, :]
         if DT_SOFTPLUS:
@@ -257,15 +257,15 @@ def chunk_cumsum(dt, A, chunk_size, dt_bias=None, dt_softplus=False):
     da_cumsum = torch.empty(out_shape, device=dt.device, dtype=torch.float32)
     block_k = triton.next_power_of_2(chunk_size)
     bias_ptr = dt if dt_bias is None else dt_bias
-    block_h = _dot_block_h(nheads) if (block_k >= 16 and dt.stride(2) == 1) else 0
+    block_h = (
+        _dot_block_h(nheads) if (block_k >= 16 and dt.stride(2) == 1) else 0
+    )
     if block_h and batch * nchunks <= 65535:
         block_t = min(block_k, 128)
         num_sub = triton.cdiv(chunk_size, block_t)
         # Tail masks are statically all-true when every chunk is full and
         # block_t divides the chunk; the unmasked arm skips them then.
-        full_chunks = (
-            seqlen % chunk_size == 0 and chunk_size % block_t == 0
-        )
+        full_chunks = seqlen % chunk_size == 0 and chunk_size % block_t == 0
         _chunk_cumsum_dot_kernel[(batch * nchunks, nheads // block_h)](
             dt,
             A,

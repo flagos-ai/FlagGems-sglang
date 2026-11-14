@@ -66,7 +66,10 @@ def _scatter(
                         value = tl.load(X + addr, cache_modifier=".cg")
                     else:
                         value = tl.load(
-                            X + addr, mask=cols < H * D, other=0, cache_modifier=".cg"
+                            X + addr,
+                            mask=cols < H * D,
+                            other=0,
+                            cache_modifier=".cg",
                         )
             if B == H * D:
                 tl.store(Y + row * (H * D) + cols, value, cache_modifier=".cs")

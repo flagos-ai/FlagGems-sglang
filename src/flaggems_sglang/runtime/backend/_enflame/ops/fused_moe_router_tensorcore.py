@@ -227,9 +227,9 @@ def _gemm_dot_kernel(
     # ---- optional expert correction bias (in registers) ----
     if HAS_BIAS:
         offs_nb = n0 + tl.arange(0, BLOCK_N)
-        bias = tl.load(
-            bias_ptr + offs_nb, mask=offs_nb < E, other=0.0
-        ).to(tl.float32)
+        bias = tl.load(bias_ptr + offs_nb, mask=offs_nb < E, other=0.0).to(
+            tl.float32
+        )
         acc += bias[None, :]
 
     # ---- 2-D affine masked store of this [PAD_M, BLOCK_N] logits tile ----
@@ -306,7 +306,9 @@ def _gemm_kloop_kernel(
 
     # ---- optional expert correction bias (in registers) ----
     if HAS_BIAS:
-        bias = tl.load(bias_ptr + e_offs, mask=e_mask, other=0.0).to(tl.float32)
+        bias = tl.load(bias_ptr + e_offs, mask=e_mask, other=0.0).to(
+            tl.float32
+        )
         acc = acc + bias[None, :]
 
     # ---- store this program's [ROW_TILE, BLOCK_E] slice of the logits ----
@@ -364,12 +366,14 @@ def _gemm_rows_kernel(
             xv = tl.load(x_ptr + row * H + kk, mask=rm & km, other=0.0)
             for e in range(BE):  # static unroll: scalar w-row loads
                 wv = tl.load(
-                    w_ptr + (e0 + e) * H + kk, mask=(e0 + e < E) & km, other=0.0
+                    w_ptr + (e0 + e) * H + kk,
+                    mask=(e0 + e < E) & km,
+                    other=0.0,
                 )
                 s = tl.sum(wv.to(tl.float32) * xv.to(tl.float32))
                 acc += tl.where(tl.arange(0, BE) == e, s, 0.0)
 
-    # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
+        # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
         if SOFTCAP:
             acc = moe_softcapping * libdevice.tanh(acc / moe_softcapping)
 
@@ -468,7 +472,9 @@ def _post_rows_kernel(
         sm_denom = tl.sum(e_exp, axis=0)
     else:
         em = offs < E
-        logits = tl.load(logits_ptr + row * E + offs, mask=em, other=float("-inf"))
+        logits = tl.load(
+            logits_ptr + row * E + offs, mask=em, other=float("-inf")
+        )
         sm_max, idx0 = tl.max(logits, axis=0, return_indices=True)
         e_exp = tl.exp(logits - sm_max) * em
         sm_denom = tl.sum(e_exp, axis=0)
@@ -484,7 +490,11 @@ def _post_rows_kernel(
         sel_w = tl.where(k_offs == 0, w0, w1)
         out_mask = k_offs < TOPK
         tl.store(weights_ptr + row * TOPK + k_offs, sel_w, mask=out_mask)
-        tl.store(indices_ptr + row * TOPK + k_offs, sel_idx.to(tl.int32), mask=out_mask)
+        tl.store(
+            indices_ptr + row * TOPK + k_offs,
+            sel_idx.to(tl.int32),
+            mask=out_mask,
+        )
     else:
         w0 = 1.0 / sm_denom
         tl.store(weights_ptr + row * TOPK, w0)
@@ -753,9 +763,7 @@ def _launch_gemm_kloop(
     if (m + rt - 1) // rt > 65535:  # grid.x limit for the selected ROW_TILE
         return False
     try:
-        _gemm_kloop_kernel[
-            ((m + rt - 1) // rt, (e + be - 1) // be)
-        ](
+        _gemm_kloop_kernel[((m + rt - 1) // rt, (e + be - 1) // be)](
             x,
             router_weight,
             bias_arg,

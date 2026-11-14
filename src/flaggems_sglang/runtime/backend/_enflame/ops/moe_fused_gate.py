@@ -196,7 +196,11 @@ def _moe_fused_gate_kernel(
     if APPLY_SCALE:
         values *= ROUTED_SCALE
     tl.store(weights_ptr + output_start + rank_offsets, values, mask=rank_mask)
-    tl.store(indices_ptr + output_start + rank_offsets, output_indices, mask=rank_mask)
+    tl.store(
+        indices_ptr + output_start + rank_offsets,
+        output_indices,
+        mask=rank_mask,
+    )
 
 
 @triton.jit
@@ -263,7 +267,9 @@ def _moe_fused_gate_rows_kernel(
 
     if NUM_GROUPS > 1:
         # Per-group top-2 sums via a contiguous row-split view (N == BLOCK_N).
-        sel_g = tl.reshape(selection, (BLOCK_M * NUM_GROUPS, EXPERTS_PER_GROUP))
+        sel_g = tl.reshape(
+            selection, (BLOCK_M * NUM_GROUPS, EXPERTS_PER_GROUP)
+        )
         local_offsets = tl.arange(0, EXPERTS_PER_GROUP)
         first_values = tl.max(sel_g, axis=1)
         first_lanes = tl.max(
@@ -397,7 +403,9 @@ def _moe_fused_gate_rows_kernel(
         values = values * ROUTED_SCALE
     out_offsets = rows[:, None] * K + rank_offsets[None, :]
     tl.store(weights_ptr + out_offsets, values, mask=rank_mask[None, :])
-    tl.store(indices_ptr + out_offsets, output_indices, mask=rank_mask[None, :])
+    tl.store(
+        indices_ptr + out_offsets, output_indices, mask=rank_mask[None, :]
+    )
 
 
 def _prev_pow2(n):
@@ -421,8 +429,9 @@ def _rows_kernel_eligible(n, num_expert_group):
         if n % num_expert_group != 0:
             return False
         experts_per_group = n // num_expert_group
-        if experts_per_group < 2 or experts_per_group != triton.next_power_of_2(
-            experts_per_group
+        if (
+            experts_per_group < 2
+            or experts_per_group != triton.next_power_of_2(experts_per_group)
         ):
             return False
     return True

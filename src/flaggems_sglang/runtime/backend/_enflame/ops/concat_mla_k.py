@@ -129,9 +129,8 @@ def _concat_mla_k_exact_kernel(
             mask=mask_rope[None, :],
             other=0,
         )
-        blended = (
-            (nope.to(IT, bitcast=True) | rope.to(IT, bitcast=True))
-            .to(nope.dtype, bitcast=True)
+        blended = (nope.to(IT, bitcast=True) | rope.to(IT, bitcast=True)).to(
+            nope.dtype, bitcast=True
         )
         tl.store(
             out_ptr + (r0 + rows)[:, None] * (N + R) + cols[None, :],
@@ -143,8 +142,11 @@ def _concat_mla_k_exact_kernel(
 def _launch_exact(out, k_nope, k_rope, tokens, heads, nope_dim, rope_dim):
     if not k_nope.is_contiguous() or k_rope.stride(2) != 1:
         return False
-    if not (out.dtype.is_floating_point and k_nope.dtype == out.dtype
-            and k_rope.dtype == out.dtype):
+    if not (
+        out.dtype.is_floating_point
+        and k_nope.dtype == out.dtype
+        and k_rope.dtype == out.dtype
+    ):
         return False
     elem = out.element_size()
     if elem not in (2, 4):

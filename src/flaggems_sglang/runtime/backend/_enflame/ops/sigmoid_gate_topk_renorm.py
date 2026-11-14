@@ -109,8 +109,9 @@ def _sigmoid_gate_topk_renorm_kernel(
     if N_EXACT:
         bias_f = tl.load(bias + offs_n * bias_stride).to(tl.float32)
     else:
-        bias_f = tl.load(bias + offs_n * bias_stride, mask=mask_n,
-                         other=-float("inf")).to(tl.float32)
+        bias_f = tl.load(
+            bias + offs_n * bias_stride, mask=mask_n, other=-float("inf")
+        ).to(tl.float32)
     offs_s = tl.arange(0, BLOCK_S)
     mask_s = offs_s < S
 
@@ -199,115 +200,247 @@ def _sigmoid_gate_topk_renorm_kernel(
             r21 = base + 21
             v21 = r21 < M
             b21 = r21 * logits_stride_m
-        x0 = tl.load(logits + b0 + offs_n * logits_stride_g,
-                             mask=v0 & mask_n, other=-float("inf")).to(tl.float32)
+        x0 = tl.load(
+            logits + b0 + offs_n * logits_stride_g,
+            mask=v0 & mask_n,
+            other=-float("inf"),
+        ).to(tl.float32)
         if UROWS >= 2:
-            x1 = tl.load(logits + b1 + offs_n * logits_stride_g,
-                                 mask=v1 & mask_n, other=-float("inf")).to(tl.float32)
+            x1 = tl.load(
+                logits + b1 + offs_n * logits_stride_g,
+                mask=v1 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 4:
-            x2 = tl.load(logits + b2 + offs_n * logits_stride_g,
-                                 mask=v2 & mask_n, other=-float("inf")).to(tl.float32)
-            x3 = tl.load(logits + b3 + offs_n * logits_stride_g,
-                                 mask=v3 & mask_n, other=-float("inf")).to(tl.float32)
+            x2 = tl.load(
+                logits + b2 + offs_n * logits_stride_g,
+                mask=v2 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x3 = tl.load(
+                logits + b3 + offs_n * logits_stride_g,
+                mask=v3 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 6:
-            x4 = tl.load(logits + b4 + offs_n * logits_stride_g,
-                                 mask=v4 & mask_n, other=-float("inf")).to(tl.float32)
-            x5 = tl.load(logits + b5 + offs_n * logits_stride_g,
-                                 mask=v5 & mask_n, other=-float("inf")).to(tl.float32)
+            x4 = tl.load(
+                logits + b4 + offs_n * logits_stride_g,
+                mask=v4 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x5 = tl.load(
+                logits + b5 + offs_n * logits_stride_g,
+                mask=v5 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 8:
-            x6 = tl.load(logits + b6 + offs_n * logits_stride_g,
-                                 mask=v6 & mask_n, other=-float("inf")).to(tl.float32)
-            x7 = tl.load(logits + b7 + offs_n * logits_stride_g,
-                                 mask=v7 & mask_n, other=-float("inf")).to(tl.float32)
+            x6 = tl.load(
+                logits + b6 + offs_n * logits_stride_g,
+                mask=v6 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x7 = tl.load(
+                logits + b7 + offs_n * logits_stride_g,
+                mask=v7 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 11:
-            x8 = tl.load(logits + b8 + offs_n * logits_stride_g,
-                                 mask=v8 & mask_n, other=-float("inf")).to(tl.float32)
-            x9 = tl.load(logits + b9 + offs_n * logits_stride_g,
-                                 mask=v9 & mask_n, other=-float("inf")).to(tl.float32)
-            x10 = tl.load(logits + b10 + offs_n * logits_stride_g,
-                                 mask=v10 & mask_n, other=-float("inf")).to(tl.float32)
+            x8 = tl.load(
+                logits + b8 + offs_n * logits_stride_g,
+                mask=v8 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x9 = tl.load(
+                logits + b9 + offs_n * logits_stride_g,
+                mask=v9 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x10 = tl.load(
+                logits + b10 + offs_n * logits_stride_g,
+                mask=v10 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 14:
-            x11 = tl.load(logits + b11 + offs_n * logits_stride_g,
-                                 mask=v11 & mask_n, other=-float("inf")).to(tl.float32)
-            x12 = tl.load(logits + b12 + offs_n * logits_stride_g,
-                                 mask=v12 & mask_n, other=-float("inf")).to(tl.float32)
-            x13 = tl.load(logits + b13 + offs_n * logits_stride_g,
-                                 mask=v13 & mask_n, other=-float("inf")).to(tl.float32)
+            x11 = tl.load(
+                logits + b11 + offs_n * logits_stride_g,
+                mask=v11 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x12 = tl.load(
+                logits + b12 + offs_n * logits_stride_g,
+                mask=v12 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x13 = tl.load(
+                logits + b13 + offs_n * logits_stride_g,
+                mask=v13 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 16:
-            x14 = tl.load(logits + b14 + offs_n * logits_stride_g,
-                                 mask=v14 & mask_n, other=-float("inf")).to(tl.float32)
-            x15 = tl.load(logits + b15 + offs_n * logits_stride_g,
-                                 mask=v15 & mask_n, other=-float("inf")).to(tl.float32)
+            x14 = tl.load(
+                logits + b14 + offs_n * logits_stride_g,
+                mask=v14 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x15 = tl.load(
+                logits + b15 + offs_n * logits_stride_g,
+                mask=v15 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 18:
-            x16 = tl.load(logits + b16 + offs_n * logits_stride_g,
-                                 mask=v16 & mask_n, other=-float("inf")).to(tl.float32)
-            x17 = tl.load(logits + b17 + offs_n * logits_stride_g,
-                                 mask=v17 & mask_n, other=-float("inf")).to(tl.float32)
+            x16 = tl.load(
+                logits + b16 + offs_n * logits_stride_g,
+                mask=v16 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x17 = tl.load(
+                logits + b17 + offs_n * logits_stride_g,
+                mask=v17 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 20:
-            x18 = tl.load(logits + b18 + offs_n * logits_stride_g,
-                                 mask=v18 & mask_n, other=-float("inf")).to(tl.float32)
-            x19 = tl.load(logits + b19 + offs_n * logits_stride_g,
-                                 mask=v19 & mask_n, other=-float("inf")).to(tl.float32)
+            x18 = tl.load(
+                logits + b18 + offs_n * logits_stride_g,
+                mask=v18 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x19 = tl.load(
+                logits + b19 + offs_n * logits_stride_g,
+                mask=v19 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if UROWS >= 22:
-            x20 = tl.load(logits + b20 + offs_n * logits_stride_g,
-                                 mask=v20 & mask_n, other=-float("inf")).to(tl.float32)
-            x21 = tl.load(logits + b21 + offs_n * logits_stride_g,
-                                 mask=v21 & mask_n, other=-float("inf")).to(tl.float32)
+            x20 = tl.load(
+                logits + b20 + offs_n * logits_stride_g,
+                mask=v20 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
+            x21 = tl.load(
+                logits + b21 + offs_n * logits_stride_g,
+                mask=v21 & mask_n,
+                other=-float("inf"),
+            ).to(tl.float32)
         if S > 0:
-            sh0 = tl.load(logits + b0 + (N + offs_s) * logits_stride_g,
-                                  mask=v0 & mask_s, other=-float("inf")).to(tl.float32)
+            sh0 = tl.load(
+                logits + b0 + (N + offs_s) * logits_stride_g,
+                mask=v0 & mask_s,
+                other=-float("inf"),
+            ).to(tl.float32)
             if UROWS >= 2:
-                sh1 = tl.load(logits + b1 + (N + offs_s) * logits_stride_g,
-                                      mask=v1 & mask_s, other=-float("inf")).to(tl.float32)
+                sh1 = tl.load(
+                    logits + b1 + (N + offs_s) * logits_stride_g,
+                    mask=v1 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 4:
-                sh2 = tl.load(logits + b2 + (N + offs_s) * logits_stride_g,
-                                      mask=v2 & mask_s, other=-float("inf")).to(tl.float32)
-                sh3 = tl.load(logits + b3 + (N + offs_s) * logits_stride_g,
-                                      mask=v3 & mask_s, other=-float("inf")).to(tl.float32)
+                sh2 = tl.load(
+                    logits + b2 + (N + offs_s) * logits_stride_g,
+                    mask=v2 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh3 = tl.load(
+                    logits + b3 + (N + offs_s) * logits_stride_g,
+                    mask=v3 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 6:
-                sh4 = tl.load(logits + b4 + (N + offs_s) * logits_stride_g,
-                                      mask=v4 & mask_s, other=-float("inf")).to(tl.float32)
-                sh5 = tl.load(logits + b5 + (N + offs_s) * logits_stride_g,
-                                      mask=v5 & mask_s, other=-float("inf")).to(tl.float32)
+                sh4 = tl.load(
+                    logits + b4 + (N + offs_s) * logits_stride_g,
+                    mask=v4 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh5 = tl.load(
+                    logits + b5 + (N + offs_s) * logits_stride_g,
+                    mask=v5 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 8:
-                sh6 = tl.load(logits + b6 + (N + offs_s) * logits_stride_g,
-                                      mask=v6 & mask_s, other=-float("inf")).to(tl.float32)
-                sh7 = tl.load(logits + b7 + (N + offs_s) * logits_stride_g,
-                                      mask=v7 & mask_s, other=-float("inf")).to(tl.float32)
+                sh6 = tl.load(
+                    logits + b6 + (N + offs_s) * logits_stride_g,
+                    mask=v6 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh7 = tl.load(
+                    logits + b7 + (N + offs_s) * logits_stride_g,
+                    mask=v7 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 11:
-                sh8 = tl.load(logits + b8 + (N + offs_s) * logits_stride_g,
-                                      mask=v8 & mask_s, other=-float("inf")).to(tl.float32)
-                sh9 = tl.load(logits + b9 + (N + offs_s) * logits_stride_g,
-                                      mask=v9 & mask_s, other=-float("inf")).to(tl.float32)
-                sh10 = tl.load(logits + b10 + (N + offs_s) * logits_stride_g,
-                                      mask=v10 & mask_s, other=-float("inf")).to(tl.float32)
+                sh8 = tl.load(
+                    logits + b8 + (N + offs_s) * logits_stride_g,
+                    mask=v8 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh9 = tl.load(
+                    logits + b9 + (N + offs_s) * logits_stride_g,
+                    mask=v9 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh10 = tl.load(
+                    logits + b10 + (N + offs_s) * logits_stride_g,
+                    mask=v10 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 14:
-                sh11 = tl.load(logits + b11 + (N + offs_s) * logits_stride_g,
-                                      mask=v11 & mask_s, other=-float("inf")).to(tl.float32)
-                sh12 = tl.load(logits + b12 + (N + offs_s) * logits_stride_g,
-                                      mask=v12 & mask_s, other=-float("inf")).to(tl.float32)
-                sh13 = tl.load(logits + b13 + (N + offs_s) * logits_stride_g,
-                                      mask=v13 & mask_s, other=-float("inf")).to(tl.float32)
+                sh11 = tl.load(
+                    logits + b11 + (N + offs_s) * logits_stride_g,
+                    mask=v11 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh12 = tl.load(
+                    logits + b12 + (N + offs_s) * logits_stride_g,
+                    mask=v12 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh13 = tl.load(
+                    logits + b13 + (N + offs_s) * logits_stride_g,
+                    mask=v13 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 16:
-                sh14 = tl.load(logits + b14 + (N + offs_s) * logits_stride_g,
-                                      mask=v14 & mask_s, other=-float("inf")).to(tl.float32)
-                sh15 = tl.load(logits + b15 + (N + offs_s) * logits_stride_g,
-                                      mask=v15 & mask_s, other=-float("inf")).to(tl.float32)
+                sh14 = tl.load(
+                    logits + b14 + (N + offs_s) * logits_stride_g,
+                    mask=v14 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh15 = tl.load(
+                    logits + b15 + (N + offs_s) * logits_stride_g,
+                    mask=v15 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 18:
-                sh16 = tl.load(logits + b16 + (N + offs_s) * logits_stride_g,
-                                      mask=v16 & mask_s, other=-float("inf")).to(tl.float32)
-                sh17 = tl.load(logits + b17 + (N + offs_s) * logits_stride_g,
-                                      mask=v17 & mask_s, other=-float("inf")).to(tl.float32)
+                sh16 = tl.load(
+                    logits + b16 + (N + offs_s) * logits_stride_g,
+                    mask=v16 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh17 = tl.load(
+                    logits + b17 + (N + offs_s) * logits_stride_g,
+                    mask=v17 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 20:
-                sh18 = tl.load(logits + b18 + (N + offs_s) * logits_stride_g,
-                                      mask=v18 & mask_s, other=-float("inf")).to(tl.float32)
-                sh19 = tl.load(logits + b19 + (N + offs_s) * logits_stride_g,
-                                      mask=v19 & mask_s, other=-float("inf")).to(tl.float32)
+                sh18 = tl.load(
+                    logits + b18 + (N + offs_s) * logits_stride_g,
+                    mask=v18 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh19 = tl.load(
+                    logits + b19 + (N + offs_s) * logits_stride_g,
+                    mask=v19 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
             if UROWS >= 22:
-                sh20 = tl.load(logits + b20 + (N + offs_s) * logits_stride_g,
-                                      mask=v20 & mask_s, other=-float("inf")).to(tl.float32)
-                sh21 = tl.load(logits + b21 + (N + offs_s) * logits_stride_g,
-                                      mask=v21 & mask_s, other=-float("inf")).to(tl.float32)
+                sh20 = tl.load(
+                    logits + b20 + (N + offs_s) * logits_stride_g,
+                    mask=v20 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
+                sh21 = tl.load(
+                    logits + b21 + (N + offs_s) * logits_stride_g,
+                    mask=v21 & mask_s,
+                    other=-float("inf"),
+                ).to(tl.float32)
         p0 = tl.sigmoid(x0)
         if UROWS >= 2:
             p1 = tl.sigmoid(x1)
@@ -532,24 +665,27 @@ def _sigmoid_gate_topk_renorm_kernel(
             d0 += tl.sum(q0, axis=0)
         if ROUTE_SCALE_IS_TENSOR:
             if ROUTE_SCALE_IS_ROW:
-                rs0 = tl.load(route_scale + r0 * route_scale_stride_m,
-                              mask=v0, other=0.0).to(tl.float32)
+                rs0 = tl.load(
+                    route_scale + r0 * route_scale_stride_m, mask=v0, other=0.0
+                ).to(tl.float32)
             else:
                 rs0 = route_scale_h
         else:
             rs0 = route_scale
         if GLOBAL_SCALE_IS_TENSOR:
             if GLOBAL_SCALE_IS_ROW:
-                gs0 = tl.load(global_scale + r0 * global_scale_stride_m,
-                              mask=v0, other=0.0).to(tl.float32)
+                gs0 = tl.load(
+                    global_scale + r0 * global_scale_stride_m,
+                    mask=v0,
+                    other=0.0,
+                ).to(tl.float32)
             else:
                 gs0 = global_scale_h
         else:
             gs0 = global_scale
         sd0 = rs0 * gs0 / d0
         tl.store(routed_w + r0 * K + rank0, p0 * sd0, mask=sel0 & v0)
-        tl.store(indices + r0 * K + rank0, offs_n.to(tl.int32),
-                         mask=sel0 & v0)
+        tl.store(indices + r0 * K + rank0, offs_n.to(tl.int32), mask=sel0 & v0)
         if S > 0:
             tl.store(shared_w + r0 * S + offs_s, q0 * sd0, mask=mask_s & v0)
         if UROWS >= 2:
@@ -559,26 +695,35 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d1 += tl.sum(q1, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs1 = tl.load(route_scale + r1 * route_scale_stride_m,
-                                  mask=v1, other=0.0).to(tl.float32)
+                    rs1 = tl.load(
+                        route_scale + r1 * route_scale_stride_m,
+                        mask=v1,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs1 = route_scale_h
             else:
                 rs1 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs1 = tl.load(global_scale + r1 * global_scale_stride_m,
-                                  mask=v1, other=0.0).to(tl.float32)
+                    gs1 = tl.load(
+                        global_scale + r1 * global_scale_stride_m,
+                        mask=v1,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs1 = global_scale_h
             else:
                 gs1 = global_scale
             sd1 = rs1 * gs1 / d1
             tl.store(routed_w + r1 * K + rank1, p1 * sd1, mask=sel1 & v1)
-            tl.store(indices + r1 * K + rank1, offs_n.to(tl.int32),
-                             mask=sel1 & v1)
+            tl.store(
+                indices + r1 * K + rank1, offs_n.to(tl.int32), mask=sel1 & v1
+            )
             if S > 0:
-                tl.store(shared_w + r1 * S + offs_s, q1 * sd1, mask=mask_s & v1)
+                tl.store(
+                    shared_w + r1 * S + offs_s, q1 * sd1, mask=mask_s & v1
+                )
         if UROWS >= 4:
             sel2 = rank2 < K
             d2 = tl.sum(tl.where(sel2, p2, 0.0), axis=0)
@@ -586,52 +731,70 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d2 += tl.sum(q2, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs2 = tl.load(route_scale + r2 * route_scale_stride_m,
-                                  mask=v2, other=0.0).to(tl.float32)
+                    rs2 = tl.load(
+                        route_scale + r2 * route_scale_stride_m,
+                        mask=v2,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs2 = route_scale_h
             else:
                 rs2 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs2 = tl.load(global_scale + r2 * global_scale_stride_m,
-                                  mask=v2, other=0.0).to(tl.float32)
+                    gs2 = tl.load(
+                        global_scale + r2 * global_scale_stride_m,
+                        mask=v2,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs2 = global_scale_h
             else:
                 gs2 = global_scale
             sd2 = rs2 * gs2 / d2
             tl.store(routed_w + r2 * K + rank2, p2 * sd2, mask=sel2 & v2)
-            tl.store(indices + r2 * K + rank2, offs_n.to(tl.int32),
-                             mask=sel2 & v2)
+            tl.store(
+                indices + r2 * K + rank2, offs_n.to(tl.int32), mask=sel2 & v2
+            )
             if S > 0:
-                tl.store(shared_w + r2 * S + offs_s, q2 * sd2, mask=mask_s & v2)
+                tl.store(
+                    shared_w + r2 * S + offs_s, q2 * sd2, mask=mask_s & v2
+                )
             sel3 = rank3 < K
             d3 = tl.sum(tl.where(sel3, p3, 0.0), axis=0)
             if S > 0:
                 d3 += tl.sum(q3, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs3 = tl.load(route_scale + r3 * route_scale_stride_m,
-                                  mask=v3, other=0.0).to(tl.float32)
+                    rs3 = tl.load(
+                        route_scale + r3 * route_scale_stride_m,
+                        mask=v3,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs3 = route_scale_h
             else:
                 rs3 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs3 = tl.load(global_scale + r3 * global_scale_stride_m,
-                                  mask=v3, other=0.0).to(tl.float32)
+                    gs3 = tl.load(
+                        global_scale + r3 * global_scale_stride_m,
+                        mask=v3,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs3 = global_scale_h
             else:
                 gs3 = global_scale
             sd3 = rs3 * gs3 / d3
             tl.store(routed_w + r3 * K + rank3, p3 * sd3, mask=sel3 & v3)
-            tl.store(indices + r3 * K + rank3, offs_n.to(tl.int32),
-                             mask=sel3 & v3)
+            tl.store(
+                indices + r3 * K + rank3, offs_n.to(tl.int32), mask=sel3 & v3
+            )
             if S > 0:
-                tl.store(shared_w + r3 * S + offs_s, q3 * sd3, mask=mask_s & v3)
+                tl.store(
+                    shared_w + r3 * S + offs_s, q3 * sd3, mask=mask_s & v3
+                )
         if UROWS >= 6:
             sel4 = rank4 < K
             d4 = tl.sum(tl.where(sel4, p4, 0.0), axis=0)
@@ -639,52 +802,70 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d4 += tl.sum(q4, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs4 = tl.load(route_scale + r4 * route_scale_stride_m,
-                                  mask=v4, other=0.0).to(tl.float32)
+                    rs4 = tl.load(
+                        route_scale + r4 * route_scale_stride_m,
+                        mask=v4,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs4 = route_scale_h
             else:
                 rs4 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs4 = tl.load(global_scale + r4 * global_scale_stride_m,
-                                  mask=v4, other=0.0).to(tl.float32)
+                    gs4 = tl.load(
+                        global_scale + r4 * global_scale_stride_m,
+                        mask=v4,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs4 = global_scale_h
             else:
                 gs4 = global_scale
             sd4 = rs4 * gs4 / d4
             tl.store(routed_w + r4 * K + rank4, p4 * sd4, mask=sel4 & v4)
-            tl.store(indices + r4 * K + rank4, offs_n.to(tl.int32),
-                             mask=sel4 & v4)
+            tl.store(
+                indices + r4 * K + rank4, offs_n.to(tl.int32), mask=sel4 & v4
+            )
             if S > 0:
-                tl.store(shared_w + r4 * S + offs_s, q4 * sd4, mask=mask_s & v4)
+                tl.store(
+                    shared_w + r4 * S + offs_s, q4 * sd4, mask=mask_s & v4
+                )
             sel5 = rank5 < K
             d5 = tl.sum(tl.where(sel5, p5, 0.0), axis=0)
             if S > 0:
                 d5 += tl.sum(q5, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs5 = tl.load(route_scale + r5 * route_scale_stride_m,
-                                  mask=v5, other=0.0).to(tl.float32)
+                    rs5 = tl.load(
+                        route_scale + r5 * route_scale_stride_m,
+                        mask=v5,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs5 = route_scale_h
             else:
                 rs5 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs5 = tl.load(global_scale + r5 * global_scale_stride_m,
-                                  mask=v5, other=0.0).to(tl.float32)
+                    gs5 = tl.load(
+                        global_scale + r5 * global_scale_stride_m,
+                        mask=v5,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs5 = global_scale_h
             else:
                 gs5 = global_scale
             sd5 = rs5 * gs5 / d5
             tl.store(routed_w + r5 * K + rank5, p5 * sd5, mask=sel5 & v5)
-            tl.store(indices + r5 * K + rank5, offs_n.to(tl.int32),
-                             mask=sel5 & v5)
+            tl.store(
+                indices + r5 * K + rank5, offs_n.to(tl.int32), mask=sel5 & v5
+            )
             if S > 0:
-                tl.store(shared_w + r5 * S + offs_s, q5 * sd5, mask=mask_s & v5)
+                tl.store(
+                    shared_w + r5 * S + offs_s, q5 * sd5, mask=mask_s & v5
+                )
         if UROWS >= 8:
             sel6 = rank6 < K
             d6 = tl.sum(tl.where(sel6, p6, 0.0), axis=0)
@@ -692,52 +873,70 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d6 += tl.sum(q6, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs6 = tl.load(route_scale + r6 * route_scale_stride_m,
-                                  mask=v6, other=0.0).to(tl.float32)
+                    rs6 = tl.load(
+                        route_scale + r6 * route_scale_stride_m,
+                        mask=v6,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs6 = route_scale_h
             else:
                 rs6 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs6 = tl.load(global_scale + r6 * global_scale_stride_m,
-                                  mask=v6, other=0.0).to(tl.float32)
+                    gs6 = tl.load(
+                        global_scale + r6 * global_scale_stride_m,
+                        mask=v6,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs6 = global_scale_h
             else:
                 gs6 = global_scale
             sd6 = rs6 * gs6 / d6
             tl.store(routed_w + r6 * K + rank6, p6 * sd6, mask=sel6 & v6)
-            tl.store(indices + r6 * K + rank6, offs_n.to(tl.int32),
-                             mask=sel6 & v6)
+            tl.store(
+                indices + r6 * K + rank6, offs_n.to(tl.int32), mask=sel6 & v6
+            )
             if S > 0:
-                tl.store(shared_w + r6 * S + offs_s, q6 * sd6, mask=mask_s & v6)
+                tl.store(
+                    shared_w + r6 * S + offs_s, q6 * sd6, mask=mask_s & v6
+                )
             sel7 = rank7 < K
             d7 = tl.sum(tl.where(sel7, p7, 0.0), axis=0)
             if S > 0:
                 d7 += tl.sum(q7, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs7 = tl.load(route_scale + r7 * route_scale_stride_m,
-                                  mask=v7, other=0.0).to(tl.float32)
+                    rs7 = tl.load(
+                        route_scale + r7 * route_scale_stride_m,
+                        mask=v7,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs7 = route_scale_h
             else:
                 rs7 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs7 = tl.load(global_scale + r7 * global_scale_stride_m,
-                                  mask=v7, other=0.0).to(tl.float32)
+                    gs7 = tl.load(
+                        global_scale + r7 * global_scale_stride_m,
+                        mask=v7,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs7 = global_scale_h
             else:
                 gs7 = global_scale
             sd7 = rs7 * gs7 / d7
             tl.store(routed_w + r7 * K + rank7, p7 * sd7, mask=sel7 & v7)
-            tl.store(indices + r7 * K + rank7, offs_n.to(tl.int32),
-                             mask=sel7 & v7)
+            tl.store(
+                indices + r7 * K + rank7, offs_n.to(tl.int32), mask=sel7 & v7
+            )
             if S > 0:
-                tl.store(shared_w + r7 * S + offs_s, q7 * sd7, mask=mask_s & v7)
+                tl.store(
+                    shared_w + r7 * S + offs_s, q7 * sd7, mask=mask_s & v7
+                )
         if UROWS >= 11:
             sel8 = rank8 < K
             d8 = tl.sum(tl.where(sel8, p8, 0.0), axis=0)
@@ -745,78 +944,107 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d8 += tl.sum(q8, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs8 = tl.load(route_scale + r8 * route_scale_stride_m,
-                                  mask=v8, other=0.0).to(tl.float32)
+                    rs8 = tl.load(
+                        route_scale + r8 * route_scale_stride_m,
+                        mask=v8,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs8 = route_scale_h
             else:
                 rs8 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs8 = tl.load(global_scale + r8 * global_scale_stride_m,
-                                  mask=v8, other=0.0).to(tl.float32)
+                    gs8 = tl.load(
+                        global_scale + r8 * global_scale_stride_m,
+                        mask=v8,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs8 = global_scale_h
             else:
                 gs8 = global_scale
             sd8 = rs8 * gs8 / d8
             tl.store(routed_w + r8 * K + rank8, p8 * sd8, mask=sel8 & v8)
-            tl.store(indices + r8 * K + rank8, offs_n.to(tl.int32),
-                             mask=sel8 & v8)
+            tl.store(
+                indices + r8 * K + rank8, offs_n.to(tl.int32), mask=sel8 & v8
+            )
             if S > 0:
-                tl.store(shared_w + r8 * S + offs_s, q8 * sd8, mask=mask_s & v8)
+                tl.store(
+                    shared_w + r8 * S + offs_s, q8 * sd8, mask=mask_s & v8
+                )
             sel9 = rank9 < K
             d9 = tl.sum(tl.where(sel9, p9, 0.0), axis=0)
             if S > 0:
                 d9 += tl.sum(q9, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs9 = tl.load(route_scale + r9 * route_scale_stride_m,
-                                  mask=v9, other=0.0).to(tl.float32)
+                    rs9 = tl.load(
+                        route_scale + r9 * route_scale_stride_m,
+                        mask=v9,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs9 = route_scale_h
             else:
                 rs9 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs9 = tl.load(global_scale + r9 * global_scale_stride_m,
-                                  mask=v9, other=0.0).to(tl.float32)
+                    gs9 = tl.load(
+                        global_scale + r9 * global_scale_stride_m,
+                        mask=v9,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs9 = global_scale_h
             else:
                 gs9 = global_scale
             sd9 = rs9 * gs9 / d9
             tl.store(routed_w + r9 * K + rank9, p9 * sd9, mask=sel9 & v9)
-            tl.store(indices + r9 * K + rank9, offs_n.to(tl.int32),
-                             mask=sel9 & v9)
+            tl.store(
+                indices + r9 * K + rank9, offs_n.to(tl.int32), mask=sel9 & v9
+            )
             if S > 0:
-                tl.store(shared_w + r9 * S + offs_s, q9 * sd9, mask=mask_s & v9)
+                tl.store(
+                    shared_w + r9 * S + offs_s, q9 * sd9, mask=mask_s & v9
+                )
             sel10 = rank10 < K
             d10 = tl.sum(tl.where(sel10, p10, 0.0), axis=0)
             if S > 0:
                 d10 += tl.sum(q10, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs10 = tl.load(route_scale + r10 * route_scale_stride_m,
-                                  mask=v10, other=0.0).to(tl.float32)
+                    rs10 = tl.load(
+                        route_scale + r10 * route_scale_stride_m,
+                        mask=v10,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs10 = route_scale_h
             else:
                 rs10 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs10 = tl.load(global_scale + r10 * global_scale_stride_m,
-                                  mask=v10, other=0.0).to(tl.float32)
+                    gs10 = tl.load(
+                        global_scale + r10 * global_scale_stride_m,
+                        mask=v10,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs10 = global_scale_h
             else:
                 gs10 = global_scale
             sd10 = rs10 * gs10 / d10
             tl.store(routed_w + r10 * K + rank10, p10 * sd10, mask=sel10 & v10)
-            tl.store(indices + r10 * K + rank10, offs_n.to(tl.int32),
-                             mask=sel10 & v10)
+            tl.store(
+                indices + r10 * K + rank10,
+                offs_n.to(tl.int32),
+                mask=sel10 & v10,
+            )
             if S > 0:
-                tl.store(shared_w + r10 * S + offs_s, q10 * sd10, mask=mask_s & v10)
+                tl.store(
+                    shared_w + r10 * S + offs_s, q10 * sd10, mask=mask_s & v10
+                )
         if UROWS >= 14:
             sel11 = rank11 < K
             d11 = tl.sum(tl.where(sel11, p11, 0.0), axis=0)
@@ -824,78 +1052,111 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d11 += tl.sum(q11, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs11 = tl.load(route_scale + r11 * route_scale_stride_m,
-                                  mask=v11, other=0.0).to(tl.float32)
+                    rs11 = tl.load(
+                        route_scale + r11 * route_scale_stride_m,
+                        mask=v11,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs11 = route_scale_h
             else:
                 rs11 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs11 = tl.load(global_scale + r11 * global_scale_stride_m,
-                                  mask=v11, other=0.0).to(tl.float32)
+                    gs11 = tl.load(
+                        global_scale + r11 * global_scale_stride_m,
+                        mask=v11,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs11 = global_scale_h
             else:
                 gs11 = global_scale
             sd11 = rs11 * gs11 / d11
             tl.store(routed_w + r11 * K + rank11, p11 * sd11, mask=sel11 & v11)
-            tl.store(indices + r11 * K + rank11, offs_n.to(tl.int32),
-                             mask=sel11 & v11)
+            tl.store(
+                indices + r11 * K + rank11,
+                offs_n.to(tl.int32),
+                mask=sel11 & v11,
+            )
             if S > 0:
-                tl.store(shared_w + r11 * S + offs_s, q11 * sd11, mask=mask_s & v11)
+                tl.store(
+                    shared_w + r11 * S + offs_s, q11 * sd11, mask=mask_s & v11
+                )
             sel12 = rank12 < K
             d12 = tl.sum(tl.where(sel12, p12, 0.0), axis=0)
             if S > 0:
                 d12 += tl.sum(q12, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs12 = tl.load(route_scale + r12 * route_scale_stride_m,
-                                  mask=v12, other=0.0).to(tl.float32)
+                    rs12 = tl.load(
+                        route_scale + r12 * route_scale_stride_m,
+                        mask=v12,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs12 = route_scale_h
             else:
                 rs12 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs12 = tl.load(global_scale + r12 * global_scale_stride_m,
-                                  mask=v12, other=0.0).to(tl.float32)
+                    gs12 = tl.load(
+                        global_scale + r12 * global_scale_stride_m,
+                        mask=v12,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs12 = global_scale_h
             else:
                 gs12 = global_scale
             sd12 = rs12 * gs12 / d12
             tl.store(routed_w + r12 * K + rank12, p12 * sd12, mask=sel12 & v12)
-            tl.store(indices + r12 * K + rank12, offs_n.to(tl.int32),
-                             mask=sel12 & v12)
+            tl.store(
+                indices + r12 * K + rank12,
+                offs_n.to(tl.int32),
+                mask=sel12 & v12,
+            )
             if S > 0:
-                tl.store(shared_w + r12 * S + offs_s, q12 * sd12, mask=mask_s & v12)
+                tl.store(
+                    shared_w + r12 * S + offs_s, q12 * sd12, mask=mask_s & v12
+                )
             sel13 = rank13 < K
             d13 = tl.sum(tl.where(sel13, p13, 0.0), axis=0)
             if S > 0:
                 d13 += tl.sum(q13, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs13 = tl.load(route_scale + r13 * route_scale_stride_m,
-                                  mask=v13, other=0.0).to(tl.float32)
+                    rs13 = tl.load(
+                        route_scale + r13 * route_scale_stride_m,
+                        mask=v13,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs13 = route_scale_h
             else:
                 rs13 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs13 = tl.load(global_scale + r13 * global_scale_stride_m,
-                                  mask=v13, other=0.0).to(tl.float32)
+                    gs13 = tl.load(
+                        global_scale + r13 * global_scale_stride_m,
+                        mask=v13,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs13 = global_scale_h
             else:
                 gs13 = global_scale
             sd13 = rs13 * gs13 / d13
             tl.store(routed_w + r13 * K + rank13, p13 * sd13, mask=sel13 & v13)
-            tl.store(indices + r13 * K + rank13, offs_n.to(tl.int32),
-                             mask=sel13 & v13)
+            tl.store(
+                indices + r13 * K + rank13,
+                offs_n.to(tl.int32),
+                mask=sel13 & v13,
+            )
             if S > 0:
-                tl.store(shared_w + r13 * S + offs_s, q13 * sd13, mask=mask_s & v13)
+                tl.store(
+                    shared_w + r13 * S + offs_s, q13 * sd13, mask=mask_s & v13
+                )
         if UROWS >= 16:
             sel14 = rank14 < K
             d14 = tl.sum(tl.where(sel14, p14, 0.0), axis=0)
@@ -903,52 +1164,74 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d14 += tl.sum(q14, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs14 = tl.load(route_scale + r14 * route_scale_stride_m,
-                                  mask=v14, other=0.0).to(tl.float32)
+                    rs14 = tl.load(
+                        route_scale + r14 * route_scale_stride_m,
+                        mask=v14,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs14 = route_scale_h
             else:
                 rs14 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs14 = tl.load(global_scale + r14 * global_scale_stride_m,
-                                  mask=v14, other=0.0).to(tl.float32)
+                    gs14 = tl.load(
+                        global_scale + r14 * global_scale_stride_m,
+                        mask=v14,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs14 = global_scale_h
             else:
                 gs14 = global_scale
             sd14 = rs14 * gs14 / d14
             tl.store(routed_w + r14 * K + rank14, p14 * sd14, mask=sel14 & v14)
-            tl.store(indices + r14 * K + rank14, offs_n.to(tl.int32),
-                             mask=sel14 & v14)
+            tl.store(
+                indices + r14 * K + rank14,
+                offs_n.to(tl.int32),
+                mask=sel14 & v14,
+            )
             if S > 0:
-                tl.store(shared_w + r14 * S + offs_s, q14 * sd14, mask=mask_s & v14)
+                tl.store(
+                    shared_w + r14 * S + offs_s, q14 * sd14, mask=mask_s & v14
+                )
             sel15 = rank15 < K
             d15 = tl.sum(tl.where(sel15, p15, 0.0), axis=0)
             if S > 0:
                 d15 += tl.sum(q15, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs15 = tl.load(route_scale + r15 * route_scale_stride_m,
-                                  mask=v15, other=0.0).to(tl.float32)
+                    rs15 = tl.load(
+                        route_scale + r15 * route_scale_stride_m,
+                        mask=v15,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs15 = route_scale_h
             else:
                 rs15 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs15 = tl.load(global_scale + r15 * global_scale_stride_m,
-                                  mask=v15, other=0.0).to(tl.float32)
+                    gs15 = tl.load(
+                        global_scale + r15 * global_scale_stride_m,
+                        mask=v15,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs15 = global_scale_h
             else:
                 gs15 = global_scale
             sd15 = rs15 * gs15 / d15
             tl.store(routed_w + r15 * K + rank15, p15 * sd15, mask=sel15 & v15)
-            tl.store(indices + r15 * K + rank15, offs_n.to(tl.int32),
-                             mask=sel15 & v15)
+            tl.store(
+                indices + r15 * K + rank15,
+                offs_n.to(tl.int32),
+                mask=sel15 & v15,
+            )
             if S > 0:
-                tl.store(shared_w + r15 * S + offs_s, q15 * sd15, mask=mask_s & v15)
+                tl.store(
+                    shared_w + r15 * S + offs_s, q15 * sd15, mask=mask_s & v15
+                )
         if UROWS >= 18:
             sel16 = rank16 < K
             d16 = tl.sum(tl.where(sel16, p16, 0.0), axis=0)
@@ -956,52 +1239,74 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d16 += tl.sum(q16, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs16 = tl.load(route_scale + r16 * route_scale_stride_m,
-                                  mask=v16, other=0.0).to(tl.float32)
+                    rs16 = tl.load(
+                        route_scale + r16 * route_scale_stride_m,
+                        mask=v16,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs16 = route_scale_h
             else:
                 rs16 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs16 = tl.load(global_scale + r16 * global_scale_stride_m,
-                                  mask=v16, other=0.0).to(tl.float32)
+                    gs16 = tl.load(
+                        global_scale + r16 * global_scale_stride_m,
+                        mask=v16,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs16 = global_scale_h
             else:
                 gs16 = global_scale
             sd16 = rs16 * gs16 / d16
             tl.store(routed_w + r16 * K + rank16, p16 * sd16, mask=sel16 & v16)
-            tl.store(indices + r16 * K + rank16, offs_n.to(tl.int32),
-                             mask=sel16 & v16)
+            tl.store(
+                indices + r16 * K + rank16,
+                offs_n.to(tl.int32),
+                mask=sel16 & v16,
+            )
             if S > 0:
-                tl.store(shared_w + r16 * S + offs_s, q16 * sd16, mask=mask_s & v16)
+                tl.store(
+                    shared_w + r16 * S + offs_s, q16 * sd16, mask=mask_s & v16
+                )
             sel17 = rank17 < K
             d17 = tl.sum(tl.where(sel17, p17, 0.0), axis=0)
             if S > 0:
                 d17 += tl.sum(q17, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs17 = tl.load(route_scale + r17 * route_scale_stride_m,
-                                  mask=v17, other=0.0).to(tl.float32)
+                    rs17 = tl.load(
+                        route_scale + r17 * route_scale_stride_m,
+                        mask=v17,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs17 = route_scale_h
             else:
                 rs17 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs17 = tl.load(global_scale + r17 * global_scale_stride_m,
-                                  mask=v17, other=0.0).to(tl.float32)
+                    gs17 = tl.load(
+                        global_scale + r17 * global_scale_stride_m,
+                        mask=v17,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs17 = global_scale_h
             else:
                 gs17 = global_scale
             sd17 = rs17 * gs17 / d17
             tl.store(routed_w + r17 * K + rank17, p17 * sd17, mask=sel17 & v17)
-            tl.store(indices + r17 * K + rank17, offs_n.to(tl.int32),
-                             mask=sel17 & v17)
+            tl.store(
+                indices + r17 * K + rank17,
+                offs_n.to(tl.int32),
+                mask=sel17 & v17,
+            )
             if S > 0:
-                tl.store(shared_w + r17 * S + offs_s, q17 * sd17, mask=mask_s & v17)
+                tl.store(
+                    shared_w + r17 * S + offs_s, q17 * sd17, mask=mask_s & v17
+                )
         if UROWS >= 20:
             sel18 = rank18 < K
             d18 = tl.sum(tl.where(sel18, p18, 0.0), axis=0)
@@ -1009,52 +1314,74 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d18 += tl.sum(q18, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs18 = tl.load(route_scale + r18 * route_scale_stride_m,
-                                  mask=v18, other=0.0).to(tl.float32)
+                    rs18 = tl.load(
+                        route_scale + r18 * route_scale_stride_m,
+                        mask=v18,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs18 = route_scale_h
             else:
                 rs18 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs18 = tl.load(global_scale + r18 * global_scale_stride_m,
-                                  mask=v18, other=0.0).to(tl.float32)
+                    gs18 = tl.load(
+                        global_scale + r18 * global_scale_stride_m,
+                        mask=v18,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs18 = global_scale_h
             else:
                 gs18 = global_scale
             sd18 = rs18 * gs18 / d18
             tl.store(routed_w + r18 * K + rank18, p18 * sd18, mask=sel18 & v18)
-            tl.store(indices + r18 * K + rank18, offs_n.to(tl.int32),
-                             mask=sel18 & v18)
+            tl.store(
+                indices + r18 * K + rank18,
+                offs_n.to(tl.int32),
+                mask=sel18 & v18,
+            )
             if S > 0:
-                tl.store(shared_w + r18 * S + offs_s, q18 * sd18, mask=mask_s & v18)
+                tl.store(
+                    shared_w + r18 * S + offs_s, q18 * sd18, mask=mask_s & v18
+                )
             sel19 = rank19 < K
             d19 = tl.sum(tl.where(sel19, p19, 0.0), axis=0)
             if S > 0:
                 d19 += tl.sum(q19, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs19 = tl.load(route_scale + r19 * route_scale_stride_m,
-                                  mask=v19, other=0.0).to(tl.float32)
+                    rs19 = tl.load(
+                        route_scale + r19 * route_scale_stride_m,
+                        mask=v19,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs19 = route_scale_h
             else:
                 rs19 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs19 = tl.load(global_scale + r19 * global_scale_stride_m,
-                                  mask=v19, other=0.0).to(tl.float32)
+                    gs19 = tl.load(
+                        global_scale + r19 * global_scale_stride_m,
+                        mask=v19,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs19 = global_scale_h
             else:
                 gs19 = global_scale
             sd19 = rs19 * gs19 / d19
             tl.store(routed_w + r19 * K + rank19, p19 * sd19, mask=sel19 & v19)
-            tl.store(indices + r19 * K + rank19, offs_n.to(tl.int32),
-                             mask=sel19 & v19)
+            tl.store(
+                indices + r19 * K + rank19,
+                offs_n.to(tl.int32),
+                mask=sel19 & v19,
+            )
             if S > 0:
-                tl.store(shared_w + r19 * S + offs_s, q19 * sd19, mask=mask_s & v19)
+                tl.store(
+                    shared_w + r19 * S + offs_s, q19 * sd19, mask=mask_s & v19
+                )
         if UROWS >= 22:
             sel20 = rank20 < K
             d20 = tl.sum(tl.where(sel20, p20, 0.0), axis=0)
@@ -1062,52 +1389,75 @@ def _sigmoid_gate_topk_renorm_kernel(
                 d20 += tl.sum(q20, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs20 = tl.load(route_scale + r20 * route_scale_stride_m,
-                                  mask=v20, other=0.0).to(tl.float32)
+                    rs20 = tl.load(
+                        route_scale + r20 * route_scale_stride_m,
+                        mask=v20,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs20 = route_scale_h
             else:
                 rs20 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs20 = tl.load(global_scale + r20 * global_scale_stride_m,
-                                  mask=v20, other=0.0).to(tl.float32)
+                    gs20 = tl.load(
+                        global_scale + r20 * global_scale_stride_m,
+                        mask=v20,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs20 = global_scale_h
             else:
                 gs20 = global_scale
             sd20 = rs20 * gs20 / d20
             tl.store(routed_w + r20 * K + rank20, p20 * sd20, mask=sel20 & v20)
-            tl.store(indices + r20 * K + rank20, offs_n.to(tl.int32),
-                             mask=sel20 & v20)
+            tl.store(
+                indices + r20 * K + rank20,
+                offs_n.to(tl.int32),
+                mask=sel20 & v20,
+            )
             if S > 0:
-                tl.store(shared_w + r20 * S + offs_s, q20 * sd20, mask=mask_s & v20)
+                tl.store(
+                    shared_w + r20 * S + offs_s, q20 * sd20, mask=mask_s & v20
+                )
             sel21 = rank21 < K
             d21 = tl.sum(tl.where(sel21, p21, 0.0), axis=0)
             if S > 0:
                 d21 += tl.sum(q21, axis=0)
             if ROUTE_SCALE_IS_TENSOR:
                 if ROUTE_SCALE_IS_ROW:
-                    rs21 = tl.load(route_scale + r21 * route_scale_stride_m,
-                                  mask=v21, other=0.0).to(tl.float32)
+                    rs21 = tl.load(
+                        route_scale + r21 * route_scale_stride_m,
+                        mask=v21,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     rs21 = route_scale_h
             else:
                 rs21 = route_scale
             if GLOBAL_SCALE_IS_TENSOR:
                 if GLOBAL_SCALE_IS_ROW:
-                    gs21 = tl.load(global_scale + r21 * global_scale_stride_m,
-                                  mask=v21, other=0.0).to(tl.float32)
+                    gs21 = tl.load(
+                        global_scale + r21 * global_scale_stride_m,
+                        mask=v21,
+                        other=0.0,
+                    ).to(tl.float32)
                 else:
                     gs21 = global_scale_h
             else:
                 gs21 = global_scale
             sd21 = rs21 * gs21 / d21
             tl.store(routed_w + r21 * K + rank21, p21 * sd21, mask=sel21 & v21)
-            tl.store(indices + r21 * K + rank21, offs_n.to(tl.int32),
-                             mask=sel21 & v21)
+            tl.store(
+                indices + r21 * K + rank21,
+                offs_n.to(tl.int32),
+                mask=sel21 & v21,
+            )
             if S > 0:
-                tl.store(shared_w + r21 * S + offs_s, q21 * sd21, mask=mask_s & v21)
+                tl.store(
+                    shared_w + r21 * S + offs_s, q21 * sd21, mask=mask_s & v21
+                )
+
 
 def _pow2_at_least_1(x):
     x = int(x)
@@ -1142,13 +1492,30 @@ def _is_row_tensor(x):
 #   rung their wave count allows (M=4096: U22 103.4us vs U4 125.5us).
 _PERSIST_SPC = 48
 _ROW_ISO_US = (
-    (1, 5.91), (2, 7.29), (4, 9.54), (6, 11.54), (8, 13.77),
-    (11, 17.03), (14, 20.39), (16, 22.59), (18, 25.14), (20, 27.24),
+    (1, 5.91),
+    (2, 7.29),
+    (4, 9.54),
+    (6, 11.54),
+    (8, 13.77),
+    (11, 17.03),
+    (14, 20.39),
+    (16, 22.59),
+    (18, 25.14),
+    (20, 27.24),
     (22, 29.50),
 )
 _ROW_SS_US = {
-    1: 2.28, 2: 3.27, 4: 5.52, 6: 7.46, 8: 9.55, 11: 12.81,
-    14: 15.88, 16: 18.10, 18: 20.73, 20: 21.81, 22: 24.62,
+    1: 2.28,
+    2: 3.27,
+    4: 5.52,
+    6: 7.46,
+    8: 9.55,
+    11: 12.81,
+    14: 15.88,
+    16: 18.10,
+    18: 20.73,
+    20: 21.81,
+    22: 24.62,
 }
 # Interleaved-chain budget: rows_per_program * BLOCK_N stays at or below
 # the measured no-spill point (22 * 128 = 2816 lanes per chain vector; the

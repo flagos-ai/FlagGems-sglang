@@ -122,9 +122,16 @@ def _fix_gcu_attr(attr_match, line, op_name):
                 return f" <{{operandSegmentSizes = {new_seg}, {rest}}}>"
             return f" <{{operandSegmentSizes = {new_seg}}}>"
         return attr_match.group(0)
-    if op_name in ("memref.reinterpret_cast", "memref.subview") and not seg_match:
+    if (
+        op_name in ("memref.reinterpret_cast", "memref.subview")
+        and not seg_match
+    ):
         opers = re.search(r"\(([^()]*)\)\s*<\{", line)
-        n_ops = len([x for x in opers.group(1).split(",") if x.strip()]) if opers else 1
+        n_ops = (
+            len([x for x in opers.group(1).split(",") if x.strip()])
+            if opers
+            else 1
+        )
         offs = re.search(r"static_offsets = array<i64: ([^>]*)>", line)
         sizes = re.search(r"static_sizes = array<i64: ([^>]*)>", line)
         strides = re.search(r"static_strides = array<i64: ([^>]*)>", line)
@@ -168,7 +175,9 @@ def _patch_gcu_compiler_opt():
 
     def _shim(content, *args):
         if isinstance(content, str) and "operandSegmentSizes" in content:
-            content = "\n".join(_fix_gcu_dialect_line(l) for l in content.split("\n"))
+            content = "\n".join(
+                _fix_gcu_dialect_line(line) for line in content.split("\n")
+            )
         return _orig(content, *args)
 
     _shim._flaggems_dialect_shim = True
@@ -201,31 +210,47 @@ def _per_group_transpose_kernel(
     k_offsets = k_block * BLOCK_K + tl.arange(0, BLOCK_K)
 
     if EVEN_K:
-        for row_start in tl.range(split * BLOCK_M, group_rows, NSPLIT * BLOCK_M):
+        for row_start in tl.range(
+            split * BLOCK_M, group_rows, NSPLIT * BLOCK_M
+        ):
             row_offsets = row_start + tl.arange(0, BLOCK_M)
             row_mask = row_offsets < group_rows
             values = tl.load(
-                input_ptr + group_base + row_offsets[None, :] * K + k_offsets[:, None],
+                input_ptr
+                + group_base
+                + row_offsets[None, :] * K
+                + k_offsets[:, None],
                 mask=row_mask[None, :],
                 other=0,
             )
             tl.store(
-                output_ptr + group_base + k_offsets[:, None] * group_rows + row_offsets[None, :],
+                output_ptr
+                + group_base
+                + k_offsets[:, None] * group_rows
+                + row_offsets[None, :],
                 values,
                 mask=row_mask[None, :],
             )
     else:
         k_mask = k_offsets < K
-        for row_start in tl.range(split * BLOCK_M, group_rows, NSPLIT * BLOCK_M):
+        for row_start in tl.range(
+            split * BLOCK_M, group_rows, NSPLIT * BLOCK_M
+        ):
             row_offsets = row_start + tl.arange(0, BLOCK_M)
             row_mask = row_offsets < group_rows
             values = tl.load(
-                input_ptr + group_base + row_offsets[None, :] * K + k_offsets[:, None],
+                input_ptr
+                + group_base
+                + row_offsets[None, :] * K
+                + k_offsets[:, None],
                 mask=row_mask[None, :] & k_mask[:, None],
                 other=0,
             )
             tl.store(
-                output_ptr + group_base + k_offsets[:, None] * group_rows + row_offsets[None, :],
+                output_ptr
+                + group_base
+                + k_offsets[:, None] * group_rows
+                + row_offsets[None, :],
                 values,
                 mask=k_mask[:, None] & row_mask[None, :],
             )
@@ -242,15 +267,15 @@ _DISPATCH = {
     # avg_rows >= 512 (deep, uniform groups)
     (True, 4): (256, 1024, 2),  # K >= 8192
     (True, 3): (128, 1024, 2),  # 4096 <= K < 8192
-    (True, 2): (512, 512, 4),   # 2048 <= K < 4096
-    (True, 1): (256, 256, 8),   # 256 <= K < 2048
-    (True, 0): (512, 128, 4),   # K < 256
+    (True, 2): (512, 512, 4),  # 2048 <= K < 4096
+    (True, 1): (256, 256, 8),  # 256 <= K < 2048
+    (True, 0): (512, 128, 4),  # K < 256
     # 128 <= avg_rows < 512
     (False, 4): (128, 1024, 2),  # K >= 8192
     (False, 3): (128, 1024, 2),  # 4096 <= K < 8192
-    (False, 2): (128, 512, 2),   # 2048 <= K < 4096
-    (False, 1): (256, 256, 4),   # 256 <= K < 2048
-    (False, 0): (256, 128, 4),   # K < 256
+    (False, 2): (128, 512, 2),  # 2048 <= K < 4096
+    (False, 1): (256, 256, 4),  # 256 <= K < 2048
+    (False, 0): (256, 128, 4),  # K < 256
 }
 # avg_rows < 128 (skinny groups): match BLOCK_M to the group height, widen the
 # load instead. Keyed by the same K classes.
@@ -258,7 +283,7 @@ _DISPATCH_SKINNY = {
     4: (64, 1024, 4),  # K >= 8192
     3: (64, 1024, 4),  # 4096 <= K < 8192
     2: (64, 1024, 4),  # 2048 <= K < 4096
-    1: (64, 512, 4),   # 256 <= K < 2048
+    1: (64, 512, 4),  # 256 <= K < 2048
     0: (256, 128, 4),  # K < 256
 }
 
@@ -322,7 +347,10 @@ def per_group_transpose(a, expert_offsets, m_alignment=1):
     nsplit = 1
     programs = num_experts * k_blocks
     if programs < _NUM_SPS:
-        nsplit = min(max(1, _NUM_SPS // programs), max(1, a.shape[0] // num_experts // block_m))
+        nsplit = min(
+            max(1, _NUM_SPS // programs),
+            max(1, a.shape[0] // num_experts // block_m),
+        )
     grid = (num_experts, k_blocks, nsplit)
     _per_group_transpose_kernel[grid](
         a,

@@ -103,14 +103,18 @@ def _tile(
     if EVEN:
         for k in range(NFULL):
             col = k * BC + tl.arange(0, BC)
-            x = tl.load(X + row[:, None] * X0 + col[None, :] * X1).to(tl.float32)
+            x = tl.load(X + row[:, None] * X0 + col[None, :] * X1).to(
+                tl.float32
+            )
             w = tl.load(W + col * WS).to(tl.float32)
             acc += tl.sum(x * w[None, :], 1)
         if TAIL:
             col = NFULL * BC + tl.arange(0, BC)
             cm = col < D
             x = tl.load(
-                X + row[:, None] * X0 + col[None, :] * X1, cm[None, :], other=0.0
+                X + row[:, None] * X0 + col[None, :] * X1,
+                cm[None, :],
+                other=0.0,
             ).to(tl.float32)
             w = tl.load(W + col * WS, cm, other=0.0).to(tl.float32)
             acc += tl.sum(x * w[None, :], 1)
@@ -127,10 +131,14 @@ def _tile(
             col = NFULL * BC + tl.arange(0, BC)
             cm = col < D
             s = tl.load(
-                S + row[:, None] * S0 + col[None, :] * S1, cm[None, :], other=0.0
+                S + row[:, None] * S0 + col[None, :] * S1,
+                cm[None, :],
+                other=0.0,
             )
             f = tl.load(
-                F + row[:, None] * F0 + col[None, :] * F1, cm[None, :], other=0.0
+                F + row[:, None] * F0 + col[None, :] * F1,
+                cm[None, :],
+                other=0.0,
             )
             tl.store(
                 Out + row[:, None] * D + col[None, :],
@@ -142,7 +150,9 @@ def _tile(
         for k in range(NFULL):
             col = k * BC + tl.arange(0, BC)
             x = tl.load(
-                X + row[:, None] * X0 + col[None, :] * X1, rm[:, None], other=0.0
+                X + row[:, None] * X0 + col[None, :] * X1,
+                rm[:, None],
+                other=0.0,
             ).to(tl.float32)
             w = tl.load(W + col * WS).to(tl.float32)
             acc += tl.sum(x * w[None, :], 1)
@@ -150,9 +160,9 @@ def _tile(
             col = NFULL * BC + tl.arange(0, BC)
             cm = col < D
             m = rm[:, None] & cm[None, :]
-            x = tl.load(X + row[:, None] * X0 + col[None, :] * X1, m, other=0.0).to(
-                tl.float32
-            )
+            x = tl.load(
+                X + row[:, None] * X0 + col[None, :] * X1, m, other=0.0
+            ).to(tl.float32)
             w = tl.load(W + col * WS, cm, other=0.0).to(tl.float32)
             acc += tl.sum(x * w[None, :], 1)
         scale = 1.0 / (1.0 + tl.exp(-acc))
@@ -160,10 +170,14 @@ def _tile(
         for k in range(NFULL):
             col = k * BC + tl.arange(0, BC)
             s = tl.load(
-                S + row[:, None] * S0 + col[None, :] * S1, rm[:, None], other=0.0
+                S + row[:, None] * S0 + col[None, :] * S1,
+                rm[:, None],
+                other=0.0,
             )
             f = tl.load(
-                F + row[:, None] * F0 + col[None, :] * F1, rm[:, None], other=0.0
+                F + row[:, None] * F0 + col[None, :] * F1,
+                rm[:, None],
+                other=0.0,
             )
             tl.store(
                 Out + row[:, None] * D + col[None, :],
@@ -174,8 +188,12 @@ def _tile(
             col = NFULL * BC + tl.arange(0, BC)
             cm = col < D
             m = rm[:, None] & cm[None, :]
-            s = tl.load(S + row[:, None] * S0 + col[None, :] * S1, m, other=0.0)
-            f = tl.load(F + row[:, None] * F0 + col[None, :] * F1, m, other=0.0)
+            s = tl.load(
+                S + row[:, None] * S0 + col[None, :] * S1, m, other=0.0
+            )
+            f = tl.load(
+                F + row[:, None] * F0 + col[None, :] * F1, m, other=0.0
+            )
             tl.store(
                 Out + row[:, None] * D + col[None, :], f + sc[:, None] * s, m
             )

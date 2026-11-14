@@ -42,7 +42,11 @@ def _patch_enflame_operand_segments():
     if getattr(toolkit._run_command, "_operand_segments_patched", False):
         return
     original = toolkit._run_command
-    fix_ops = ("gcu.matmul", "memref_ext.slice_start", "memref_ext.slice_pad_start")
+    fix_ops = (
+        "gcu.matmul",
+        "memref_ext.slice_start",
+        "memref_ext.slice_pad_start",
+    )
     array_re = re.compile(r"(operandSegmentSizes = array<i32: )([^>]*?)(>})")
 
     def strip_trailing_zeros(match):
@@ -57,7 +61,9 @@ def _patch_enflame_operand_segments():
         if "operandSegmentSizes" in content:
             fixed_lines = []
             for line in content.split("\n"):
-                if "operandSegmentSizes" in line and any(op in line for op in fix_ops):
+                if "operandSegmentSizes" in line and any(
+                    op in line for op in fix_ops
+                ):
                     line = array_re.sub(strip_trailing_zeros, line)
                 fixed_lines.append(line)
             content = "\n".join(fixed_lines)
@@ -214,7 +220,9 @@ def _flash_kernel(
     for block_idx in range(0, num_blocks):
         sequence_offsets = start + block_idx * BLOCK_N + tl.arange(0, BLOCK_N)
         sequence_mask = sequence_offsets < end
-        pages = tl.load(kv_indices + sequence_offsets, mask=sequence_mask, other=0)
+        pages = tl.load(
+            kv_indices + sequence_offsets, mask=sequence_mask, other=0
+        )
         v_values = tl.load(
             v_buffer
             + pages[:, None] * sv0
@@ -238,7 +246,9 @@ def _flash_kernel(
             query_mask[:, None] & sequence_mask[None, :], scores, -float("inf")
         )
         block_max = tl.max(scores, axis=1)
-        next_max = tl.where(query_mask, tl.maximum(running_max, block_max), 0.0)
+        next_max = tl.where(
+            query_mask, tl.maximum(running_max, block_max), 0.0
+        )
         old_scale = tl.where(
             query_mask,
             tl.exp2((running_max - next_max) * 1.4426950408889634),

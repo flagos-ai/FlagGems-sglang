@@ -50,14 +50,18 @@ def _fill_padded_rows_copyfirst_kernel(
         xv = tl.load(x_ptr + offs)
         tl.store(out_ptr + offs, xv)
         thresh = tl.load(n_ptr) * NCOLS
-        fv = tl.full([BLOCK], fill_value, tl.float32).to(out_ptr.dtype.element_ty)
+        fv = tl.full([BLOCK], fill_value, tl.float32).to(
+            out_ptr.dtype.element_ty
+        )
         tl.store(out_ptr + offs, fv, mask=offs >= thresh)
     else:
         in_bounds = offs < total
         xv = tl.load(x_ptr + offs, mask=in_bounds, other=fill_value)
         tl.store(out_ptr + offs, xv, mask=in_bounds)
         thresh = tl.load(n_ptr) * NCOLS
-        fv = tl.full([BLOCK], fill_value, tl.float32).to(out_ptr.dtype.element_ty)
+        fv = tl.full([BLOCK], fill_value, tl.float32).to(
+            out_ptr.dtype.element_ty
+        )
         tl.store(out_ptr + offs, fv, mask=in_bounds & (offs >= thresh))
 
 

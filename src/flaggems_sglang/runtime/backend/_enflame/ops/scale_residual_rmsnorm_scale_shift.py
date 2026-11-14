@@ -170,8 +170,8 @@ def _persist(
             res = (r + update).to(O.dtype.element_ty).to(tl.float32)
             tl.store(O + row_off, res, cache_modifier=".cs")
             inv = tl.rsqrt(tl.sum(res * res, axis=1) / D + EPS)
-            norm = (res * inv[:, None] * w).to(Y.dtype.element_ty).to(
-                tl.float32
+            norm = (
+                (res * inv[:, None] * w).to(Y.dtype.element_ty).to(tl.float32)
             )
             product = (norm * fac).to(Y.dtype.element_ty).to(tl.float32)
             tl.store(Y + row_off, product + sh, cache_modifier=".cs")
@@ -187,8 +187,8 @@ def _persist(
             res = (r + update).to(O.dtype.element_ty).to(tl.float32)
             tl.store(O + row_off, res, mask=rmask, cache_modifier=".cs")
             inv = tl.rsqrt(tl.sum(res * res, axis=1) / D + EPS)
-            norm = (res * inv[:, None] * w).to(Y.dtype.element_ty).to(
-                tl.float32
+            norm = (
+                (res * inv[:, None] * w).to(Y.dtype.element_ty).to(tl.float32)
             )
             product = (norm * fac).to(Y.dtype.element_ty).to(tl.float32)
             tl.store(

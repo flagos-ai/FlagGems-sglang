@@ -203,7 +203,9 @@ def pad_draft_extend_query(q, padded_q, seq_lens_q, cu_seqlens_q):
             and out.data_ptr() % 4 == 0
             and triton.cdiv(nmax // 2, _MAX_BLOCK) <= 1
         ):
-            block2 = min(triton.next_power_of_2(max(nmax // 2, 16)), _MAX_BLOCK)
+            block2 = min(
+                triton.next_power_of_2(max(nmax // 2, 16)), _MAX_BLOCK
+            )
             grid = min(bs, _NUM_SPC)
             _pad_draft_extend_query_persist_u32[(grid,)](
                 q,

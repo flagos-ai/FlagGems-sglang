@@ -235,9 +235,15 @@ def _split_kernel(
     log2e: tl.constexpr = 1.4426950408889634
     q_base = (batch * H_Q + kv_head * GROUP) * D
     q0 = tl.load(q + q_base + dim_lanes).to(tl.float32) * (sm_scale * log2e)
-    q1 = tl.load(q + q_base + D + dim_lanes).to(tl.float32) * (sm_scale * log2e)
-    q2 = tl.load(q + q_base + 2 * D + dim_lanes).to(tl.float32) * (sm_scale * log2e)
-    q3 = tl.load(q + q_base + 3 * D + dim_lanes).to(tl.float32) * (sm_scale * log2e)
+    q1 = tl.load(q + q_base + D + dim_lanes).to(tl.float32) * (
+        sm_scale * log2e
+    )
+    q2 = tl.load(q + q_base + 2 * D + dim_lanes).to(tl.float32) * (
+        sm_scale * log2e
+    )
+    q3 = tl.load(q + q_base + 3 * D + dim_lanes).to(tl.float32) * (
+        sm_scale * log2e
+    )
     m0 = -float("inf")
     m1 = -float("inf")
     m2 = -float("inf")

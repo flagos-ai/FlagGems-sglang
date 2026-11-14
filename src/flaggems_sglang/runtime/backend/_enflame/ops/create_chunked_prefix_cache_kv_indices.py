@@ -154,14 +154,10 @@ def _ccpk_group2(
         ln0 = tl.load(chunk_seq_lens_ptr + r0).to(tl.int32)
         ln1 = tl.load(chunk_seq_lens_ptr + r1).to(tl.int32)
         src0 = (
-            req_to_token_ptr
-            + pool0 * req_to_token_stride
-            + st0 * r2t_stride1
+            req_to_token_ptr + pool0 * req_to_token_stride + st0 * r2t_stride1
         )
         src1 = (
-            req_to_token_ptr
-            + pool1 * req_to_token_stride
-            + st1 * r2t_stride1
+            req_to_token_ptr + pool1 * req_to_token_stride + st1 * r2t_stride1
         )
         if (ln0 <= BLOCK) and (ln1 <= BLOCK):
             # Fast path (typical): both windows fit one masked tile each;

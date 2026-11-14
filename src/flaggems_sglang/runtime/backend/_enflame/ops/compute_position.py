@@ -50,7 +50,9 @@ def _position(
         tl.store(A + first, start)
         for base in range(0, length, B):
             index = base + tl.arange(0, B)
-            tl.store(O + start + index, prefix.to(tl.int64) + index, index < length)
+            tl.store(
+                O + start + index, prefix.to(tl.int64) + index, index < length
+            )
     else:
         gl = tl.arange(0, CP)
         rows = first + gl
