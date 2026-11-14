@@ -13,6 +13,21 @@
 # limitations under the License.
 
 ops:
+  - id: act_and_mul
+    description: |
+      Fused MoE gated activation. Applies silu or tanh-approximated gelu to the first half of the last dim,
+      multiplies by the second half, and supports an optional SwiGLU input clamp; all fused in a single pass.
+    for:
+      - act_and_mul
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: add3
     description: |
       Three-way elementwise addition that preserves the double rounding: bf16(bf16(a + b) + c).
