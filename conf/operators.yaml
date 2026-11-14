@@ -1895,6 +1895,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: reshape_and_cache_flash
+    description: |
+      Write token-major keys and values into paged FlashAttention KV caches.
+      Resolves each token's slot, optionally through a sliding-window remap table, ignores negative resolved slots, and applies optional quantization scales by division before the write.
+    for:
+      - reshape_and_cache_flash
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: residual_gate_add
     description: |
       Elementwise residual/gate update of an LTX-2 transformer block: residual + T(update * gate).
