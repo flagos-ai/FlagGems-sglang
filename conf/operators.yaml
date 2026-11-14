@@ -1443,6 +1443,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: mla_kv_pack_quantize_fp8
+    description: |
+      Broadcast rotary keys across heads as needed and concatenate them with the
+      non-rotary keys. Multiply the packed keys and values by their respective
+      inverse scales, saturate and cast both to fp8_dtype.
+    for:
+      - mla_kv_pack_quantize_fp8
+    labels:
+      - fused
+      - sglang
+      - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: moe_align_block_size
     description: |
       The MoE sort and pad that every block-tiled fused-MoE GEMM depends on.
