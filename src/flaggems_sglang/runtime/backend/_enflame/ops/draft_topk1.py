@@ -16,7 +16,11 @@ import torch
 import triton
 import triton.language as tl
 
-_PARTITION_SIZE = 262144
+_LARGE_VOCAB_LIMIT = 32768
+_STREAMING_W_SMALL_BATCH = 4096
+_STREAMING_W_LARGE_BATCH = 2048
+_STREAMING_TREE_K = 8
+_SMALL_BATCH_LIMIT = 48
 _INT64_STORAGE_IS_INT32 = True
 
 
@@ -70,7 +74,7 @@ def _write_outputs(
 
 
 @triton.jit
-def _draft_topk1_direct_kernel(
+def _draft_topk1_streaming_kernel(
     logits_ptr,
     positions_ptr,
     draft_tokens_ptr,
@@ -86,118 +90,85 @@ def _draft_topk1_direct_kernel(
     stride_logits_batch,
     stride_logits_vocab,
     VOCAB_SIZE: tl.constexpr,
-    BLOCK_VOCAB: tl.constexpr,
+    W: tl.constexpr,
+    K: tl.constexpr,
     DRAFT_SIZE: tl.constexpr,
     BLOCK_DRAFT: tl.constexpr,
     DRAFT_TOKEN_COLUMN: tl.constexpr,
     HAS_DRAFT_TOKENS: tl.constexpr,
 ):
+    # One program per row; per loop iteration K independent W-wide loads are
+    # issued back-to-back (GCU400 exposes per-iteration load latency unless
+    # several loads are in flight), then merged with a leftmost-preferring
+    # combine tree into a single per-lane running (m, k) state. Strict '>'
+    # against the running state keeps earlier iterations on ties, and '>='
+    # inside the tree keeps the leftmost slot, so the composite is the exact
+    # leftmost argmax.
     row = tl.program_id(0)
-    columns = tl.arange(0, BLOCK_VOCAB)
-    logits = tl.load(
-        logits_ptr + row * stride_logits_batch + columns * stride_logits_vocab,
-        mask=columns < VOCAB_SIZE,
-        other=-float("inf"),
-    )
-    selected_index = tl.argmax(
-        logits,
+    lane = tl.arange(0, W)
+    base = logits_ptr + row * stride_logits_batch
+    running_max = tl.full([W], -float("inf"), tl.float32)
+    running_index = tl.zeros([W], tl.int32)
+    CHUNK: tl.constexpr = K * W
+    N_ITER: tl.constexpr = VOCAB_SIZE // CHUNK
+    tail = VOCAB_SIZE - N_ITER * CHUNK
+    for it in range(0, N_ITER):
+        c0 = it * CHUNK + lane
+        v0 = tl.load(base + c0 * stride_logits_vocab)
+        v1 = tl.load(base + (c0 + W) * stride_logits_vocab)
+        if K >= 4:
+            v2 = tl.load(base + (c0 + 2 * W) * stride_logits_vocab)
+            v3 = tl.load(base + (c0 + 3 * W) * stride_logits_vocab)
+        if K >= 8:
+            v4 = tl.load(base + (c0 + 4 * W) * stride_logits_vocab)
+            v5 = tl.load(base + (c0 + 5 * W) * stride_logits_vocab)
+            v6 = tl.load(base + (c0 + 6 * W) * stride_logits_vocab)
+            v7 = tl.load(base + (c0 + 7 * W) * stride_logits_vocab)
+        if K == 2:
+            vM = tl.where(v0 >= v1, v0, v1)
+            cM = tl.where(v0 >= v1, c0, c0 + W)
+        if K == 4:
+            vA = tl.where(v0 >= v1, v0, v1)
+            cA = tl.where(v0 >= v1, c0, c0 + W)
+            vB = tl.where(v2 >= v3, v2, v3)
+            cB = tl.where(v2 >= v3, c0 + 2 * W, c0 + 3 * W)
+            vM = tl.where(vA >= vB, vA, vB)
+            cM = tl.where(vA >= vB, cA, cB)
+        if K == 8:
+            vA = tl.where(v0 >= v1, v0, v1)
+            cA = tl.where(v0 >= v1, c0, c0 + W)
+            vB = tl.where(v2 >= v3, v2, v3)
+            cB = tl.where(v2 >= v3, c0 + 2 * W, c0 + 3 * W)
+            vC = tl.where(v4 >= v5, v4, v5)
+            cC = tl.where(v4 >= v5, c0 + 4 * W, c0 + 5 * W)
+            vD = tl.where(v6 >= v7, v6, v7)
+            cD = tl.where(v6 >= v7, c0 + 6 * W, c0 + 7 * W)
+            vE = tl.where(vA >= vB, vA, vB)
+            cE = tl.where(vA >= vB, cA, cB)
+            vF = tl.where(vC >= vD, vC, vD)
+            cF = tl.where(vC >= vD, cC, cD)
+            vM = tl.where(vE >= vF, vE, vF)
+            cM = tl.where(vE >= vF, cE, cF)
+        hit = vM > running_max
+        running_max = tl.where(hit, vM, running_max)
+        running_index = tl.where(hit, cM, running_index)
+    if tail > 0:
+        t_base = N_ITER * CHUNK
+        for s in tl.static_range(K):
+            sbase = t_base + s * W
+            rem = tail - s * W
+            vs = tl.load(
+                base + (sbase + lane) * stride_logits_vocab,
+                mask=lane < rem,
+                other=-float("inf"),
+            )
+            hit = vs > running_max
+            running_max = tl.where(hit, vs, running_max)
+            running_index = tl.where(hit, sbase + lane, running_index)
+    global_max = tl.max(running_max, axis=0)
+    selected_index = tl.min(
+        tl.where(running_max == global_max, running_index, 2147483647),
         axis=0,
-        tie_break_left=True,
-    )
-    _write_outputs(
-        row,
-        selected_index,
-        positions_ptr,
-        draft_tokens_ptr,
-        topk_p_ptr,
-        topk_index_ptr,
-        out_positions_ptr,
-        out_draft_tokens_ptr,
-        stride_positions,
-        stride_draft_batch,
-        stride_draft_column,
-        stride_out_draft_batch,
-        stride_out_draft_column,
-        DRAFT_SIZE,
-        BLOCK_DRAFT,
-        DRAFT_TOKEN_COLUMN,
-        HAS_DRAFT_TOKENS,
-    )
-
-
-@triton.jit
-def _draft_topk1_partial_kernel(
-    logits_ptr,
-    partial_values_ptr,
-    partial_indices_ptr,
-    stride_logits_batch,
-    stride_logits_vocab,
-    VOCAB_SIZE: tl.constexpr,
-    PARTITION_COUNT: tl.constexpr,
-    BLOCK_VOCAB: tl.constexpr,
-):
-    program = tl.program_id(0)
-    row = program // PARTITION_COUNT
-    partition = program - row * PARTITION_COUNT
-    columns = partition * BLOCK_VOCAB + tl.arange(0, BLOCK_VOCAB)
-    mask = columns < VOCAB_SIZE
-    logits = tl.load(
-        logits_ptr + row * stride_logits_batch + columns * stride_logits_vocab,
-        mask=mask,
-        other=-float("inf"),
-    ).to(tl.float32)
-    local_index = tl.argmax(
-        logits,
-        axis=0,
-        tie_break_left=True,
-    )
-    selected_index = partition * BLOCK_VOCAB + local_index
-    selected_value = tl.load(
-        logits_ptr
-        + row * stride_logits_batch
-        + selected_index * stride_logits_vocab,
-    ).to(tl.float32)
-    partial_offset = row * PARTITION_COUNT + partition
-    tl.store(partial_values_ptr + partial_offset, selected_value)
-    tl.store(partial_indices_ptr + partial_offset, selected_index)
-
-
-@triton.jit
-def _draft_topk1_finalize_kernel(
-    partial_values_ptr,
-    partial_indices_ptr,
-    positions_ptr,
-    draft_tokens_ptr,
-    topk_p_ptr,
-    topk_index_ptr,
-    out_positions_ptr,
-    out_draft_tokens_ptr,
-    stride_positions,
-    stride_draft_batch,
-    stride_draft_column,
-    stride_out_draft_batch,
-    stride_out_draft_column,
-    PARTITION_COUNT: tl.constexpr,
-    BLOCK_PARTITIONS: tl.constexpr,
-    DRAFT_SIZE: tl.constexpr,
-    BLOCK_DRAFT: tl.constexpr,
-    DRAFT_TOKEN_COLUMN: tl.constexpr,
-    HAS_DRAFT_TOKENS: tl.constexpr,
-):
-    row = tl.program_id(0)
-    partitions = tl.arange(0, BLOCK_PARTITIONS)
-    partial_values = tl.load(
-        partial_values_ptr + row * PARTITION_COUNT + partitions,
-        mask=partitions < PARTITION_COUNT,
-        other=-float("inf"),
-    )
-    selected_partition = tl.argmax(
-        partial_values,
-        axis=0,
-        tie_break_left=True,
-    )
-    selected_index = tl.load(
-        partial_indices_ptr + row * PARTITION_COUNT + selected_partition,
     )
     _write_outputs(
         row,
@@ -223,28 +194,36 @@ def _draft_topk1_finalize_kernel(
 def chunk_topk1_outputs(
     next_token_logits, positions, draft_tokens, draft_token_column
 ):
+    # Host-side prep is on the measured op-call critical path; keep the
+    # per-call tensor-API op count minimal (allocs + int32 views only).
     batch_size, vocab_size = next_token_logits.shape
+    device = next_token_logits.device
     topk_p = torch.empty(
         (batch_size, 1),
         dtype=torch.float32,
-        device=next_token_logits.device,
+        device=device,
     )
-    integer_outputs = torch.empty(
-        (2, batch_size),
+    topk_index = torch.empty(
+        (batch_size, 1),
         dtype=torch.int64,
-        device=next_token_logits.device,
+        device=device,
     )
-    topk_index = integer_outputs[0].view(batch_size, 1)
-    out_positions = integer_outputs[1]
+    out_positions = torch.empty(
+        (batch_size,),
+        dtype=torch.int64,
+        device=device,
+    )
+    stride_positions = positions.stride(0)
     positions_ptr = positions
     topk_index_ptr = topk_index
     out_positions_ptr = out_positions
-    stride_positions = positions.stride(0)
     if _INT64_STORAGE_IS_INT32:
-        positions_ptr = positions.view(torch.int32).reshape(-1)
-        integer_kernel_storage = integer_outputs.view(torch.int32).reshape(-1)
-        topk_index_ptr = integer_kernel_storage[:batch_size]
-        out_positions_ptr = integer_kernel_storage[batch_size : 2 * batch_size]
+        # int64 tensors are int32-backed (Long->Int storage); one int32 word
+        # per logical element, so the kernel addresses them through plain
+        # int32 views without flattening (explicit strides drive addressing).
+        positions_ptr = positions.view(torch.int32)
+        topk_index_ptr = topk_index.view(torch.int32)
+        out_positions_ptr = out_positions.view(torch.int32)
         stride_positions = 1
 
     has_draft_tokens = draft_tokens is not None
@@ -255,10 +234,8 @@ def chunk_topk1_outputs(
             normalized_column += draft_size
         out_draft_tokens = torch.empty_like(draft_tokens)
         if _INT64_STORAGE_IS_INT32 and draft_tokens.dtype == torch.int64:
-            draft_tokens_ptr = draft_tokens.view(torch.int32).reshape(-1)
-            out_draft_tokens_ptr = out_draft_tokens.view(torch.int32).reshape(
-                -1
-            )
+            draft_tokens_ptr = draft_tokens.view(torch.int32)
+            out_draft_tokens_ptr = out_draft_tokens.view(torch.int32)
             stride_draft_batch = draft_size
             stride_draft_column = 1
             stride_out_draft_batch = draft_size
@@ -336,53 +313,41 @@ def draft_topk1(
         draft_token_column,
     )
 
-    if vocab_size <= _PARTITION_SIZE:
-        block_vocab = triton.next_power_of_2(vocab_size)
-        _draft_topk1_direct_kernel[(batch_size,)](
-            next_token_logits,
-            *output_args,
-            next_token_logits.stride(0),
-            next_token_logits.stride(1),
-            VOCAB_SIZE=vocab_size,
-            BLOCK_VOCAB=block_vocab,
-            **output_meta,
-            num_warps=4,
-            num_stages=1,
-        )
+    if vocab_size > _LARGE_VOCAB_LIMIT:
+        # Latency regime (grid below the 48 SPs) prefers wider per-load
+        # vectors; the throughput regime prefers narrower ones (dual-program
+        # DSM occupancy). K-way issue depth is shared by both arms.
+        if batch_size < _SMALL_BATCH_LIMIT:
+            streaming_width = _STREAMING_W_SMALL_BATCH
+        else:
+            streaming_width = _STREAMING_W_LARGE_BATCH
+        streaming_k = _STREAMING_TREE_K
     else:
-        partition_count = triton.cdiv(vocab_size, _PARTITION_SIZE)
-        partial_values = torch.empty(
-            (batch_size, partition_count),
-            dtype=torch.float32,
-            device=next_token_logits.device,
+        # Small vocab: keep every load inside the toolchain-safe width
+        # (masked fp32 loads >= 8192 lanes fail to fresh-compile, see
+        # compiler_issues/vllm_silu_flat_slice_start.md) and pick the
+        # largest K whose chunk still fits the row.
+        streaming_width = min(
+            _STREAMING_W_SMALL_BATCH,
+            triton.next_power_of_2(vocab_size),
         )
-        partial_indices = torch.empty(
-            (batch_size, partition_count),
-            dtype=torch.int32,
-            device=next_token_logits.device,
-        )
-        _draft_topk1_partial_kernel[(batch_size * partition_count,)](
-            next_token_logits,
-            partial_values,
-            partial_indices,
-            next_token_logits.stride(0),
-            next_token_logits.stride(1),
-            VOCAB_SIZE=vocab_size,
-            PARTITION_COUNT=partition_count,
-            BLOCK_VOCAB=_PARTITION_SIZE,
-            num_warps=4,
-            num_stages=1,
-        )
-        _draft_topk1_finalize_kernel[(batch_size,)](
-            partial_values,
-            partial_indices,
-            *output_args,
-            PARTITION_COUNT=partition_count,
-            BLOCK_PARTITIONS=triton.next_power_of_2(partition_count),
-            **output_meta,
-            num_warps=1,
-            num_stages=1,
-        )
+        streaming_k = 2
+        if streaming_width * 4 <= vocab_size:
+            streaming_k = 4
+        if streaming_width * 8 <= vocab_size:
+            streaming_k = 8
+    _draft_topk1_streaming_kernel[(batch_size,)](
+        next_token_logits,
+        *output_args,
+        next_token_logits.stride(0),
+        next_token_logits.stride(1),
+        VOCAB_SIZE=vocab_size,
+        W=streaming_width,
+        K=streaming_k,
+        **output_meta,
+        num_warps=4,
+        num_stages=1,
+    )
 
     return topk_p, topk_index, out_positions, out_draft_tokens
 

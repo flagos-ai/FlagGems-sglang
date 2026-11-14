@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -27,34 +29,48 @@ def _kv_indices_kernel(
     out_ptr,
     BS: tl.constexpr,
     ROW: tl.constexpr,
+    TS: tl.constexpr,
     PS: tl.constexpr,
     LS: tl.constexpr,
     IS: tl.constexpr,
     SS: tl.constexpr,
     HAS_START: tl.constexpr,
     BLOCK: tl.constexpr,
+    TB: tl.constexpr,
     NP: tl.constexpr,
 ):
-    cols = tl.arange(0, BLOCK)
+    cols_b = tl.arange(0, BLOCK)
+    cols_t = tl.arange(0, TB)
     for j in range(tl.program_id(0), BS, NP):
         n = tl.load(lens_ptr + j * LS)
         beg = tl.load(indptr_ptr + j * IS)
         base = tl.load(pool_ptr + j * PS) * ROW
         if HAS_START:
             base += tl.load(start_ptr + j * SS)
-        for c in range(0, n, BLOCK):
-            offs = c + cols
-            m = offs < n
+        last = tl.maximum(n - 1, 0)
+        nb = tl.cdiv(n, BLOCK)
+        full_end = (nb - 1) * BLOCK
+        for c in range(0, full_end, BLOCK):
+            offs = c + cols_b
+            tl.store(out_ptr + beg + offs, tl.load(table_ptr + (base + offs) * TS))
+        tail_start = tl.maximum(full_end, 0)
+        for c in range(tail_start, n, TB):
+            offs = c + cols_t
+            safe = tl.minimum(tl.maximum(offs, 0), last)
             tl.store(
                 out_ptr + beg + offs,
-                tl.load(table_ptr + base + offs, mask=m, other=0),
-                mask=m,
+                tl.load(table_ptr + (base + safe) * TS),
+                mask=offs < n,
             )
+
+
+def _int64_word_stride():
+    return 2 if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64") == "1" else 1
 
 
 def _index(t):
     if t.dtype == torch.int64:
-        return t.contiguous().view(torch.int32), 2
+        return t.contiguous().view(torch.int32), _int64_word_stride()
     return t, t.stride(0)
 
 
@@ -69,32 +85,47 @@ def create_flashinfer_kv_indices(
     pool, ps = _index(req_pool_indices)
     lens, ls = _index(page_kernel_lens)
     indptr, is_ = _index(kv_indptr)
+    table = req_to_token.contiguous()
+    row = table.stride(0)
+    if table.dtype == torch.int64:
+        table = table.view(torch.int32)
+        ts = _int64_word_stride()
+    else:
+        ts = 1
     bs = req_pool_indices.shape[0]
+    if bs == 0:
+        return kv_indices
     if kv_start_idx is None:
         start, ss, has_start = indptr, 1, False
     else:
         start, ss = _index(kv_start_idx)
         has_start = True
-    np_ = bs
-    if np_ > 24:
-        np_ = 24
+    np_ = bs if bs <= 48 else 48
+    if bs <= 2:
+        block, tb, warps = 2048, 256, 1
+    elif bs <= 16:
+        block, tb, warps = 2048, 2048, 2
+    else:
+        block, tb, warps = 1024, 1024, 1
     _kv_indices_kernel[(np_,)](
         pool,
         lens,
         indptr,
         start,
-        req_to_token,
+        table,
         kv_indices,
         bs,
-        req_to_token.stride(0),
+        row,
+        ts,
         ps,
         ls,
         is_,
         ss,
         has_start,
-        4096,
+        block,
+        tb,
         np_,
-        num_warps=1,
+        num_warps=warps,
     )
     return kv_indices
 

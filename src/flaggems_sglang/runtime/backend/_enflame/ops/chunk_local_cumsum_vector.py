@@ -8,8 +8,8 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-# express or implied. See the License for the specific language
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+# implied. See the License for the specific language
 # governing permissions and limitations under the License.
 
 """chunk_local_cumsum_vector — vector-mode local cumulative sum within chunks.
@@ -34,102 +34,173 @@ The output is always float32 (the reference never casts back to the input
 dtype). This kernel is written in portable Triton only and never calls any
 pre-compiled / vendor-specific cached operator.
 
-v6 design (measured on the GCU backend; four per-tile-size launch tiers):
-  * TINY tiles (2 * BLOCK_BT * BLOCK_HS <= TINY_MAX_ELEMS, even chunk count):
-    the common case (NCOL == 1, pow2 BT/HS, no scale / reverse / masks) is
-    handled by the fused-3D kernel: NCH consecutive chunks are loaded as one
-    contiguous [NCH*BT, HS] tile, reshaped to [NCH, BT, HS] and scanned per
-    chunk with a single tl.cumsum(axis=1).  Scanning each chunk with its own
-    rows is exactly the reference semantics (the cumsum resets at every chunk
-    boundary), so -- unlike the fused-2 kernel it replaces -- there is no
-    cross-chunk leak and no masked-reduce carry correction; the whole kernel
-    is load + reshape + scan + store.  The larger fused tile amortizes the
-    per-tile dispatch/scan setup that dominates tiny shapes: on
-    b1-t1024-h8-s16-c16 the kernel-only time drops from ~22.4us (fused-2) to
-    ~16.4us, at the measured pure-tile-copy floor (~16.1us).  NCH is the
-    largest of {8, 4, 2} dividing nchunks with NCH*BT*HS <= TINY_3D_MAX_ELEMS
-    so the tile stays off local memory (GCU spills above ~256KB fp32).  The
-    masked / scale / reverse tiny cases keep the fused-2 kernel (single
-    [2*BT, HS] scan + one masked-reduce carry correction).
+v9 design (2026-11-08).  Three parts:
 
-v7: the tiny shapes are CPU/dispatch bound on the GCU backend -- the wrapper
-  measures ~26us while the fused-3D kernel itself is only ~15us (the rest is
-  the torch allocation, the Triton launch dispatch, and the wrapper Python).
-  v7 therefore attacks the wrapper: the common tiny case is now selected by a
-  pure-arithmetic fast path at the top of reference() (pow2 BT/HS checks,
-  tile-size and even-chunk tests, inline NCH selection -- no pow2 helper
-  calls, no NCOL/tile computation), and the output is allocated with
-  torch.empty_like (a few tenths of a us cheaper than torch.empty on this
-  backend).  Both changes are exact-preserving: the fast-path conditions
-  reproduce the general path's dispatch for these shapes, so the fused-3D
-  kernel is launched identically.  The GPU-bound medium/large tiers are
-  untouched (they are already at the pure-copy bandwidth floor and their
-  wrapper cost is hidden under the kernel).
+1. Triangular-dot main path.  The within-chunk scan is computed as a single
+   ``tl.dot`` of a loop-invariant triangular mask with the loaded tile —
+   the delivered form of the vllm sibling kernel
+   (``flaggems_vllm/ops/FLA/cumsum.py::chunk_local_cumsum_vector_kernel``):
+   on the GCU backend the ``tl.cumsum`` intrinsic is an order of magnitude
+   slower than the surrounding memory traffic, while the masked matmul runs
+   at the load+store floor.  The mask is inclusive-lower-triangular for the
+   forward direction and inclusive-upper-triangular for reverse, so both
+   directions share one canonical addressing pattern (no reversed rows, no
+   flip arithmetic).  Operands stay in the input dtype (bf16/fp16 products
+   are exact in the fp32 accumulator; for fp32 inputs the stripped-input
+   matmul measured IEEE-level accuracy, max abs err 3.8e-6 on the probe
+   shapes).  MMA bounds require BLOCK_BT >= 16, BLOCK_HS >= 16 and keep
+   BLOCK_BT <= 128 (the [BT, BT] mask stays <= 32K elements); the per-program
+   tile is capped at [BLOCK_BT, 512] (bf16 tile + fp32 accumulator + mask
+   <= ~576 KB DSM at the largest BLOCK_BT = 128, under the 917504 B limit).
+   Measured on the GCU backend (kernel wall): b8-t1024-h8-s64-c64 forward
+   20.2 us / reverse 22.0 us; b32-t256-h8-s128-c64 (two [64, 512] column
+   blocks) 32.0 / 31.9 us — with num_warps=8, NCHUNK=4 chunks per program.
 
-  * MEDIUM tiles (BLOCK_BT * BLOCK_HS <= MEDIUM_MAX_ELEMS): the NCHUNK-loop
-    kernel with NCHUNK=2, 1 warp and 3 software-pipeline stages on the chunk
-    loop (overlaps the next tile load with the current scan/store; ~-4.5% on
-    b2-t2048-h16-s32-c32).  A minimal-signature variant of this kernel was
-    measured too: no gain (35.7us vs 36.0us), so it is not used.
-  * LARGE tiles (else): the NCHUNK-loop kernel with 2 warps, no pipelining,
-    and NCHUNK=2 for the widest tiles (BLOCK_BT*BLOCK_HS at MAX_TILE_ELEMS,
-    e.g. b2-t8192-h64-s64-c128, where two sequential huge tiles per program
-    beats four; ~-2% there) or NCHUNK=4 otherwise.
-  * All tiers: consecutive chunks are contiguous in memory (c == b*NT + nt),
-    so the per-chunk base offset is c * (BT*HS) — no div/mod by NT in the hot
-    loop.  reverse mode is folded in by loading/storing rows in reversed
-    order inside each chunk (cumsum over the reversed sequence equals the
-    reference flip-cumsum-flip), and scale is applied after the scan.
-  * Masked (non-power-of-two BT / H*S) shapes keep working: the tile is padded
-    to pow2 and rows/columns are masked on load/store.
+2. Toolchain-compat shim (2026-11-07 20:22 build skew).  First compile of
+   every canonical 2D tile load (``memref_ext.slice_*``) and every
+   ``tl.dot`` (``gcu.matmul`` inputPrecision / operandSegmentSizes) fails on
+   this build: the in-process GCUIR generator emits new-format op encodings
+   that the older external ``gcu-compiler-opt`` rejects.  A scoped retry
+   shim — the delivered vllm pattern (see
+   compiler_issues/vllm_parallel_nsa_gcu_matmul.md and
+   compiler_issues/sglang_chunk_local_cumsum_vector.md) — rewrites those
+   encodings back to the old form and retries.  It is fallback-only (the
+   original compile is attempted first) and scoped to this module's kernel
+   names, so already-compilable kernels are unaffected.  Remove once the
+   toolchain is re-synced.
 
-The kernel remains memory-bandwidth-bound on the large production shapes
-(pure bf16->fp32 tile copy and the full cumsum run within ~1-2% of each
-other), so scan restructuring there would buy nothing.
+3. Wave-aware NCHUNK dispatch (2026-11-12 re-tune).  With the toolchain
+   re-synced (the shim below stays disabled), the single-wave grid optimum
+   moved: one program per chunk-group per 512-wide column block, with the
+   grid held inside one 48-program wave, beats the old fixed NCHUNK=4 cap
+   whenever NCOL >= 2 — the wide bench shape [32, 256, 8, 128] drops from
+   34.4 to 30.4 us (NCHUNK 4 -> 8, grid 64 -> 32), sitting on its copy
+   floor.  Deeper loops and multi-wave grids both lose (see _pick_nchunk).
+
+Shapes outside the dot domain (chunk_size < 16 or > 128, H*S < 16) take a
+per-row 1D recurrence fallback (static_range row loop over [BLOCK_HS]
+vectors; scan direction = loop order), which compiles without the shim on
+every configuration probed.
 """
+
+import re
 
 import torch
 import triton
 import triton.language as tl
 
 # ---------------------------------------------------------------------------
+# Toolchain-compat shim (2026-11-07 20:22 skew): retry-path GCUIR downgrade
+# scoped to this module's kernels. See compiler_issues/
+# vllm_parallel_nsa_gcu_matmul.md for the full analysis.
+# ---------------------------------------------------------------------------
+_COMPAT_SCOPED_KERNELS = (
+    "_chunk_local_cumsum_vector_kernel",
+    "_chunk_local_cumsum_rowloop_kernel",
+)
+
+
+def _downgrade_gcuir_for_external_tool(text):
+    """Rewrite new-format GCUIR op encodings back to the old external-tool form."""
+
+    def _strip_trailing_zero_segments(match):
+        entries = [entry.strip() for entry in match.group(2).split(",")]
+        while len(entries) > 1 and entries[-1] == "0":
+            entries.pop()
+        return match.group(1) + ", ".join(entries) + match.group(3)
+
+    out_lines = []
+    for line in text.splitlines():
+        if '"memref_ext.slice_' in line or '"gcu.matmul"' in line:
+            if "operandSegmentSizes = array<i32:" in line:
+                line = re.sub(
+                    r"(operandSegmentSizes = array<i32: )"
+                    r"((?:\s*\d+\s*,\s*)*\s*\d+\s*)(>)",
+                    _strip_trailing_zero_segments,
+                    line,
+                )
+            if '"gcu.matmul"' in line:
+                # Legacy gcu.matmul keeps one empty variadic segment entry.
+                line = re.sub(
+                    r"operandSegmentSizes = array<i32: (\d+(?:, \d+){3})>",
+                    r"operandSegmentSizes = array<i32: \1, 0>",
+                    line,
+                )
+                line = re.sub(r"inputPrecision = \d+ : i32, ", "", line)
+                line = re.sub(r", inputPrecision = \d+ : i32", "", line)
+        if '"memref_ext.memset_start"' in line:
+            line = re.sub(
+                r" <\{operandSegmentSizes = array<i32: [0-9, ]+>\}>", "", line
+            )
+        out_lines.append(line)
+    return "\n".join(out_lines) + "\n"
+
+
+def _install_gcuir_text_compat():
+    """Wrap enflame toolkit.gcu_compiler_opt with a scoped downgrade retry."""
+    try:
+        from triton.backends.enflame import toolkit
+    except ImportError:
+        return
+    if getattr(toolkit.gcu_compiler_opt, "_cumsum_vector_gcu_compat", False):
+        return
+    original = toolkit.gcu_compiler_opt
+
+    def gcu_compiler_opt_compat(content, *args):
+        try:
+            return original(content, *args)
+        except Exception as first_error:
+            text = content if isinstance(content, str) else str(content)
+            if not any(name in text for name in _COMPAT_SCOPED_KERNELS):
+                raise first_error
+            try:
+                return toolkit._run_command(
+                    "gcu-compiler-opt",
+                    _downgrade_gcuir_for_external_tool(text),
+                    "-mlir-print-op-generic",
+                    *args,
+                )
+            except Exception:
+                raise first_error
+
+    gcu_compiler_opt_compat._cumsum_vector_gcu_compat = True
+    toolkit.gcu_compiler_opt = gcu_compiler_opt_compat
+
+
+# _install_gcuir_text_compat()  # DISABLED 2026-11-09: 私有 GCUIR shim 实测引入回归(降级重试路径
+# 搞挂合法 kernel,同 conftest shim 事故);详见 commit b333be6/e1acdf6 与
+# compiler_issues/vllm_memref_slice_pad_start.md。编译器修复后统一处置。
+
+
+# ---------------------------------------------------------------------------
 # Tunables.
 # ---------------------------------------------------------------------------
-# Tiny tiles (2 * BLOCK_BT * BLOCK_HS at or below this) use the fused-2 kernel
-# (two consecutive chunks as one [2*BT, HS] tile, single scan with a carry
-# correction).  The cap stays well below the point where fusing spills to
-# local memory on GCU (a ~16K-element fused tile is 4x slower).
-TINY_MAX_ELEMS = 16384
-# Tiny tiles whose launch matches the common case (NCOL == 1 and no
-# scale / reverse / masks) use a minimal-signature fused-2 kernel; measured
-# ~1.5us faster on b1-t1024-h8-s16-c16 than the full-signature variant.
-NUM_WARPS_FUSED = 1
-# Fused-3D tiny kernel: N consecutive chunks as one [N*BT, HS] tile scanned
-# per-chunk (reshape + tl.cumsum(axis=1), no carry).  Cap on the fused tile
-# (N * BT * HS) in elements -- above ~256KB fp32 the GCU backend spills to
-# local memory / trips the L1 allocator.
-TINY_3D_MAX_ELEMS = 24576
-NUM_WARPS_3D = 1
-# Tiles above TINY_MAX_ELEMS and at or below MEDIUM_MAX_ELEMS use the medium
-# launch config (NCHUNK=2, 1 warp, pipelined chunk loop) instead of the
-# wide-tile config.
-MEDIUM_MAX_ELEMS = 32768
-# Medium tiles: chunks per program, warps, and chunk-loop pipeline stages.
-NCHUNK_MEDIUM = 2
-NUM_WARPS_MEDIUM = 1
-NUM_STAGES_MEDIUM = 3
-# Large tiles: chunks per program and warps.
-NCHUNK_DEFAULT = 4
-NUM_WARPS = 2
-# Widest tiles (BLOCK_BT*BLOCK_HS == MAX_TILE_ELEMS) prefer fewer sequential
-# huge tiles per program (2 instead of 4) -- measured on b2-t8192-h64-s64-c128.
-NCHUNK_WIDEST = 2
-# Upper bound on tile columns (h*s); wider tiles don't help and raise
-# register pressure.
-BLOCK_HS_MAX = 1024
-# Upper bound on tile elements (BLOCK_BT * BLOCK_HS); avoids local-memory
-# spilling on large (chunk_size, h*s) combinations.
-MAX_TILE_ELEMS = 131072
+# Dot-path launch config (measured on the GCU backend; nw=8 won every probed
+# tile and stages are flat for NCHUNK >= 2).
+NUM_WARPS_DOT = 8
+NUM_STAGES_DOT = 3
+# Wave-aware chunk-loop dispatch (measured 2026-11-12 on GCU400 / 48 SIPs):
+# latency is minimized by a single-wave grid (<= 48 programs) with the
+# program count as large as the wave allows.  Grids past one wave lose
+# (64-256 programs: +8-15% on the official shapes and synthetics), and too
+# few resident programs lose harder (grid <= 16: +30-300%).  Chunk loops
+# deeper than ~32 always lose (NCHUNK=97 on prime nchunks measured 10x), so
+# shapes whose single-wave grid needs a deeper loop fall back to a
+# 128-program multi-wave cap before giving up on loop depth.
+GRID_WAVE = 48
+GRID_MULTIWAVE = 128
+NCHUNK_WAVE_MAX = 16
+NCHUNK_MAX = 32
+# Dot-path geometry: column blocks at most 512 wide (two [64, 512] blocks
+# beat one [64, 1024] tile by ~22% on the wide bench shape), chunk (BT) side
+# bounded by the MMA constraints and the [BT, BT] mask DSM budget.
+BLOCK_HS_MAX = 512
+BLOCK_BT_MIN = 16
+BLOCK_BT_MAX = 128
+BLOCK_HS_MIN = 16
+# Fallback launch config (per-row recurrence, [BLOCK_HS] 1D row vectors).
+LOOP_BLOCK_HS_MAX = 512
+NUM_WARPS_LOOP = 1
 
 
 def _next_pow2(n):
@@ -146,27 +217,27 @@ def _largest_pow2_le(n):
     return p
 
 
-def _pick_nchunk(nchunks, cap):
-    """Largest divisor of nchunks that is <= cap (no OOB, no guard)."""
-    for nc in (cap, cap - 1, cap // 2, 2, 1):
-        if nc >= 1 and nchunks % nc == 0:
-            return nc
-    return 1
+def _pick_nchunk(nchunks, ncol):
+    """Smallest chunk loop at the measured latency optimum.
 
-
-def _pick_3d_n(nchunks, BT, HS):
-    """Largest N in {8, 4, 2} for the fused-3D tiny kernel.
-
-    N consecutive chunks are fused into one [N*BT, HS] tile that is scanned
-    per-chunk via a reshape + tl.cumsum(axis=1) -- no cross-chunk leak, so no
-    carry correction.  N is capped so the fused tile stays off local memory
-    (measured on the GCU backend: 256KB+ tiles spill / hit the L1 allocator).
-    Returns 1 when no N >= 2 divides nchunks within the cap (caller then keeps
-    the fused-2 path).
+    Tier 1 keeps the grid within one 48-program wave (loop <= 16 chunks);
+    tier 2 allows a 128-program multi-wave grid (loop <= 32); tier 3 takes
+    the shallowest divisor-based loop available.  NCHUNK always divides
+    nchunks, so the grid covers the chunks exactly (no guard, no OOB).
     """
-    for nc in (8, 4, 2):
-        if nchunks % nc == 0 and nc * BT * HS <= TINY_3D_MAX_ELEMS:
-            return nc
+    for grid_cap, nchunk_cap in (
+        (GRID_WAVE, NCHUNK_WAVE_MAX),
+        (GRID_MULTIWAVE, NCHUNK_MAX),
+    ):
+        for nprog in range(min(max(grid_cap // ncol, 1), nchunks), 0, -1):
+            if nchunks % nprog == 0:
+                nchunk = nchunks // nprog
+                if nchunk <= nchunk_cap:
+                    return nchunk
+                break
+    for nchunk in range(NCHUNK_MAX, 0, -1):
+        if nchunks % nchunk == 0:
+            return nchunk
     return 1
 
 
@@ -187,71 +258,68 @@ def _chunk_local_cumsum_vector_kernel(
     HAS_COL_MASK: tl.constexpr,
     NUM_STAGES: tl.constexpr,
 ):
+    # Triangular-dot scan: one loop-inclusive triangular mask per program,
+    # applied to every chunk tile the program owns.  The mask is lower
+    # triangular for the forward direction (inclusive prefix sums) and upper
+    # triangular for reverse (inclusive suffix sums), so both directions use
+    # the same canonical ascending addresses.  Operands stay in the input
+    # dtype; the fp32 accumulator keeps bf16/fp16 products exact.
     pid = tl.program_id(0)
-    # pid -> (column-block, chunk-group): column blocks innermost so the
-    # chunk-group decode stays cheap and consecutive programs touch adjacent
-    # memory.
     cb = pid % NCOL
     rem = pid // NCOL
     chunk0 = rem * NCHUNK
 
     rows = tl.arange(0, BLOCK_BT)
     cols = tl.arange(0, BLOCK_HS)
-
-    # Within-chunk time index of each tile row; reversed when IS_REVERSE
-    # (cumsum over reversed rows == reference flip-cumsum-flip).  For masked
-    # rows the offset is negative but never dereferenced (load/store masked).
+    o_i = tl.arange(0, BLOCK_BT)
     if IS_REVERSE:
-        bt = BT - 1 - rows
+        m = tl.where(o_i[:, None] <= o_i[None, :], 1.0, 0.0)
     else:
-        bt = rows
-
-    # Chunks are contiguous in memory (c == b*NT + nt), so the base offset of
-    # chunk c is simply c * (BT*HS) -- no div/mod by NT needed in the loop;
-    # consecutive chunk tiles are BT*HS elements apart.
+        m = tl.where(o_i[:, None] >= o_i[None, :], 1.0, 0.0)
+    mb = m.to(g_ptr.dtype.element_ty)
     off_cols = cb * BLOCK_HS + tl.max_contiguous(
         tl.multiple_of(cols, BLOCK_HS), BLOCK_HS
     )
-    row_off = bt[:, None] * HS + off_cols[None, :]
+    row_off = rows[:, None] * HS + off_cols[None, :]
     base = (chunk0 * BT) * HS
 
     if HAS_ROW_MASK and HAS_COL_MASK:
         ncols = HS - cb * BLOCK_HS
-        m = (rows[:, None] < BT) & (cols[None, :] < ncols)
+        m2 = (rows[:, None] < BT) & (cols[None, :] < ncols)
         for k in tl.range(0, NCHUNK, num_stages=NUM_STAGES):
             off = base + row_off
-            x = tl.load(g_ptr + off, mask=m, other=0.0).to(tl.float32)
-            y = tl.cumsum(x, axis=0)
+            x = tl.load(g_ptr + off, mask=m2, other=0.0)
+            y = tl.dot(mb, x)
             if HAS_SCALE:
                 y = y * scale
-            tl.store(out_ptr + off, y, mask=m)
+            tl.store(out_ptr + off, y, mask=m2)
             base += BT * HS
     elif HAS_ROW_MASK:
-        m = rows[:, None] < BT
+        mr = rows[:, None] < BT
         for k in tl.range(0, NCHUNK, num_stages=NUM_STAGES):
             off = base + row_off
-            x = tl.load(g_ptr + off, mask=m, other=0.0).to(tl.float32)
-            y = tl.cumsum(x, axis=0)
+            x = tl.load(g_ptr + off, mask=mr, other=0.0)
+            y = tl.dot(mb, x)
             if HAS_SCALE:
                 y = y * scale
-            tl.store(out_ptr + off, y, mask=m)
+            tl.store(out_ptr + off, y, mask=mr)
             base += BT * HS
     elif HAS_COL_MASK:
         ncols = HS - cb * BLOCK_HS
-        m = cols[None, :] < ncols
+        mc = cols[None, :] < ncols
         for k in tl.range(0, NCHUNK, num_stages=NUM_STAGES):
             off = base + row_off
-            x = tl.load(g_ptr + off, mask=m, other=0.0).to(tl.float32)
-            y = tl.cumsum(x, axis=0)
+            x = tl.load(g_ptr + off, mask=mc, other=0.0)
+            y = tl.dot(mb, x)
             if HAS_SCALE:
                 y = y * scale
-            tl.store(out_ptr + off, y, mask=m)
+            tl.store(out_ptr + off, y, mask=mc)
             base += BT * HS
     else:
         for k in tl.range(0, NCHUNK, num_stages=NUM_STAGES):
             off = base + row_off
-            x = tl.load(g_ptr + off).to(tl.float32)
-            y = tl.cumsum(x, axis=0)
+            x = tl.load(g_ptr + off)
+            y = tl.dot(mb, x)
             if HAS_SCALE:
                 y = y * scale
             tl.store(out_ptr + off, y)
@@ -259,143 +327,69 @@ def _chunk_local_cumsum_vector_kernel(
 
 
 @triton.jit
-def _chunk_local_cumsum_fused2_kernel(
+def _chunk_local_cumsum_rowloop_kernel(
     g_ptr,
     out_ptr,
     scale,
     BT: tl.constexpr,
     HS: tl.constexpr,
     NCOL: tl.constexpr,
-    BLOCK_BT: tl.constexpr,
     BLOCK_HS: tl.constexpr,
-    HAS_SCALE: tl.constexpr,
     IS_REVERSE: tl.constexpr,
-    HAS_ROW_MASK: tl.constexpr,
+    HAS_SCALE: tl.constexpr,
     HAS_COL_MASK: tl.constexpr,
 ):
-    # Tiny-tile path: two consecutive chunks (rows 0..BT-1, rows BT..2*BT-1)
-    # are loaded as ONE contiguous [2*BT, HS] tile (they are adjacent in
-    # memory).  A single cumsum over the fused tile is exact per column
-    # except that the second chunk inherits the first chunk's prefix; the
-    # leak is removed by subtracting s[BT-1] (the first chunk's total) from
-    # the second chunk's rows.
-    #   Grid: axis 0 = chunk pair.  When NCOL > 1 there is a second axis of
-    # column blocks (axis 1 = column block, no div/mod decode); when NCOL ==
-    # 1 that axis is dropped and cb folds to 0 at trace time (a 1D grid
-    # launches ~0.5us faster per program on the GCU backend than a 2D grid
-    # whose second axis has extent 1).
-    c0 = tl.program_id(0) * 2
-    if NCOL == 1:
-        cb = 0
-    else:
-        cb = tl.program_id(1)
+    # Fallback for shapes outside the dot domain (BT < 16 or > 128, HS < 16):
+    # per-row 1D recurrence.  One program owns one (chunk, column block);
+    # the BT rows stream through a running fp32 accumulator, storing each
+    # partial sum.  The scan direction is the loop order.
+    pid = tl.program_id(0)
+    cb = pid % NCOL
+    chunk = pid // NCOL
 
-    rows = tl.arange(0, BLOCK_BT)
-    cols = tl.max_contiguous(
-        tl.multiple_of(tl.arange(0, BLOCK_HS), BLOCK_HS), BLOCK_HS
+    cols = tl.arange(0, BLOCK_HS)
+    off_cols = cb * BLOCK_HS + tl.max_contiguous(
+        tl.multiple_of(cols, BLOCK_HS), BLOCK_HS
     )
+    if HAS_COL_MASK:
+        cmask = cols < HS - cb * BLOCK_HS
 
+    base = (chunk * BT) * HS
+    acc = tl.zeros((BLOCK_HS,), dtype=tl.float32)
     if IS_REVERSE:
-        # reversed within each chunk; chunk order preserved
-        r = (rows // BT) * BT + (BT - 1 - (rows % BT))
+        for r in tl.static_range(BT - 1, -1, -1):
+            if HAS_COL_MASK:
+                x = tl.load(
+                    g_ptr + base + r * HS + off_cols, mask=cmask, other=0.0
+                ).to(tl.float32)
+            else:
+                x = tl.load(g_ptr + base + r * HS + off_cols).to(tl.float32)
+            acc += x
+            if HAS_SCALE:
+                y = acc * scale
+            else:
+                y = acc
+            if HAS_COL_MASK:
+                tl.store(out_ptr + base + r * HS + off_cols, y, mask=cmask)
+            else:
+                tl.store(out_ptr + base + r * HS + off_cols, y)
     else:
-        r = rows
-
-    # Column-block offset is folded into the scalar base so the column
-    # address stays a pure annotated arange (keeps vectorized loads on the
-    # backend that annotate tt.make_range).
-    base = (c0 * BT) * HS + cb * BLOCK_HS
-    off = base + r[:, None] * HS + cols[None, :]
-
-    if HAS_ROW_MASK or HAS_COL_MASK:
-        m = rows[:, None] < 2 * BT
-        if HAS_COL_MASK:
-            m = m & (cols[None, :] < HS - cb * BLOCK_HS)
-        x = tl.load(g_ptr + off, mask=m, other=0.0).to(tl.float32)
-        s = tl.cumsum(x, axis=0)
-        c1 = tl.sum(tl.where(rows[:, None] == BT - 1, s, 0.0), axis=0)
-        y = tl.where(
-            (rows[:, None] >= BT) & (rows[:, None] < 2 * BT),
-            s - c1[None, :],
-            s,
-        )
-        if HAS_SCALE:
-            y = y * scale
-        tl.store(out_ptr + off, y, mask=m)
-    else:
-        x = tl.load(g_ptr + off).to(tl.float32)
-        s = tl.cumsum(x, axis=0)
-        c1 = tl.sum(tl.where(rows[:, None] == BT - 1, s, 0.0), axis=0)
-        y = tl.where(
-            (rows[:, None] >= BT) & (rows[:, None] < 2 * BT),
-            s - c1[None, :],
-            s,
-        )
-        if HAS_SCALE:
-            y = y * scale
-        tl.store(out_ptr + off, y)
-
-
-@triton.jit
-def _chunk_local_cumsum_fused2_fast_kernel(
-    g_ptr,
-    out_ptr,
-    BT: tl.constexpr,
-    HS: tl.constexpr,
-    BLOCK_BT: tl.constexpr,
-    BLOCK_HS: tl.constexpr,
-):
-    # Minimal-signature fast path of the fused-2 kernel, used only when the
-    # launch matches the common case: NCOL == 1 (single column block covering
-    # all of HS) and no scale / reverse / row / column masks.  With the
-    # cb decode, the flag plumbing and the scale runtime argument all gone,
-    # the dispatch is ~1.5us cheaper on tiny shapes (measured on
-    # b1-t1024-h8-s16-c16: 23.7us vs 25.1us wrapper-level in the same
-    # process).  The body is byte-for-byte what the full kernel traces to
-    # when every flag is False.
-    c0 = tl.program_id(0) * 2
-    rows = tl.arange(0, BLOCK_BT)
-    cols = tl.max_contiguous(
-        tl.multiple_of(tl.arange(0, BLOCK_HS), BLOCK_HS), BLOCK_HS
-    )
-    off = (c0 * BT) * HS + rows[:, None] * HS + cols[None, :]
-    x = tl.load(g_ptr + off).to(tl.float32)
-    s = tl.cumsum(x, axis=0)
-    c1 = tl.sum(tl.where(rows[:, None] == BT - 1, s, 0.0), axis=0)
-    y = tl.where(
-        (rows[:, None] >= BT) & (rows[:, None] < 2 * BT), s - c1[None, :], s
-    )
-    tl.store(out_ptr + off, y)
-
-
-@triton.jit
-def _chunk_local_cumsum_3d_fast_kernel(
-    g_ptr,
-    out_ptr,
-    BT: tl.constexpr,
-    HS: tl.constexpr,
-    NCH: tl.constexpr,
-):
-    # v6 fast path for the common tiny-tile case (NCOL == 1, pow2 BT/HS, no
-    # scale / reverse / masks): NCH consecutive chunks are loaded as one
-    # contiguous [NCH*BT, HS] tile and the scan runs per-chunk through a
-    # reshape to [NCH, BT, HS] + tl.cumsum(axis=1).  Scanning chunk k with
-    # rows [k*BT, (k+1)*BT) of the tile is exactly the reference semantics
-    # (the cumsum resets at each chunk boundary), so unlike the fused-2
-    # kernel there is no cross-chunk leak and no carry correction at all --
-    # the whole computation is one load + one reshape + one scan + one store.
-    # On b1-t1024-h8-s16-c16 this runs at the pure-tile-copy floor (~16.4us
-    # vs ~19.6us for the fused-2 kernel's 32-row tile; the larger fused tile
-    # amortizes the per-tile dispatch/scan setup that dominates tiny shapes).
-    # NCH is picked by _pick_3d_n so the fused tile stays off local memory.
-    c0 = tl.program_id(0) * NCH
-    rows = tl.arange(0, NCH * BT)
-    cols = tl.max_contiguous(tl.multiple_of(tl.arange(0, HS), HS), HS)
-    off = (c0 * BT) * HS + rows[:, None] * HS + cols[None, :]
-    x = tl.load(g_ptr + off).to(tl.float32)
-    x3 = tl.reshape(x, (NCH, BT, HS))
-    s = tl.cumsum(x3, axis=1)
-    tl.store(out_ptr + off, tl.reshape(s, (NCH * BT, HS)))
+        for r in tl.static_range(0, BT):
+            if HAS_COL_MASK:
+                x = tl.load(
+                    g_ptr + base + r * HS + off_cols, mask=cmask, other=0.0
+                ).to(tl.float32)
+            else:
+                x = tl.load(g_ptr + base + r * HS + off_cols).to(tl.float32)
+            acc += x
+            if HAS_SCALE:
+                y = acc * scale
+            else:
+                y = acc
+            if HAS_COL_MASK:
+                tl.store(out_ptr + base + r * HS + off_cols, y, mask=cmask)
+            else:
+                tl.store(out_ptr + base + r * HS + off_cols, y)
 
 
 def chunk_local_cumsum_vector(g, chunk_size, reverse=False, scale=None):
@@ -414,155 +408,57 @@ def chunk_local_cumsum_vector(g, chunk_size, reverse=False, scale=None):
     BT = chunk_size
     HS = H * S
     nchunks = B * (T // BT)
-    # v7: allocate via empty_like (output is always the input shape in fp32) --
-    # ~1us cheaper than torch.empty(shape...) on the GCU backend's patched
-    # allocator, and it matters because the tiny shapes are CPU/dispatch bound.
     out = torch.empty_like(g, dtype=torch.float32)
-
-    # v7 fast path: the common tiny case (NCOL == 1, pow2 BT/HS, no scale /
-    # reverse / row or column masks) is recognized with pure arithmetic, so the
-    # CPU-bound tiny shapes pay the least possible Python per call (no pow2
-    # helper calls, no NCOL/tile computation).  On the GCU backend these shapes
-    # measure ~26us wrapper vs ~15us GPU kernel, so every Python op counts.
-    # The checks are exactly equivalent to the general path's decision here:
-    #   * (BT & (BT - 1)) == 0            -> BLOCK_BT == BT    (no row mask)
-    #   * HS pow2 and HS <= BLOCK_HS_MAX  -> BLOCK_HS == HS    (no col mask,
-    #                                                           NCOL == 1)
-    #   * 2*BT*HS <= TINY_MAX_ELEMS and nchunks even -> tiny fused tier
-    # NCH is then the largest of {8, 4, 2} dividing nchunks within the fused-3D
-    # tile cap (same selection as _pick_3d_n); nchunks even + tiny tier always
-    # yields NCH >= 2, so the fused-3D kernel always applies here.
-    if scale is None and not reverse:
-        if (
-            (HS & (HS - 1)) == 0
-            and HS <= BLOCK_HS_MAX
-            and (BT & (BT - 1)) == 0
-            and 2 * BT * HS <= TINY_MAX_ELEMS
-            and (nchunks & 1) == 0
-        ):
-            if nchunks % 8 == 0 and 8 * BT * HS <= TINY_3D_MAX_ELEMS:
-                nch3 = 8
-            elif nchunks % 4 == 0 and 4 * BT * HS <= TINY_3D_MAX_ELEMS:
-                nch3 = 4
-            else:
-                nch3 = 2
-            grid = (nchunks // nch3,)
-            _chunk_local_cumsum_3d_fast_kernel[grid](
-                g,
-                out,
-                BT=BT,
-                HS=HS,
-                NCH=nch3,
-                num_warps=NUM_WARPS_3D,
-            )
-            return out
-
-    BLOCK_BT = _next_pow2(BT)
-    BLOCK_HS = min(_largest_pow2_le(HS), BLOCK_HS_MAX)
-    # Keep the tile from spilling into local memory.
-    while BLOCK_BT * BLOCK_HS > MAX_TILE_ELEMS and BLOCK_HS > 16:
-        BLOCK_HS //= 2
-    NCOL = (HS + BLOCK_HS - 1) // BLOCK_HS
-    tile_elems = BLOCK_BT * BLOCK_HS
 
     scale_f = float(scale) if scale is not None else 1.0
     has_scale = scale is not None
     is_reverse = bool(reverse)
 
-    if 2 * tile_elems <= TINY_MAX_ELEMS and nchunks % 2 == 0:
-        # Tiny tiles.  The common case (NCOL == 1, pow2 BT/HS, no scale /
-        # reverse / masks) takes the fused-3D kernel: N consecutive chunks
-        # fused into one [N*BT, HS] tile scanned per-chunk (no carry), which
-        # runs at the pure-copy floor.  Everything else falls back to the
-        # fused-2 kernel (single [2*BT, HS] scan + carry correction).
-        has_row_mask = BT != BLOCK_BT
-        has_col_mask = HS % BLOCK_HS != 0
-        if (
-            NCOL == 1
-            and not has_scale
-            and not is_reverse
-            and not has_row_mask
-            and not has_col_mask
-        ):
-            NCH3 = _pick_3d_n(nchunks, BT, HS)
-            if NCH3 >= 2:
-                grid = (nchunks // NCH3,)
-                _chunk_local_cumsum_3d_fast_kernel[grid](
-                    g,
-                    out,
-                    BT=BT,
-                    HS=HS,
-                    NCH=NCH3,
-                    num_warps=NUM_WARPS_3D,
-                )
-                return out
-            # fall through to fused-2 when no N >= 2 fits
-        FBT = 2 * BLOCK_BT
-        if (
-            NCOL == 1
-            and not has_scale
-            and not is_reverse
-            and not has_row_mask
-            and not has_col_mask
-        ):
-            grid = (nchunks // 2,)
-            _chunk_local_cumsum_fused2_fast_kernel[grid](
-                g,
-                out,
-                BT=BT,
-                HS=HS,
-                BLOCK_BT=FBT,
-                BLOCK_HS=BLOCK_HS,
-                num_warps=NUM_WARPS_FUSED,
-            )
-        else:
-            grid = ((nchunks // 2),) if NCOL == 1 else ((nchunks // 2), NCOL)
-            _chunk_local_cumsum_fused2_kernel[grid](
+    BLOCK_BT = _next_pow2(BT)
+    if BLOCK_BT_MIN <= BLOCK_BT <= BLOCK_BT_MAX:
+        # Dot path.  BLOCK_HS covers all pow2 HS up to 512 in one block;
+        # wider or non-pow2 HS splits into column blocks (masked tail).
+        BLOCK_HS = min(_largest_pow2_le(HS), BLOCK_HS_MAX)
+        if BLOCK_HS >= BLOCK_HS_MIN:
+            NCOL = (HS + BLOCK_HS - 1) // BLOCK_HS
+            NCHUNK = _pick_nchunk(nchunks, NCOL)
+            grid = ((nchunks + NCHUNK - 1) // NCHUNK * NCOL,)
+            _chunk_local_cumsum_vector_kernel[grid](
                 g,
                 out,
                 scale_f,
                 BT=BT,
                 HS=HS,
                 NCOL=NCOL,
-                BLOCK_BT=FBT,
+                NCHUNK=NCHUNK,
+                BLOCK_BT=BLOCK_BT,
                 BLOCK_HS=BLOCK_HS,
                 HAS_SCALE=has_scale,
                 IS_REVERSE=is_reverse,
-                HAS_ROW_MASK=has_row_mask,
-                HAS_COL_MASK=has_col_mask,
-                num_warps=NUM_WARPS_FUSED,
+                HAS_ROW_MASK=(BT != BLOCK_BT),
+                HAS_COL_MASK=(HS % BLOCK_HS != 0),
+                NUM_STAGES=NUM_STAGES_DOT if NCHUNK >= 2 else 1,
+                num_warps=NUM_WARPS_DOT,
             )
-    else:
-        # Medium / large tiles: NCHUNK-loop kernel.
-        if tile_elems <= MEDIUM_MAX_ELEMS:
-            nc, num_warps, num_stages = (
-                NCHUNK_MEDIUM,
-                NUM_WARPS_MEDIUM,
-                NUM_STAGES_MEDIUM,
-            )
-        elif tile_elems >= MAX_TILE_ELEMS:
-            nc, num_warps, num_stages = NCHUNK_WIDEST, NUM_WARPS, 1
-        else:
-            nc, num_warps, num_stages = NCHUNK_DEFAULT, NUM_WARPS, 1
-        NCHUNK = _pick_nchunk(nchunks, nc)
-        grid = ((nchunks + NCHUNK - 1) // NCHUNK * NCOL,)
-        _chunk_local_cumsum_vector_kernel[grid](
-            g,
-            out,
-            scale_f,
-            BT=BT,
-            HS=HS,
-            NCOL=NCOL,
-            NCHUNK=NCHUNK,
-            BLOCK_BT=BLOCK_BT,
-            BLOCK_HS=BLOCK_HS,
-            HAS_SCALE=has_scale,
-            IS_REVERSE=is_reverse,
-            HAS_ROW_MASK=(BT != BLOCK_BT),
-            HAS_COL_MASK=(HS % BLOCK_HS != 0),
-            NUM_STAGES=num_stages,
-            num_warps=num_warps,
-        )
+            return out
+
+    # Fallback: per-row recurrence over [BLOCK_HS] column blocks.
+    BLOCK_HS_L = min(_largest_pow2_le(HS), LOOP_BLOCK_HS_MAX)
+    NCOL = (HS + BLOCK_HS_L - 1) // BLOCK_HS_L
+    grid = (nchunks * NCOL,)
+    _chunk_local_cumsum_rowloop_kernel[grid](
+        g,
+        out,
+        scale_f,
+        BT=BT,
+        HS=HS,
+        NCOL=NCOL,
+        BLOCK_HS=BLOCK_HS_L,
+        IS_REVERSE=is_reverse,
+        HAS_SCALE=has_scale,
+        HAS_COL_MASK=(HS % BLOCK_HS_L != 0),
+        num_warps=NUM_WARPS_LOOP,
+    )
     return out
 
 

@@ -12,9 +12,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+
 import torch
 import triton
 import triton.language as tl
+
+
+def _loc_arg(loc):
+    if loc.dtype == torch.int32:
+        return loc
+    if loc.dtype != torch.int64:
+        return loc.to(torch.int32)
+    if os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "") in ("1", "true"):
+        return loc
+    view = torch.empty(0, dtype=torch.int32, device=loc.device)
+    view.set_(
+        loc.untyped_storage(),
+        loc.storage_offset(),
+        loc.shape,
+        loc.stride(),
+    )
+    return view
 
 
 @triton.jit
@@ -43,7 +62,7 @@ def _save(
     BT: tl.constexpr,
     W: tl.constexpr,
 ):
-    i = tl.program_id(0) * W + tl.arange(0, W)[None, :]
+    i = tl.program_id(0) * W + tl.arange(0, W)
     if tl.program_id(0) * W < NA:
         a = tl.load(A + _src(i, AS, AT), i < NA, other=0)
         tl.store(X + i, a, i < NA)
@@ -84,7 +103,7 @@ def _pair(
         work = j if SERIAL else tl.program_id(0)
         req = (work // NB).to(tl.int64)
         part = work % NB
-        col = part * W + tl.arange(0, W)[None, :]
+        col = part * W + tl.arange(0, W)
         loc = tl.load(L + req * LS).to(tl.int64)
         page = loc // P
         token = loc % P
@@ -190,7 +209,7 @@ def _flat(
         work = j if SERIAL else tl.program_id(0)
         req = (work // NB).to(tl.int64)
         part = work % NB
-        col = part * W + tl.arange(0, W)[None, :]
+        col = part * W + tl.arange(0, W)
         loc = tl.load(L + req * LS).to(tl.int64)
         slot = tl.where(loc < 0, loc + CAP, loc)
         ai = req * AS + col.to(tl.int64)
@@ -237,6 +256,87 @@ def _flat(
                     tl.store(V + vi, bv, col < EV)
 
 
+@triton.jit
+def _flat_u8(
+    K,
+    V,
+    A,
+    B,
+    L,
+    CAP,
+    N,
+    NBLK,
+    NPROG,
+    KS: tl.constexpr,
+    VS: tl.constexpr,
+    AS: tl.constexpr,
+    BS: tl.constexpr,
+    LS: tl.constexpr,
+    W: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    col = tl.arange(0, W)
+    col64 = col.to(tl.int64)
+    for blk in range(pid, NBLK, NPROG):
+        q0 = tl.maximum(tl.minimum(blk * 8, N - 8), 0)
+        r0 = (q0 + 0).to(tl.int64)
+        r1 = (q0 + 1).to(tl.int64)
+        r2 = (q0 + 2).to(tl.int64)
+        r3 = (q0 + 3).to(tl.int64)
+        r4 = (q0 + 4).to(tl.int64)
+        r5 = (q0 + 5).to(tl.int64)
+        r6 = (q0 + 6).to(tl.int64)
+        r7 = (q0 + 7).to(tl.int64)
+        l0 = tl.load(L + r0 * LS).to(tl.int64)
+        l1 = tl.load(L + r1 * LS).to(tl.int64)
+        l2 = tl.load(L + r2 * LS).to(tl.int64)
+        l3 = tl.load(L + r3 * LS).to(tl.int64)
+        l4 = tl.load(L + r4 * LS).to(tl.int64)
+        l5 = tl.load(L + r5 * LS).to(tl.int64)
+        l6 = tl.load(L + r6 * LS).to(tl.int64)
+        l7 = tl.load(L + r7 * LS).to(tl.int64)
+        s0 = tl.where(l0 < 0, l0 + CAP, l0)
+        s1 = tl.where(l1 < 0, l1 + CAP, l1)
+        s2 = tl.where(l2 < 0, l2 + CAP, l2)
+        s3 = tl.where(l3 < 0, l3 + CAP, l3)
+        s4 = tl.where(l4 < 0, l4 + CAP, l4)
+        s5 = tl.where(l5 < 0, l5 + CAP, l5)
+        s6 = tl.where(l6 < 0, l6 + CAP, l6)
+        s7 = tl.where(l7 < 0, l7 + CAP, l7)
+        a0 = tl.load(A + r0 * AS + col64)
+        a1 = tl.load(A + r1 * AS + col64)
+        a2 = tl.load(A + r2 * AS + col64)
+        a3 = tl.load(A + r3 * AS + col64)
+        a4 = tl.load(A + r4 * AS + col64)
+        a5 = tl.load(A + r5 * AS + col64)
+        a6 = tl.load(A + r6 * AS + col64)
+        a7 = tl.load(A + r7 * AS + col64)
+        b0 = tl.load(B + r0 * BS + col64)
+        b1 = tl.load(B + r1 * BS + col64)
+        b2 = tl.load(B + r2 * BS + col64)
+        b3 = tl.load(B + r3 * BS + col64)
+        b4 = tl.load(B + r4 * BS + col64)
+        b5 = tl.load(B + r5 * BS + col64)
+        b6 = tl.load(B + r6 * BS + col64)
+        b7 = tl.load(B + r7 * BS + col64)
+        tl.store(K + s0 * KS + col64, a0)
+        tl.store(V + s0 * VS + col64, b0)
+        tl.store(K + s1 * KS + col64, a1)
+        tl.store(V + s1 * VS + col64, b1)
+        tl.store(K + s2 * KS + col64, a2)
+        tl.store(V + s2 * VS + col64, b2)
+        tl.store(K + s3 * KS + col64, a3)
+        tl.store(V + s3 * VS + col64, b3)
+        tl.store(K + s4 * KS + col64, a4)
+        tl.store(V + s4 * VS + col64, b4)
+        tl.store(K + s5 * KS + col64, a5)
+        tl.store(V + s5 * VS + col64, b5)
+        tl.store(K + s6 * KS + col64, a6)
+        tl.store(V + s6 * VS + col64, b6)
+        tl.store(K + s7 * KS + col64, a7)
+        tl.store(V + s7 * VS + col64, b7)
+
+
 def _inner(t):
     return t.stride(-1) == 1 and (
         t.shape[-2] == 1 or t.stride(-2) == t.shape[-1]
@@ -244,6 +344,7 @@ def _inner(t):
 
 
 def store_cache_4d(k_view, v_view, cache_k, cache_v, loc, page_size):
+    loc = _loc_arg(loc)
     n = loc.numel()
     ek = k_view.shape[2] * k_view.shape[3]
     ev = v_view.shape[2] * v_view.shape[3]
@@ -306,8 +407,38 @@ def store_cache_4d(k_view, v_view, cache_k, cache_v, loc, page_size):
         and k_view.stride(0) == page_size * k_view.stride(1)
         and v_view.stride(0) == page_size * v_view.stride(1)
     ):
+        if not serial and x == y and x == w and n > 48:
+            nblk = (n + 7) // 8
+            _flat_u8[(min(nblk, 48),)](
+                k_view,
+                v_view,
+                cache_k,
+                cache_v,
+                loc,
+                k_view.shape[0] * page_size,
+                n,
+                nblk,
+                min(nblk, 48),
+                k_view.stride(1),
+                v_view.stride(1),
+                cache_k.stride(0),
+                cache_v.stride(0),
+                loc.stride(0),
+                W=w,
+                num_warps=2,
+                num_stages=1,
+            )
+            return k_view, v_view
         div = 4 if pack else 1
-        _flat[(1 if serial else count,)](
+        if not serial and n * triton.cdiv(max(x, y), min(256, w)) <= 48:
+            wf = min(256, w)
+            nw = 1
+        else:
+            wf = w
+            nw = 2
+        nbf = triton.cdiv(max(x, y), wf)
+        countf = n * nbf
+        _flat[(1 if serial else countf,)](
             k_view,
             v_view,
             cache_k,
@@ -321,12 +452,12 @@ def store_cache_4d(k_view, v_view, cache_k, cache_v, loc, page_size):
             cache_k.stride(0) // div,
             cache_v.stride(0) // div,
             loc.stride(0),
-            nb,
-            w,
-            count,
+            nbf,
+            wf,
+            countf,
             serial,
             pack,
-            num_warps=2,
+            num_warps=nw,
             num_stages=1,
         )
         return k_view, v_view

@@ -13,7 +13,20 @@
 # permissions and limitations under the License.
 
 """clamp_position -- Enflame GCU specialization.
+
+out = (seq_lens - 1).clamp(min=0), flat elementwise pass over int32 words.
+
+int64 inputs: while TORCH_GCU_ENABLE_INT64_AND_UINT64 is off, torch_gcu
+stores int64 tensors as physical 4-byte words (values < 2**31, i.e. any
+real sequence length, are represented exactly). The kernel then runs over
+zero-copy int32 word views of input and output -- a single kernel launch
+with no staging copies. With the env on (true 8-byte int64) or for
+non-contiguous inputs, a value-preserving cast staging path is used
+instead (exact for seq_lens < 2**31, non-negative; output keeps the input
+dtype).
 """
+
+import os
 
 import torch
 import triton
@@ -35,19 +48,50 @@ def _clamp_position_kernel(
     tl.store(out_ptr + offs, y, mask=mask)
 
 
+def _gcu_int64_enabled():
+    return os.environ.get("TORCH_GCU_ENABLE_INT64_AND_UINT64", "").lower() not in (
+        "",
+        "0",
+        "false",
+        "off",
+        "no",
+    )
+
+
+def _int32_word_view(t):
+    # Same-shape/same-stride int32 view of an int64 tensor's physical
+    # words (valid while int64 is physically 4B and t is contiguous).
+    view = torch.empty(0, dtype=torch.int32, device=t.device)
+    view.set_(
+        t.untyped_storage(),
+        t.storage_offset(),
+        t.shape,
+        t.stride(),
+    )
+    return view
+
+
 def clamp_position(seq_lens):
+    n = seq_lens.numel()
     if seq_lens.dtype == torch.int64:
-        # Value-preserving narrow/widen: exact for seq_lens (< 2**31,
-        # non-negative) and independent of any backend storage layout.
+        if not _gcu_int64_enabled() and seq_lens.is_contiguous():
+            # Zero-copy word views: single kernel launch, in-place into
+            # the int64 output; values are exact for seq_lens (< 2**31,
+            # non-negative) and independent of any backend storage layout.
+            out = torch.empty_like(seq_lens)
+            if n == 0:
+                return out
+            _launch(_int32_word_view(seq_lens), _int32_word_view(out), n)
+            return out
+        # True 8-byte int64 (env on) or non-contiguous input:
+        # value-preserving narrow/widen staging.
         src = seq_lens.to(torch.int32)
         mid = torch.empty_like(src)
-        n = src.numel()
         if n == 0:
             return mid.to(seq_lens.dtype)
         _launch(src, mid, n)
         return mid.to(seq_lens.dtype)
     out = torch.empty_like(seq_lens)
-    n = seq_lens.numel()
     if n == 0:
         return out
     _launch(seq_lens, out, n)

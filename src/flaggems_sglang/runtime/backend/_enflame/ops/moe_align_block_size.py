@@ -1,6 +1,6 @@
 # Copyright 2026, The FlagOS Contributors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License")
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -15,6 +15,236 @@
 import torch
 import triton
 import triton.language as tl
+
+# GCU pipeline:
+#   * `moe_align_block_size` with at most 64 routed payloads and at most
+#     1024 routed experts takes a single-program `_fused_small` launch:
+#     atomic cursor rank + in-register prefix + full output fill, saving the
+#     two inter-kernel sync points that dominate tiny shapes.
+#   * Larger inputs run the three-kernel pipeline:
+#   1. `_count_rank_init`: per-chunk histogram + within-chunk rank via one
+#      relaxed-atomic pass (old value == rank), plus the global N-fill of
+#      `sorted_token_ids` and the `expert_ids` copy.
+#   2. `_prefix_offsets`: chunked expert prefix (2D cumsum along chunks) plus
+#      the padded begin/end table; rewrites the histogram in place as
+#      `begin[e] + cross-chunk offset` so the scatter needs a single gather.
+#   3. `_place_scatter`: rank scatter into the expert segments and the
+#      `expert_ids` block fill.
+# Intra-expert order is nondeterministic (atomic cursor), which the op
+# contract allows (per-expert multiset comparison).
+
+
+@triton.jit
+def _fused_small(
+    X,
+    OUT,
+    EI,
+    EO,
+    NP,
+    CNT,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    S0: tl.constexpr,
+    S1: tl.constexpr,
+    R: tl.constexpr,
+    BS: tl.constexpr,
+    LOGBS: tl.constexpr,
+    POW2BS: tl.constexpr,
+    NS: tl.constexpr,
+    EN: tl.constexpr,
+    BN: tl.constexpr,
+    EP: tl.constexpr,
+    FB: tl.constexpr,
+    NN: tl.constexpr,
+    PN: tl.constexpr,
+    KMAX: tl.constexpr,
+):
+    e = tl.arange(0, EP)
+    tl.store(CNT + e, 0)
+    tl.debug_barrier()
+    i = tl.arange(0, BN)
+    v = tl.load(X + i // K * S0 + i % K * S1, i < N, other=R)
+    valid = (i < N) & (v >= 0) & (v < R)
+    old = tl.atomic_add(CNT + v, 1, valid, sem="relaxed")
+    tl.debug_barrier()
+    cnt_v = tl.load(CNT + e)
+    if POW2BS:
+        padded = ((cnt_v + (BS - 1)) >> LOGBS) << LOGBS
+    else:
+        padded = tl.cdiv(cnt_v, BS) * BS
+    end = tl.cumsum(padded, 0)
+    begin = end - padded
+    grand = tl.sum(padded, 0)
+    tl.store(CNT + e, begin)
+    tl.debug_barrier()
+    for f0 in range(0, NS, FB):
+        f = f0 + tl.arange(0, FB)
+        tl.store(OUT + f, N, f < NS)
+    for g0 in range(0, EN, FB):
+        g = g0 + tl.arange(0, FB)
+        old_e = tl.load(EI + g, g < EN, other=0)
+        tl.store(EO + g, old_e, g < EN)
+    tl.debug_barrier()
+    base = tl.load(CNT + v, valid, other=0)
+    slot = base + old
+    tl.store(OUT + slot, i, valid & (slot < NS))
+    if POW2BS:
+        hb = begin >> LOGBS
+        nb = (end - begin) >> LOGBS
+    else:
+        hb = begin // BS
+        nb = (end - begin) // BS
+    for m in range(0, KMAX):
+        tl.store(EO + hb + m, e, (m < nb) & (e < R) & (hb + m < EN))
+    q = tl.arange(0, PN)
+    tl.store(NP + q, grand, q < NN)
+
+
+
+@triton.jit
+def _count_rank_init(
+    X,
+    OUT,
+    EI,
+    EO,
+    CNT,
+    RK,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    S0: tl.constexpr,
+    S1: tl.constexpr,
+    R: tl.constexpr,
+    NS: tl.constexpr,
+    EN: tl.constexpr,
+    EP: tl.constexpr,
+    CH: tl.constexpr,
+    C: tl.constexpr,
+    FB: tl.constexpr,
+    CONTIG: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    if pid < CH:
+        e = tl.arange(0, EP)
+        tl.store(CNT + pid * EP + e, 0)
+        tl.debug_barrier()
+        i = pid * C + tl.arange(0, C)
+        if CONTIG:
+            v = tl.load(X + i, i < N, other=R)
+        else:
+            v = tl.load(X + i // K * S0 + i % K * S1, i < N, other=R)
+        valid = (i < N) & (v >= 0) & (v < R)
+        old = tl.atomic_add(CNT + pid * EP + v, 1, valid, sem="relaxed")
+        tl.store(RK + i, old, valid)
+    f = pid * FB + tl.arange(0, FB)
+    tl.store(OUT + f, N, f < NS)
+    old_e = tl.load(EI + f, f < EN, other=0)
+    tl.store(EO + f, old_e, f < EN)
+
+
+@triton.jit
+def _prefix_offsets(
+    CNT,
+    EO,
+    NP,
+    R: tl.constexpr,
+    BS: tl.constexpr,
+    EP: tl.constexpr,
+    CH: tl.constexpr,
+    BC: tl.constexpr,
+    EN: tl.constexpr,
+    NN: tl.constexpr,
+    PN: tl.constexpr,
+    EO_FILL: tl.constexpr,
+    KMAX: tl.constexpr,
+    OFF_BASE: tl.constexpr,
+):
+    e = tl.arange(0, EP)
+    if CH == 1:
+        cnt0 = tl.load(CNT + e)
+        total = tl.where(e < R, cnt0, 0)
+        padded = tl.cdiv(total, BS) * BS
+        end = tl.cumsum(padded, 0)
+        begin = end - padded
+        grand = tl.sum(padded, 0)
+        tl.store(CNT + e, begin)
+    else:
+        q = tl.arange(0, BC)
+        running = tl.zeros((EP,), tl.int32)
+        for start in range(0, CH, BC):
+            chunk = start + q
+            mask = chunk[:, None] < CH
+            h = tl.load(CNT + chunk[:, None] * EP + e[None, :], mask, other=0)
+            within = tl.cumsum(h, 0) - h
+            tl.store(
+                CNT + chunk[:, None] * EP + e[None, :],
+                running[None, :] + within,
+                mask,
+            )
+            running += tl.sum(h, 0)
+        total = tl.where(e < R, running, 0)
+        padded = tl.cdiv(total, BS) * BS
+        end = tl.cumsum(padded, 0)
+        begin = end - padded
+        grand = tl.sum(padded, 0)
+    tl.store(CNT + OFF_BASE + e, begin, e < R)
+    tl.store(CNT + OFF_BASE + R, grand)
+    qn = tl.arange(0, PN)
+    tl.store(NP + qn, grand, qn < NN)
+    if EO_FILL:
+        hb = begin // BS
+        nb = (end - begin) // BS
+        for m in range(0, KMAX):
+            tl.store(EO + hb + m, e, (m < nb) & (e < R) & (hb + m < EN))
+
+
+@triton.jit
+def _place_scatter(
+    X,
+    CNT,
+    RK,
+    OUT,
+    EO,
+    N: tl.constexpr,
+    K: tl.constexpr,
+    S0: tl.constexpr,
+    S1: tl.constexpr,
+    R: tl.constexpr,
+    BS: tl.constexpr,
+    NS: tl.constexpr,
+    EN: tl.constexpr,
+    EP: tl.constexpr,
+    CH: tl.constexpr,
+    C: tl.constexpr,
+    OFF_BASE: tl.constexpr,
+    B: tl.constexpr,
+    CONTIG: tl.constexpr,
+    EO_IN_K3: tl.constexpr,
+    FOLDED: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    if pid < CH:
+        i = pid * C + tl.arange(0, C)
+        if CONTIG:
+            v = tl.load(X + i, i < N, other=R)
+        else:
+            v = tl.load(X + i // K * S0 + i % K * S1, i < N, other=R)
+        valid = (i < N) & (v >= 0) & (v < R)
+        rk = tl.load(RK + i, valid, other=0)
+        if FOLDED:
+            base = tl.load(CNT + pid * EP + v, valid, other=0)
+        else:
+            off_v = tl.load(CNT + OFF_BASE + v, valid, other=0)
+            col_v = tl.load(CNT + pid * EP + v, valid, other=0)
+            base = off_v + col_v
+        slot = base + rk
+        tl.store(OUT + slot, i, valid & (slot < NS))
+    if EO_IN_K3 and pid < R:
+        b0 = tl.load(CNT + OFF_BASE + pid) // BS
+        b1 = tl.load(CNT + OFF_BASE + pid + 1) // BS
+        r = tl.arange(0, B)
+        for s in range(b0, b1, B):
+            j = s + r
+            tl.store(EO + j, pid, (j < b1) & (j < EN))
 
 
 @triton.jit
@@ -68,54 +298,6 @@ def _tiny_onehot(
     if pid == 0:
         q = tl.arange(0, PN)
         tl.store(NP + q, tl.sum(padded, 0), q < NN)
-
-
-@triton.jit
-def _count_init(
-    X,
-    OUT,
-    EI,
-    EO,
-    H,
-    RK,
-    N: tl.constexpr,
-    K: tl.constexpr,
-    S0: tl.constexpr,
-    S1: tl.constexpr,
-    R: tl.constexpr,
-    NS: tl.constexpr,
-    EN: tl.constexpr,
-    EP: tl.constexpr,
-    CH: tl.constexpr,
-    PB: tl.constexpr,
-    B: tl.constexpr,
-    CONTIG: tl.constexpr,
-):
-    pid = tl.program_id(0)
-    i = pid * B + tl.arange(0, B)
-    tl.store(OUT + i, N, i < NS)
-    old = tl.load(EI + i, i < EN, other=0)
-    tl.store(EO + i, old, i < EN)
-    if pid < CH:
-        j = pid * PB + tl.arange(0, PB)
-        if CONTIG:
-            v = tl.load(X + j, j < N, other=R)
-        else:
-            v = tl.load(X + j // K * S0 + j % K * S1, j < N, other=R)
-        valid = (j < N) & (v >= 0) & (v < R)
-        equal = (v[:, None] == v[None, :]) & valid[None, :]
-        rank = tl.sum(
-            (
-                equal & (tl.arange(0, PB)[None, :] < tl.arange(0, PB)[:, None])
-            ).to(tl.int32),
-            1,
-        )
-        tl.store(RK + j, rank, j < N)
-        e = tl.arange(0, EP)
-        row = tl.sum(
-            ((v[:, None] == e[None, :]) & valid[:, None]).to(tl.int32), 0
-        )
-        tl.store(H + pid * EP + e, row)
 
 
 @triton.jit
@@ -268,119 +450,6 @@ def _pair_place(
             tl.store(OUT + target, i, valid & (target < NS))
 
 
-@triton.jit
-def _mid_place(
-    X,
-    RK,
-    H,
-    OUT,
-    EI,
-    EO,
-    NP,
-    N: tl.constexpr,
-    K: tl.constexpr,
-    S0: tl.constexpr,
-    S1: tl.constexpr,
-    R: tl.constexpr,
-    BS: tl.constexpr,
-    NS: tl.constexpr,
-    EN: tl.constexpr,
-    EP: tl.constexpr,
-    CH: tl.constexpr,
-    PB: tl.constexpr,
-    NN: tl.constexpr,
-    PN: tl.constexpr,
-    CB: tl.constexpr,
-    EB: tl.constexpr,
-    CONTIG: tl.constexpr,
-):
-    pid = tl.program_id(0)
-    e = tl.arange(0, EP)
-    cc = tl.arange(0, CB)
-    h = tl.load(H + cc[:, None] * EP + e[None, :], cc[:, None] < CH, other=0)
-    count = tl.sum(h, 0)
-    aligned = tl.where(e < R, tl.cdiv(count, BS) * BS, 0)
-    endv = tl.cumsum(aligned, 0)
-    begin = endv - aligned
-    total = tl.sum(aligned, 0)
-    if pid < CH:
-        i = pid * PB + tl.arange(0, PB)
-        if CONTIG:
-            v = tl.load(X + i, i < N, other=R)
-        else:
-            v = tl.load(X + i // K * S0 + i % K * S1, i < N, other=R)
-        valid = (i < N) & (v >= 0) & (v < R)
-        rank = tl.load(RK + i, i < N, other=0)
-        vs = tl.minimum(tl.maximum(v, 0), R - 1)
-        pre = tl.sum(tl.where(cc[:, None] < pid, h, 0), 0)
-        base = begin + pre
-        sel = e[None, :] == vs[:, None]
-        base_i = tl.sum(tl.where(sel, base[None, :], 0), 1)
-        target = base_i + rank
-        tl.store(OUT + target, i, valid & (target < NS))
-    j = pid * EB + tl.arange(0, EB)
-    if pid * EB < EN:
-        pos = j * BS
-        expert = tl.sum((begin[None, :] <= pos[:, None]).to(tl.int32), 1) - 1
-        live = (j < EN) & (pos < total)
-        old = tl.load(EI + j, j < EN, other=0)
-        tl.store(EO + j, tl.where(live, expert, old), j < EN)
-    if pid == 0:
-        q = tl.arange(0, PN)
-        tl.store(NP + q, total, q < NN)
-
-
-@triton.jit
-def _tiny_prepare(
-    X,
-    OUT,
-    SRC_EI,
-    EI,
-    NP,
-    N: tl.constexpr,
-    K: tl.constexpr,
-    S0: tl.constexpr,
-    S1: tl.constexpr,
-    R: tl.constexpr,
-    BS: tl.constexpr,
-    NS: tl.constexpr,
-    EN: tl.constexpr,
-    BN: tl.constexpr,
-    BE: tl.constexpr,
-    NN: tl.constexpr,
-    PN: tl.constexpr,
-    FB: tl.constexpr,
-):
-    pid = tl.program_id(0)
-    j = pid * FB + tl.arange(0, FB)
-    tl.store(OUT + j, N, j < NS)
-    i = tl.arange(0, BN)
-    v = tl.load(X + i // K * S0 + i % K * S1, i < N, other=R)
-    valid = (i < N) & (v >= 0) & (v < R)
-    equal = (v[:, None] == v[None, :]) & valid[None, :]
-    rank = tl.sum((equal & (i[None, :] < i[:, None])).to(tl.int32), 1)
-    first = valid & (rank == 0)
-    group = tl.sum(
-        ((v[None, :] < v[:, None]) & first[None, :]).to(tl.int32), 1
-    )
-    target = tl.where(valid, group * BS + rank, -1)
-    mine = valid & (target >= pid * FB) & (target < pid * FB + FB)
-    tl.store(OUT + target, i, mine & (target < NS))
-    if pid == 0:
-        groups = tl.sum(first.to(tl.int32), 0)
-        e = tl.arange(0, BE)
-        expert = tl.max(
-            tl.where(
-                first[None, :] & (group[None, :] == e[:, None]), v[None, :], -1
-            ),
-            1,
-        )
-        old = tl.load(SRC_EI + e, e < EN, other=0)
-        tl.store(EI + e, tl.where(e < groups, expert, old), e < EN)
-        q = tl.arange(0, PN)
-        tl.store(NP + q, groups * BS, q < NN)
-
-
 def moe_align_block_size(
     topk_ids,
     num_experts,
@@ -400,27 +469,121 @@ def moe_align_block_size(
     s = torch.empty_like(sorted_token_ids)
     e = torch.empty_like(expert_ids)
     np = torch.empty_like(num_tokens_post_pad)
-    if 16 < n <= 128 and n <= block_size and en <= 128 and ns <= 8192:
-        _tiny_prepare[max(1, triton.cdiv(ns, 8192)),](
+    routed = ne - 1
+    if 0 < n <= 64 and routed <= 1024 and ns <= 32768:
+        ep = triton.next_power_of_2(max(routed, 1))
+        pow2bs = 1 if (block_size & (block_size - 1)) == 0 else 0
+        logbs = (block_size.bit_length() - 1) if pow2bs else 0
+        bn = triton.next_power_of_2(n)
+        kmax = triton.cdiv(n, block_size) + 1
+        cnt = torch.empty((ep,), dtype=torch.int32, device=topk_ids.device)
+        _fused_small[1,](
             topk_ids,
             s,
             expert_ids,
             e,
             np,
+            cnt,
             n,
             k,
             s0,
             s1,
-            ne - 1,
+            routed,
+            block_size,
+            logbs,
+            pow2bs,
+            ns,
+            en,
+            bn,
+            ep,
+            min(2048, triton.next_power_of_2(max(ns, 1))),
+            np.numel(),
+            triton.next_power_of_2(max(np.numel(), 1)),
+            kmax,
+            num_warps=max(1, min(4, bn // 16)),
+        )
+        return (s, e, np)
+    if routed <= 8192:
+        ep = triton.next_power_of_2(max(routed, 1))
+        if n <= 4096:
+            c = min(128, max(8, triton.next_power_of_2(max(n, 1))))
+        elif n <= 32768:
+            c = 256
+        else:
+            c = 1024
+        ch = triton.cdiv(n, c)
+        off_base = ch * ep
+        cnt = torch.empty(
+            (off_base + routed + 2,), dtype=torch.int32, device=topk_ids.device
+        )
+        rk = torch.empty((max(n, 1),), dtype=torch.int32, device=topk_ids.device)
+        contig = 1 if (s0 == k and s1 == 1) else 0
+        grid1 = max(ch, triton.cdiv(ns, 8192), triton.cdiv(en, 8192), 1)
+        _count_rank_init[grid1,](
+            topk_ids,
+            s,
+            expert_ids,
+            e,
+            cnt,
+            rk,
+            n,
+            k,
+            s0,
+            s1,
+            routed,
+            ns,
+            en,
+            ep,
+            ch,
+            c,
+            8192,
+            contig,
+            num_warps=4,
+        )
+        kmax = triton.cdiv(n, block_size) + 1 if n else 1
+        eo_in_k2 = kmax <= 2
+        bc = max(1, min(65536 // (ep * 4), 64 if ch > 32 else 32))
+        _prefix_offsets[1,](
+            cnt,
+            e,
+            np,
+            routed,
+            block_size,
+            ep,
+            ch,
+            bc,
+            en,
+            np.numel(),
+            triton.next_power_of_2(max(np.numel(), 1)),
+            1 if eo_in_k2 else 0,
+            kmax if eo_in_k2 else 1,
+            off_base,
+            num_warps=8,
+        )
+        grid3 = max(ch, routed) if not eo_in_k2 else max(ch, 1)
+        _place_scatter[grid3,](
+            topk_ids,
+            cnt,
+            rk,
+            s,
+            e,
+            n,
+            k,
+            s0,
+            s1,
+            routed,
             block_size,
             ns,
             en,
-            triton.next_power_of_2(max(n, 1)),
-            triton.next_power_of_2(max(en, 1)),
-            np.numel(),
-            triton.next_power_of_2(max(np.numel(), 1)),
-            8192,
-            num_warps=8,
+            ep,
+            ch,
+            c,
+            off_base,
+            128,
+            contig,
+            0 if eo_in_k2 else 1,
+            1 if ch == 1 else 0,
+            num_warps=4,
         )
         return (s, e, np)
     if 0 < n <= 16:
@@ -435,7 +598,7 @@ def moe_align_block_size(
             k,
             s0,
             s1,
-            ne - 1,
+            routed,
             block_size,
             ns,
             en,
@@ -447,128 +610,7 @@ def moe_align_block_size(
             num_warps=4 if ne <= 128 else 1,
         )
         return (s, e, np)
-    contig = 1 if (s0 == k and s1 == 1) else 0
-    routed = ne - 1
-    if 128 < n <= 1024 and num_experts <= 1024 and ns <= 65536:
-        ep = triton.next_power_of_2(max(routed, 1))
-        pb = min(128, max(64, triton.next_power_of_2(triton.cdiv(n, 4))))
-        ch = triton.cdiv(n, pb)
-        hist = torch.empty(
-            (ch * ep,), dtype=torch.int32, device=topk_ids.device
-        )
-        rk = torch.empty(
-            (max(n, 1),), dtype=torch.int32, device=topk_ids.device
-        )
-        size = max(ns, en)
-        _count_init[max(triton.cdiv(size, 8192), ch, 1),](
-            topk_ids,
-            s,
-            expert_ids,
-            e,
-            hist,
-            rk,
-            n,
-            k,
-            s0,
-            s1,
-            routed,
-            ns,
-            en,
-            ep,
-            ch,
-            pb,
-            8192,
-            contig,
-            num_warps=4,
-        )
-        grid = max(ch, triton.cdiv(en, 64), 1)
-        _mid_place[grid,](
-            topk_ids,
-            rk,
-            hist,
-            s,
-            expert_ids,
-            e,
-            np,
-            n,
-            k,
-            s0,
-            s1,
-            routed,
-            block_size,
-            ns,
-            en,
-            ep,
-            ch,
-            pb,
-            np.numel(),
-            triton.next_power_of_2(max(np.numel(), 1)),
-            triton.next_power_of_2(ch),
-            64,
-            contig,
-            num_warps=4,
-        )
-        return (s, e, np)
     ep = triton.next_power_of_2(max(routed, 1))
-    gch = triton.cdiv(max(n, 1), 128)
-    if n and gch <= 32 and gch * ep <= 8192:
-        pb = 256
-        ch = triton.cdiv(n, pb)
-        hist = torch.empty(
-            (ch * ep,), dtype=torch.int32, device=topk_ids.device
-        )
-        rk = torch.empty(
-            (max(n, 1),), dtype=torch.int32, device=topk_ids.device
-        )
-        _count_init[max(triton.cdiv(max(ns, en), 8192), ch, 1),](
-            topk_ids,
-            s,
-            expert_ids,
-            e,
-            hist,
-            rk,
-            n,
-            k,
-            s0,
-            s1,
-            routed,
-            ns,
-            en,
-            ep,
-            ch,
-            pb,
-            8192,
-            contig,
-            num_warps=1,
-        )
-        grid = max(ch, triton.cdiv(en, 64), 1)
-        _mid_place[grid,](
-            topk_ids,
-            rk,
-            hist,
-            s,
-            expert_ids,
-            e,
-            np,
-            n,
-            k,
-            s0,
-            s1,
-            routed,
-            block_size,
-            ns,
-            en,
-            ep,
-            ch,
-            pb,
-            np.numel(),
-            triton.next_power_of_2(max(np.numel(), 1)),
-            triton.next_power_of_2(ch),
-            64,
-            contig,
-            num_warps=1,
-        )
-        return (s, e, np)
     pb = 128
     ch = triton.cdiv(n, pb)
     hist = torch.empty((ch * ep,), dtype=torch.int32, device=topk_ids.device)
@@ -577,6 +619,7 @@ def moe_align_block_size(
     dbl = 4 if ch >= 512 else (2 if ch >= 64 else 1)
     chg = triton.cdiv(ch, dbl)
     size = max(ns, en, ch * ep)
+    contig = 1 if (s0 == k and s1 == 1) else 0
     if size:
         _init[triton.cdiv(size, 8192),](
             s, expert_ids, e, hist, n, ns, en, ch * ep, 8192, num_warps=4

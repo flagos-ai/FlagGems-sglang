@@ -24,32 +24,36 @@ def _apply_token_bitmask_kernel(
     out_ptr,
     V,
     NW,
-    NWB: tl.constexpr,
+    SPR,
+    S,
+    EXACT: tl.constexpr,
+    BLOCK: tl.constexpr,
 ):
-    pid_b = tl.program_id(0)
-    pid_w = tl.program_id(1)
-
-    offs_w = pid_w * NWB + tl.arange(0, NWB)
-    words = tl.load(
-        bitmask_ptr + pid_b * NW + offs_w,
-        mask=offs_w < NW,
-        other=0,
-    )
+    pid = tl.program_id(0)
+    npg = tl.num_programs(0)
+    WORDS: tl.constexpr = BLOCK // 32
     bits = tl.arange(0, 32)
-    keep = tl.reshape(
-        ((words[:, None] >> bits[None, :]) & 1) != 0,
-        (NWB * 32,),
-    )
-
-    offs_v = pid_w * (NWB * 32) + tl.arange(0, NWB * 32)
-    valid = offs_v < V
-    values = tl.load(
-        logits_ptr + pid_b * V + offs_v,
-        mask=valid,
-        other=0.0,
-    )
-    result = tl.where(keep, values, float("-inf"))
-    tl.store(out_ptr + pid_b * V + offs_v, result, mask=valid)
+    inv_bits = 31 - bits
+    woffs = tl.arange(0, WORDS)
+    eoffs = tl.arange(0, BLOCK)
+    for s in tl.range(pid, S, npg):
+        b = s // SPR
+        j = s - b * SPR
+        base = b * V
+        if EXACT:
+            words = tl.load(bitmask_ptr + b * NW + j * WORDS + woffs)
+            keep = tl.reshape((words[:, None] << inv_bits[None, :]) < 0, (BLOCK,))
+            vals = tl.load(logits_ptr + base + j * BLOCK + eoffs)
+            res = tl.where(keep, vals, float("-inf"))
+            tl.store(out_ptr + base + j * BLOCK + eoffs, res)
+        else:
+            m_w = (j * WORDS + woffs) < NW
+            words = tl.load(bitmask_ptr + b * NW + j * WORDS + woffs, mask=m_w, other=0)
+            keep = tl.reshape((words[:, None] << inv_bits[None, :]) < 0, (BLOCK,))
+            m_v = (j * BLOCK + eoffs) < V
+            vals = tl.load(logits_ptr + base + j * BLOCK + eoffs, mask=m_v, other=0.0)
+            res = tl.where(keep, vals, float("-inf"))
+            tl.store(out_ptr + base + j * BLOCK + eoffs, res, mask=m_v)
 
 
 def apply_token_bitmask(logits, bitmask):
@@ -61,14 +65,21 @@ def apply_token_bitmask(logits, bitmask):
         return out
 
     NW = bitmask.shape[1]
-    NWB = 32
-    _apply_token_bitmask_kernel[(B, triton.cdiv(NW, NWB))](
+    for BLOCK in (32768, 16384, 4096):
+        if B * triton.cdiv(V, BLOCK) >= 48:
+            break
+    SPR = triton.cdiv(V, BLOCK)
+    S = B * SPR
+    _apply_token_bitmask_kernel[(min(S, 48),)](
         logits,
         bitmask,
         out,
         V,
         NW,
-        NWB=NWB,
+        SPR,
+        S,
+        EXACT=(V % BLOCK == 0),
+        BLOCK=BLOCK,
         num_warps=1,
     )
     return out

@@ -23,39 +23,83 @@ def _flat(
     X,
     Y,
     N: tl.constexpr,
+    B: tl.constexpr,
+    P: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    for tile in range(triton.cdiv(N, B * P)):
+        i = (tile * P + pid) * B + tl.arange(0, B)
+        m = i < N
+        x = tl.load(X + i, m, other=0).to(tl.float32)
+        z = tl.where(x < 0.0, 0.0, x)
+        tl.store(Y + i, z * z, m)
+
+
+@triton.jit
+def _rows(
+    X,
+    Y,
+    R,
     D: tl.constexpr,
     S0: tl.constexpr,
     S1: tl.constexpr,
     B: tl.constexpr,
     P: tl.constexpr,
 ):
-    for tile in range(triton.cdiv(N, B * P)):
-        i = (tile * P + tl.program_id(0)) * B + tl.arange(0, B)
-        if S1 == 1 and S0 == D:
-            offset = i
-        else:
-            offset = (i // D) * S0 + (i % D) * S1
-        x = tl.load(X + offset, i < N, other=0).to(tl.float32)
-        z = tl.where(x < 0.0, 0.0, x)
-        tl.store(Y + i, z * z, i < N)
+    pid = tl.program_id(0)
+    for r in range(pid, R, P):
+        xbase = r * S0
+        ybase = r * D
+        for c0 in range(0, D, B):
+            cols = c0 + tl.arange(0, B)
+            m = cols < D
+            x = tl.load(X + xbase + cols * S1, m, other=0).to(tl.float32)
+            z = tl.where(x < 0.0, 0.0, x)
+            tl.store(Y + ybase + cols, z * z, m)
+
+
+def _next_pow2(x):
+    return 1 << (x - 1).bit_length() if x > 1 else 1
+
+
+def _block_cap(itemsize):
+    return min(32768 // itemsize, 16384)
 
 
 def relu2(input):
     rows, dim = input.shape
     out = torch.empty((rows, dim), dtype=input.dtype, device=input.device)
     n = rows * dim
-    if n:
-        block = 16384 if input.is_contiguous() else 1024
-        programs = min(triton.cdiv(n, block), 128)
+    if not n:
+        return out
+    itemsize = input.element_size()
+    if input.is_contiguous():
+        root = int(n**0.5)
+        factor = 32 if itemsize <= 2 else 16
+        block = min(_next_pow2(max(factor * root, 256)), _block_cap(itemsize))
+        programs = min(triton.cdiv(n, block), 48)
         _flat[(programs,)](
             input,
             out,
             n,
-            dim,
-            *input.stride(),
             block,
             programs,
-            num_warps=2,
+            num_warps=4 if block >= 4096 else 2,
+            num_stages=1,
+        )
+    else:
+        block = max(min(_next_pow2(dim), _block_cap(itemsize)), 2)
+        programs = min(rows, 48)
+        _rows[(programs,)](
+            input,
+            out,
+            rows,
+            dim,
+            input.stride(0),
+            input.stride(1),
+            block,
+            programs,
+            num_warps=4 if block >= 4096 else 2,
             num_stages=1,
         )
     return out

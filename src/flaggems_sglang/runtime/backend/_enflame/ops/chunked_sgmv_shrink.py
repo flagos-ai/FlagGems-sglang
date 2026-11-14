@@ -685,6 +685,144 @@ def _launch(
     return output
 
 
+@triton.jit
+def _sgemm_lora_a_unrolled_kernel(
+    x_ptr,
+    weights_ptr,
+    seg_indptr_ptr,
+    weight_indices_ptr,
+    permutation_ptr,
+    output_ptr,
+    hidden_size: tl.constexpr,
+    output_size: tl.constexpr,
+    max_segment_length: tl.constexpr,
+    stride_x_row: tl.constexpr,
+    stride_x_hidden: tl.constexpr,
+    stride_weight_adapter: tl.constexpr,
+    stride_weight_output: tl.constexpr,
+    stride_weight_hidden: tl.constexpr,
+    stride_output_row: tl.constexpr,
+    stride_output_rank: tl.constexpr,
+    has_permutation: tl.constexpr,
+    use_ieee: tl.constexpr,
+    block_m: tl.constexpr,
+    block_n: tl.constexpr,
+    block_k: tl.constexpr,
+):
+    segment_tile = tl.program_id(0)
+    output_tile = tl.program_id(1)
+    tiles_per_segment: tl.constexpr = tl.cdiv(max_segment_length, block_m)
+    segment = segment_tile // tiles_per_segment
+    tile_m = segment_tile - segment * tiles_per_segment
+    start = tl.load(seg_indptr_ptr + segment)
+    end = tl.load(seg_indptr_ptr + segment + 1)
+    adapter = tl.load(weight_indices_ptr + segment)
+    positions = start + tile_m * block_m + tl.arange(0, block_m)
+    mask_m = positions < end
+    if has_permutation:
+        rows = tl.load(permutation_ptr + positions, mask=mask_m, other=0)
+    else:
+        rows = positions
+    offsets_n = output_tile * block_n + tl.arange(0, block_n)
+    mask_n = offsets_n < output_size
+    accumulator = tl.zeros((block_m, block_n), dtype=tl.float32)
+    for offset_k in tl.static_range(0, hidden_size, block_k):
+        offsets_k = offset_k + tl.arange(0, block_k)
+        mask_k = offsets_k < hidden_size
+        x_values = tl.load(
+            x_ptr
+            + rows[:, None] * stride_x_row
+            + offsets_k[None, :] * stride_x_hidden,
+            mask=mask_m[:, None] & mask_k[None, :],
+            other=0.0,
+        )
+        weight_values = tl.load(
+            weights_ptr
+            + adapter * stride_weight_adapter
+            + offsets_k[:, None] * stride_weight_hidden
+            + offsets_n[None, :] * stride_weight_output,
+            mask=mask_k[:, None] & mask_n[None, :],
+            other=0.0,
+        )
+        if use_ieee:
+            accumulator += tl.dot(
+                x_values, weight_values, input_precision="ieee"
+            )
+        else:
+            accumulator += tl.dot(x_values, weight_values)
+    output_offsets = (
+        rows[:, None] * stride_output_row
+        + offsets_n[None, :] * stride_output_rank
+    )
+    tl.store(
+        output_ptr + output_offsets,
+        accumulator,
+        mask=mask_m[:, None] & mask_n[None, :],
+    )
+
+
+def _launch_unrolled(x, weights, batch_info, stack_num, ieee=False):
+    token_count, hidden_size = x.shape
+    output_size = weights.shape[1]
+    max_segment_length = max(1, batch_info.max_len)
+    if output_size <= 16:
+        block_n = 16
+    elif output_size <= 32:
+        block_n = 32
+    else:
+        block_n = 64
+    k_pow2 = triton.next_power_of_2(hidden_size)
+    block_m = 16
+    if k_pow2 <= 2048:
+        block_k = k_pow2
+    elif k_pow2 <= 8192:
+        block_k = 2048
+    else:
+        block_k = min(4096, k_pow2 // 4)
+    tiles_16 = batch_info.bs * triton.cdiv(max_segment_length, 16)
+    if (
+        not ieee
+        and max_segment_length >= 32
+        and tiles_16 * triton.cdiv(output_size, block_n) > 48
+    ):
+        block_m = 32
+        block_k = min(1024, k_pow2)
+    output = torch.zeros(
+        (token_count, output_size), dtype=x.dtype, device=x.device
+    )
+    grid = (
+        batch_info.bs * triton.cdiv(max_segment_length, block_m),
+        triton.cdiv(output_size, block_n),
+    )
+    permutation = batch_info.permutation
+    _sgemm_lora_a_unrolled_kernel[grid](
+        x,
+        weights,
+        batch_info.seg_indptr,
+        batch_info.weight_indices,
+        x if permutation is None else permutation,
+        output,
+        hidden_size,
+        output_size,
+        max_segment_length,
+        x.stride(0),
+        x.stride(1),
+        weights.stride(0),
+        weights.stride(1),
+        weights.stride(2),
+        output.stride(0),
+        output.stride(1),
+        permutation is not None,
+        ieee,
+        block_m,
+        block_n,
+        block_k,
+        num_warps=1,
+        num_stages=1,
+    )
+    return output
+
+
 def _launch_serial(x, weights, batch_info, stack_num, round_mode=0):
     token_count, hidden_size = x.shape
     output_size = weights.shape[1]
@@ -2113,47 +2251,9 @@ def chunked_sgmv_shrink(x, weights, batch_info, num_slices=1):
     ):
         return _launch_serial(x, weights, batch_info, stack_num, 0)
     if x.dtype == torch.float32:
-        return _launch(x, weights, batch_info, stack_num, 16, 32, 32, 4, 2)
-    if batch_info.permutation is not None and x.shape[1] >= 1024:
-        return _launch_row_sgmv(
-            x,
-            weights,
-            batch_info,
-            block_k=2048 if x.shape[1] >= 4096 else 1024,
-            block_n=(
-                64
-                if weights.shape[1] >= 64
-                else 16 if weights.shape[1] <= 16 else 32
-            ),
-        )
-    if batch_info.permutation is not None:
-        return _launch(x, weights, batch_info, stack_num, 16, 32, 32, 4, 2)
+        return _launch_unrolled(x, weights, batch_info, stack_num, ieee=True)
     if x.shape[1] >= 1024:
-        if batch_info.max_len <= 64:
-            return _launch(
-                x,
-                weights,
-                batch_info,
-                stack_num,
-                64,
-                32,
-                4096,
-                1,
-                1,
-                use_default_dot=True,
-            )
-        return _launch(
-            x,
-            weights,
-            batch_info,
-            stack_num,
-            64,
-            64,
-            2048,
-            1,
-            1,
-            use_default_dot=True,
-        )
+        return _launch_unrolled(x, weights, batch_info, stack_num)
     return _launch(x, weights, batch_info, stack_num, 16, 32, 32, 4, 2)
 
 

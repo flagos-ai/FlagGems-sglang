@@ -15,73 +15,82 @@
 import torch
 import triton
 import triton.language as tl
-from triton.language.extra.libdevice import tanh as _gcu_tanh
 
-_MAX_CTAS = 12
+# L600 / GCU400 stream processors: the persistent launch is capped at one
+# program per SP (DSM per program stays <= 448 KB so grid=48 keeps true
+# 48-way concurrency).
+_NUM_SPC = 48
 
 
 @triton.jit
 def _softcap_out_enflame_kernel(
     input_ptr,
     output_ptr,
-    inv_softcap: tl.constexpr,
-    softcap_const: tl.constexpr,
-    N_ELEMENTS: tl.constexpr,
-    BLOCK_SIZE: tl.constexpr,
-    ONE_TILE_PER_CTA: tl.constexpr,
-    FULL_TILES: tl.constexpr,
+    n_elements: tl.constexpr,
+    two_inv_cap: tl.constexpr,
+    two_cap: tl.constexpr,
+    cap: tl.constexpr,
+    BLOCK: tl.constexpr,
 ):
-    """S60-native FP32 softcap with a small persistent fallback."""
+    """Flat persistent softcap: ``out = cap * tanh(x / cap)`` in FP32.
+
+    ``tanh(z) = 2 * sigmoid(2z) - 1`` keeps the hot loop on the native
+    ``tops_sigmoid_v2_fp32`` unit (libdevice tanh is an extern call, ~2.1x
+    slower end to end), and the constants are folded on the host so the
+    loop body is ``two_cap * sigmoid(x * two_inv_cap) - cap``.
+
+    Tiling uses ``tl.make_block_ptr`` with ``boundary_check`` and a
+    constexpr ``n_elements``: the block_ptr form streams the bf16 -> fp32
+    mixed-width traffic at ~2.95 TB/s (vs ~1.99 TB/s for the previous
+    masked arange form, E-1 ladder 2026-11-12), matching the pure
+    load+store floor within 3%.  ``n_elements`` must stay constexpr
+    because runtime-shaped block_ptr boundary checks trip the
+    ``memref_ext.slice_pad_start`` operandSegmentSizes toolchain bug
+    (see softcap_inplace_logits); each shape pays one JIT compile.
+    """
     pid = tl.program_id(0)
-    lane = tl.arange(0, BLOCK_SIZE)
-
-    if ONE_TILE_PER_CTA:
-        offsets = pid * BLOCK_SIZE + lane
-        if FULL_TILES:
-            x = tl.load(input_ptr + offsets).to(tl.float32)
-            result = softcap_const * _gcu_tanh(x * inv_softcap)
-            tl.store(output_ptr + offsets, result)
-        else:
-            mask = offsets < N_ELEMENTS
-            x = tl.load(input_ptr + offsets, mask=mask, other=0.0).to(
-                tl.float32
-            )
-            result = softcap_const * _gcu_tanh(x * inv_softcap)
-            tl.store(output_ptr + offsets, result, mask=mask)
-    else:
-        # Keep no more than the 12 physical S60 CTAs resident. Large inputs
-        # advance through contiguous tiles without launching a CUDA-style grid.
-        num_programs = tl.num_programs(0)
-        num_blocks = tl.cdiv(N_ELEMENTS, BLOCK_SIZE)
-        for block_id in tl.range(pid, num_blocks, num_programs, num_stages=2):
-            offsets = block_id * BLOCK_SIZE + lane
-            mask = offsets < N_ELEMENTS
-            x = tl.load(input_ptr + offsets, mask=mask, other=0.0).to(
-                tl.float32
-            )
-            result = softcap_const * _gcu_tanh(x * inv_softcap)
-            tl.store(output_ptr + offsets, result, mask=mask)
+    nprog = tl.num_programs(0)
+    nblocks = tl.cdiv(n_elements, BLOCK)
+    for bid in tl.range(pid, nblocks, nprog):
+        xblk = tl.make_block_ptr(
+            input_ptr,
+            shape=(n_elements,),
+            strides=(1,),
+            offsets=(bid * BLOCK,),
+            block_shape=(BLOCK,),
+            order=(0,),
+        )
+        yblk = tl.make_block_ptr(
+            output_ptr,
+            shape=(n_elements,),
+            strides=(1,),
+            offsets=(bid * BLOCK,),
+            block_shape=(BLOCK,),
+            order=(0,),
+        )
+        x = tl.load(xblk, boundary_check=(0,)).to(tl.float32)
+        y = two_cap * tl.sigmoid(x * two_inv_cap) - cap
+        tl.store(yblk, y, boundary_check=(0,))
 
 
-def _select_s60_config(n_elements: int):
-    """Configurations measured on an Enflame S60, not CUDA heuristics."""
-    if n_elements <= 32:
-        return 32, 1
-    if n_elements <= 4096:
-        return max(2, triton.next_power_of_2(n_elements)), 1
-    if n_elements <= 32768:
-        return 32768, 1
-    if n_elements <= 65536:
-        # The 37888-element judge case is best as three wide resident CTAs.
-        return 16384, 3
-    if n_elements <= 524288:
-        # Both ~128K judge cases are best as four 32K tiles.
-        return 32768, min(4, triton.cdiv(n_elements, 32768))
-    return 65536, min(_MAX_CTAS, triton.cdiv(n_elements, 65536))
+def _pick_block(n_elements: int):
+    """Measured dispatch tiers (L600, bf16 in / fp32 out, E-1 2026-11-12).
+
+    n >= 4M  -> BLOCK=65536 (512x128256: 133us = 2.95 TB/s)
+    n >= 96K -> BLOCK=8192  (8x128256: 6.97us, 64x32000: 10.3us)
+    else     -> BLOCK=2048  (launch-floor band; nw=2 beats nw=4)
+    32768-wide tiles measured strictly worse than both neighbours at every
+    tier, and num_stages in {1,2,3} is flat, so stages stays 1.
+    """
+    if n_elements >= 4194304:
+        return 65536
+    if n_elements >= 98304:
+        return 8192
+    return 2048
 
 
 def softcap_out(x, softcap_const, autotune=False):
-    """Compute ``softcap * tanh(x / softcap)`` in FP32 on Enflame S60."""
+    """Compute ``softcap * tanh(x / softcap)`` and return an FP32 tensor."""
     if not x.is_contiguous():
         x = x.contiguous()
 
@@ -90,22 +99,20 @@ def softcap_out(x, softcap_const, autotune=False):
     if n_elements == 0:
         return output
 
-    block_size, grid_size = _select_s60_config(n_elements)
-    num_blocks = triton.cdiv(n_elements, block_size)
-    one_tile_per_cta = grid_size == num_blocks
-    full_tiles = one_tile_per_cta and n_elements % block_size == 0
+    cap = float(softcap_const)
+    block = _pick_block(n_elements)
+    grid_size = min(_NUM_SPC, triton.cdiv(n_elements, block))
 
     _softcap_out_enflame_kernel[(grid_size,)](
         x,
         output,
-        inv_softcap=1.0 / softcap_const,
-        softcap_const=softcap_const,
-        N_ELEMENTS=n_elements,
-        BLOCK_SIZE=block_size,
-        ONE_TILE_PER_CTA=one_tile_per_cta,
-        FULL_TILES=full_tiles,
-        num_warps=4,
-        num_stages=2 if n_elements <= 65536 else 1,
+        n_elements=n_elements,
+        two_inv_cap=2.0 / cap,
+        two_cap=2.0 * cap,
+        cap=cap,
+        BLOCK=block,
+        num_warps=2 if n_elements < 98304 else 4,
+        num_stages=1,
     )
     return output
 
