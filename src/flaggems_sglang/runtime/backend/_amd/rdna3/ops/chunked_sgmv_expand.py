@@ -328,11 +328,13 @@ def chunked_sgmv_expand(
         return base_output.clone()
 
     # The task's batch_info lists no max_len hint; use it when the
-    # harness object provides one, otherwise pay a single host sync.
+    # harness object provides one. Otherwise the token count bounds every
+    # segment: the extra token blocks return at once, and no host sync is
+    # needed to read the longest segment back.
     seg_indptr = batch_info.seg_indptr
     max_len = getattr(batch_info, "max_len", None)
     if max_len is None:
-        max_len = int((seg_indptr[1:] - seg_indptr[:-1]).max().item())
+        max_len = x.shape[0]
     if max_len == 0:
         return base_output.clone()
 
