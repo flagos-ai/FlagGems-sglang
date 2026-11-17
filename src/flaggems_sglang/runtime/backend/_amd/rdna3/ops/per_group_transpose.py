@@ -23,6 +23,7 @@ def _per_group_transpose_kernel(
     output_ptr,
     expert_offsets_ptr,
     K: tl.constexpr,
+    SPLITS: tl.constexpr,
     BLOCK_M: tl.constexpr,
     BLOCK_K: tl.constexpr,
 ):
@@ -37,7 +38,11 @@ def _per_group_transpose_kernel(
     k_offsets = k_block * BLOCK_K + tl.arange(0, BLOCK_K)
     k_mask = k_offsets < K
 
-    for row_start in tl.range(0, group_rows, BLOCK_M):
+    if SPLITS == 1:
+        first_row = 0
+    else:
+        first_row = tl.program_id(2) * BLOCK_M
+    for row_start in tl.range(first_row, group_rows, SPLITS * BLOCK_M):
         row_offsets = row_start + tl.arange(0, BLOCK_M)
         row_mask = row_offsets < group_rows
 
@@ -68,20 +73,27 @@ def per_group_transpose(a, expert_offsets, m_alignment=1):
     # gfx1100: from 2^20 elements on, larger tiles (64x128 for 16-bit
     # elements, 64x64 for 32-bit ones) with 8 warps, unless that leaves fewer
     # than 16 programs; the other element sizes keep the generic launch.
-    block_m, block_k, num_warps = 32, 32, 4
+    # With k <= 256 there are only a few column blocks per group, so groups
+    # averaging 128+ rows are split over 8 programs each (1.0-1.9x, most
+    # with uneven groups, where the largest group sets the time); larger
+    # k gains nothing robust from splitting once group sizes are uneven.
+    splits, block_m, block_k, num_warps = 1, 32, 32, 4
     wide = {2: 128, 4: 64}.get(a.element_size())
-    if (
+    if wide and k <= 256 and a.shape[0] >= 128 * num_experts:
+        splits, block_m, block_k, num_warps = 8, 64, 128, 8
+    elif (
         wide
         and a.numel() >= 1 << 20
         and num_experts * triton.cdiv(k, wide) >= 16
     ):
         block_m, block_k, num_warps = 64, wide, 8
-    grid = (num_experts, triton.cdiv(k, block_k))
+    grid = (num_experts, triton.cdiv(k, block_k), splits)
     _per_group_transpose_kernel[grid](
         a,
         output,
         expert_offsets,
         K=k,
+        SPLITS=splits,
         BLOCK_M=block_m,
         BLOCK_K=block_k,
         num_warps=num_warps,
