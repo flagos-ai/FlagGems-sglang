@@ -234,6 +234,7 @@ def _fused_moe_grouped_gemm_kernel(
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
+    SPLIT_STORE: tl.constexpr,
 ):
     pid_m = tl.program_id(0)
     pid_n = tl.program_id(1)
@@ -274,6 +275,11 @@ def _fused_moe_grouped_gemm_kernel(
 
     routing_weight = tl.load(topk_weights_ptr + pair, mask=valid, other=0.0)
     scaled = acc * routing_weight.to(tl.float32)[:, None]
+    if SPLIT_STORE:
+        # Without this round trip the store keeps the WMMA layout and writes
+        # two bytes a lane.
+        low, high = tl.split(tl.reshape(scaled, (BLOCK_M, BLOCK_N // 2, 2)))
+        scaled = tl.reshape(tl.join(low, high), (BLOCK_M, BLOCK_N))
     out_ptrs = (
         Out_ptr
         + pair[:, None].to(tl.int64) * stride_out_pair
@@ -298,6 +304,15 @@ def _grouped_config(P, E, N, K, over_2gb):
         if rows_per_expert <= 16:
             return 16, 32, 128, 2, 3
         return 16, 64, 128, 4, 2
+    if N * K < 1 << 20:
+        # Small experts, e.g. up 256 x 2048 and down 2048 x 128.
+        if K <= 512:
+            return 16, 256, 128, 8, 1
+        if rows_per_expert <= 2:
+            return 32, 32, 256, 8, 1
+        if rows_per_expert <= 32:
+            return 32, 64, 256, 8, 2
+        return 64, 64, 128, 4, 2
     if K <= 512:
         if rows_per_expert <= 16:
             return 16, 64, 128, 4, 3
@@ -314,6 +329,12 @@ def _grouped_config(P, E, N, K, over_2gb):
     if rows_per_expert <= 128 and K > 1024:
         return 32, 128, 128, 4, 2
     return 64, 256, 64, 8, 2
+
+
+def _split_store(K):
+    # Up to this K the stores bound the kernel and the round trip made it up
+    # to 2.2x faster; from K = 1536 on its shuffles cost 2-11%.
+    return K <= 1024
 
 
 def _moe_align(topk_ids_c, E, block_m, chunk=256, sub=64, num_warps=4):
@@ -385,6 +406,7 @@ def _fused_moe_gemm_grouped(A, B, topk_weights_c, topk_ids_c, top_k, Out):
         BLOCK_M=block_m,
         BLOCK_N=block_n,
         BLOCK_K=block_k,
+        SPLIT_STORE=_split_store(K),
         num_warps=num_warps,
         num_stages=num_stages,
     )
@@ -419,12 +441,15 @@ def fused_moe_gemm(
     Out = torch.empty((T, top_k, N), dtype=A.dtype, device=A.device)
 
     # Grouping adds two small kernels (about 16 us), which pays off once the
-    # pairs read more than about 8 MB of weights.
+    # pairs read more than about 8 MB of weights, or 16 MB for small experts.
+    # For small experts with a short K the per-pair kernel keeps up until
+    # about 8 pairs an expert.
     P = T * top_k
+    small = N * K < 1 << 20
     if (
         P >= 2
-        and N * K >= 1 << 20
-        and P * N * K > 1 << 22
+        and (not small or K >= 1024 or P >= 8 * E)
+        and P * N * K > (1 << 23 if small else 1 << 22)
         and A.dtype in (torch.bfloat16, torch.float16)
         and B.dtype == A.dtype
     ):

@@ -20,10 +20,10 @@ fewer than ``multi_processor_count``, which on gfx1100 counts WGPs (48), not
 CUs (96): n = 1536 makes 96 tiles and falls to the single-pass kernel, whose
 512-wide K tile spills past the scratch limit and runs 5.6x slower than
 split-K. Here every x of more than one row takes split-K, with one pipeline
-stage, since more stages spill and run 1.6x slower. A program takes three
-256-element K steps: two or four steps, which start the K chunks a power of
-two of bytes apart, run 1.4-2.2x slower. A single row keeps the generic
-GEMV kernel, and K need not be a multiple of the K step.
+stage, since more stages spill and run 1.6x slower. The tile and the K steps
+a program takes follow the weight size and the rows (``_splitk_config``). A
+single row keeps the generic GEMV kernel, and K need not be a multiple of the
+K step.
 
 This kernel is written in portable Triton only. It must NOT call any
 pre-compiled / vendor-specific cached operator — the whole computation is done
@@ -34,14 +34,41 @@ import torch
 import triton
 import triton.language as tl
 
-_BLOCK_M = 16
-_BLOCK_N = 16
 _BLOCK_K = 256
-_K_STEPS = 3
-_WARPS = 2
+_MIN_BLOCKS = 800
 
 # GEMV path (m == 1): N threshold between the "thin n" and "wide n" configs.
 _GEMV_N_WIDE = 1024
+
+
+def _splitk_config(m, n, k_blocks, weight_bytes):
+    """(BLOCK_M, BLOCK_N, K steps a program, warps) for 2 to 64 rows, from
+    CUDA-graph timings with a cold cache on gfx1100."""
+    if weight_bytes >= 128 << 20:
+        # Far past the 96 MB Infinity Cache every block of rows reads the
+        # weights from memory again, so one block takes all the rows.
+        if m <= 16:
+            return 16, 64, 3 if k_blocks > 8 else 1, 4
+        block_m = 32 if m <= 32 else 64
+        if k_blocks > 8:
+            return block_m, 64, 6, 8
+        return block_m, 16, 8, 4
+    if weight_bytes >= 64 << 20 and m > 16:
+        return 32, 64, 3 if m <= 32 else 6, 8
+    if m <= 16 or weight_bytes <= 12 << 20:
+        # The widest tile that leaves _MIN_BLOCKS tile-by-K-block pieces of
+        # work. A long K takes three steps a program: one step writes three
+        # times the partial sums, which costs more than it gains there, and at
+        # K = 7168 two or four steps, which start the K chunks a power of two
+        # of bytes apart, ran 1.4-2.2x slower.
+        k_steps = 1 if k_blocks <= 8 else 3
+        for block_n, warps in ((64, 4), (32, 2)):
+            if triton.cdiv(n, block_n) * k_blocks >= _MIN_BLOCKS:
+                return 16, block_n, k_steps, warps
+        return 16, 16, k_steps, 2
+    if m <= 32:
+        return 16, 64, 3, 4
+    return 32, 32, 3, 4
 
 
 @triton.jit
@@ -203,8 +230,12 @@ def tiny_n_gemm(x, w, out_dtype):
         return out
 
     block_k = min(_BLOCK_K, triton.next_power_of_2(max(k, 16)))
-    split_k = triton.cdiv(triton.cdiv(k, block_k), _K_STEPS)
-    tiles = triton.cdiv(m, _BLOCK_M) * triton.cdiv(n, _BLOCK_N)
+    k_blocks = triton.cdiv(k, block_k)
+    block_m, block_n, k_steps, warps = _splitk_config(
+        m, n, k_blocks, w.numel() * w.element_size()
+    )
+    split_k = triton.cdiv(k_blocks, k_steps)
+    tiles = triton.cdiv(m, block_m) * triton.cdiv(n, block_n)
     part = torch.empty((split_k, m, n), device=x.device, dtype=torch.float32)
     _tiny_n_dot_splitk_kernel[(tiles * split_k,)](
         x,
@@ -214,15 +245,15 @@ def tiny_n_gemm(x, w, out_dtype):
         n,
         k,
         split_k,
-        _K_STEPS,
+        k_steps,
         x.stride(0),
         w.stride(0),
-        BLOCK_M=_BLOCK_M,
-        BLOCK_N=_BLOCK_N,
+        BLOCK_M=block_m,
+        BLOCK_N=block_n,
         BLOCK_K=block_k,
         EVEN_K=(k % block_k == 0),
         IEEE=(out_dtype == torch.float32),
-        num_warps=_WARPS,
+        num_warps=warps,
         num_stages=1,
     )
     total = m * n
