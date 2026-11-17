@@ -287,7 +287,7 @@ def mamba_layernorm_gated(
                 rows_per_program, groups_per_program, replicas = 128, 2, 3
                 num_stages, fp_fusion = 2, True
             else:
-                rows_per_program, groups_per_program, replicas = 16, 32, 48
+                rows_per_program, groups_per_program, replicas = 8, 32, 48
                 num_stages, fp_fusion = 3, False
             group_block_count = group_count // groups_per_program
             row_block_count = triton.cdiv(row_count, rows_per_program)
@@ -309,7 +309,7 @@ def mamba_layernorm_gated(
                 groups_per_program,
                 replicas,
                 True,
-                num_warps=1,
+                num_warps=2,
                 num_stages=num_stages,
                 enable_fp_fusion=fp_fusion,
             )

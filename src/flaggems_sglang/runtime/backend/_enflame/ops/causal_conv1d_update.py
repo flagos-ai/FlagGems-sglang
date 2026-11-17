@@ -16,12 +16,18 @@ import torch
 import triton
 import triton.language as tl
 
+from flaggems_sglang.utils.libentry import libentry
+
 __all__ = ["causal_conv1d_update"]
 
 
 _MAX_BLOCK = 512
 _TARGET_PROGRAMS = 1
 _WARPS = 1
+_W4S3_MAX_BLOCK = 2048
+_RB_MIN_TOTAL = 64
+_RB_BC2_MAX_TOTAL = 128
+_RB_MAX_GRID_Y = 255
 
 
 def _block_size(n_elements):
@@ -29,6 +35,195 @@ def _block_size(n_elements):
     while block > 32 and triton.cdiv(n_elements, block) < _TARGET_PROGRAMS:
         block //= 2
     return block
+
+
+def _w4s3_block(dim):
+    block = min(triton.next_power_of_2(dim), _W4S3_MAX_BLOCK)
+    while block < 4096 and triton.cdiv(dim, block) > 255:
+        block *= 2
+    return block
+
+
+def _w4s3_warps(block):
+    if block >= 1024:
+        return 4
+    if block >= 128:
+        return 2
+    return 1
+
+
+def _rb_chunk(n_total, batch):
+    if n_total < _RB_BC2_MAX_TOTAL:
+        chunk = 2
+    else:
+        chunk = 4
+    while chunk < batch and triton.cdiv(batch, chunk) > _RB_MAX_GRID_Y:
+        chunk *= 2
+    return chunk
+
+
+@libentry()
+@triton.jit
+def _single_w4_s3_kernel(
+    x,
+    state,
+    weight,
+    bias,
+    out,
+    new_state,
+    dim: tl.constexpr,
+    stride_bias: tl.constexpr,
+    has_bias: tl.constexpr,
+    use_silu: tl.constexpr,
+    even: tl.constexpr,
+    BLOCK: tl.constexpr,
+):
+    batch_idx = tl.program_id(0)
+    dim_idx = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
+    offsets = batch_idx * dim + dim_idx
+    state_base = offsets * 3
+    weight_base = dim_idx * 4
+    if even:
+        x_value = tl.load(x + offsets).to(tl.float32)
+        s0 = tl.load(state + state_base + 0).to(tl.float32)
+        s1 = tl.load(state + state_base + 1).to(tl.float32)
+        s2 = tl.load(state + state_base + 2).to(tl.float32)
+        w0 = tl.load(weight + weight_base + 0).to(tl.float32)
+        w1 = tl.load(weight + weight_base + 1).to(tl.float32)
+        w2 = tl.load(weight + weight_base + 2).to(tl.float32)
+        w3 = tl.load(weight + weight_base + 3).to(tl.float32)
+        acc = s0 * w0 + s1 * w1 + s2 * w2 + x_value * w3
+        if has_bias:
+            acc += tl.load(bias + dim_idx * stride_bias).to(tl.float32)
+        if use_silu:
+            acc = acc * tl.sigmoid(acc)
+        tl.store(out + offsets, acc)
+        tl.store(new_state + state_base + 0, s1)
+        tl.store(new_state + state_base + 1, s2)
+        tl.store(new_state + state_base + 2, x_value)
+    else:
+        mask = dim_idx < dim
+        x_value = tl.load(x + offsets, mask=mask, other=0.0).to(tl.float32)
+        s0 = tl.load(state + state_base + 0, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        s1 = tl.load(state + state_base + 1, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        s2 = tl.load(state + state_base + 2, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w0 = tl.load(weight + weight_base + 0, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w1 = tl.load(weight + weight_base + 1, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w2 = tl.load(weight + weight_base + 2, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w3 = tl.load(weight + weight_base + 3, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        acc = s0 * w0 + s1 * w1 + s2 * w2 + x_value * w3
+        if has_bias:
+            acc += tl.load(
+                bias + dim_idx * stride_bias, mask=mask, other=0.0
+            ).to(tl.float32)
+        if use_silu:
+            acc = acc * tl.sigmoid(acc)
+        tl.store(out + offsets, acc, mask=mask)
+        tl.store(new_state + state_base + 0, s1, mask=mask)
+        tl.store(new_state + state_base + 1, s2, mask=mask)
+        tl.store(new_state + state_base + 2, x_value, mask=mask)
+
+
+@libentry()
+@triton.jit
+def _single_w4_s3_rb_kernel(
+    x,
+    state,
+    weight,
+    bias,
+    out,
+    new_state,
+    batch,
+    dim: tl.constexpr,
+    stride_bias: tl.constexpr,
+    has_bias: tl.constexpr,
+    use_silu: tl.constexpr,
+    even: tl.constexpr,
+    BD: tl.constexpr,
+    BC: tl.constexpr,
+):
+    dim_idx = tl.program_id(0) * BD + tl.arange(0, BD)
+    b0 = tl.program_id(1) * BC
+    weight_base = dim_idx * 4
+    if even:
+        w0 = tl.load(weight + weight_base + 0).to(tl.float32)
+        w1 = tl.load(weight + weight_base + 1).to(tl.float32)
+        w2 = tl.load(weight + weight_base + 2).to(tl.float32)
+        w3 = tl.load(weight + weight_base + 3).to(tl.float32)
+        if has_bias:
+            bias_v = tl.load(bias + dim_idx * stride_bias).to(tl.float32)
+        n_iter = tl.minimum(batch - b0, BC)
+        for i in range(n_iter):
+            offsets = (b0 + i) * dim + dim_idx
+            state_base = offsets * 3
+            x_value = tl.load(x + offsets).to(tl.float32)
+            s0 = tl.load(state + state_base + 0).to(tl.float32)
+            s1 = tl.load(state + state_base + 1).to(tl.float32)
+            s2 = tl.load(state + state_base + 2).to(tl.float32)
+            acc = s0 * w0 + s1 * w1 + s2 * w2 + x_value * w3
+            if has_bias:
+                acc += bias_v
+            if use_silu:
+                acc = acc * tl.sigmoid(acc)
+            tl.store(out + offsets, acc)
+            tl.store(new_state + state_base + 0, s1)
+            tl.store(new_state + state_base + 1, s2)
+            tl.store(new_state + state_base + 2, x_value)
+    else:
+        mask = dim_idx < dim
+        w0 = tl.load(weight + weight_base + 0, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w1 = tl.load(weight + weight_base + 1, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w2 = tl.load(weight + weight_base + 2, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        w3 = tl.load(weight + weight_base + 3, mask=mask, other=0.0).to(
+            tl.float32
+        )
+        if has_bias:
+            bias_v = tl.load(
+                bias + dim_idx * stride_bias, mask=mask, other=0.0
+            ).to(tl.float32)
+        n_iter = tl.minimum(batch - b0, BC)
+        for i in range(n_iter):
+            offsets = (b0 + i) * dim + dim_idx
+            state_base = offsets * 3
+            x_value = tl.load(x + offsets, mask=mask, other=0.0).to(tl.float32)
+            s0 = tl.load(state + state_base + 0, mask=mask, other=0.0).to(
+                tl.float32
+            )
+            s1 = tl.load(state + state_base + 1, mask=mask, other=0.0).to(
+                tl.float32
+            )
+            s2 = tl.load(state + state_base + 2, mask=mask, other=0.0).to(
+                tl.float32
+            )
+            acc = s0 * w0 + s1 * w1 + s2 * w2 + x_value * w3
+            if has_bias:
+                acc += bias_v
+            if use_silu:
+                acc = acc * tl.sigmoid(acc)
+            tl.store(out + offsets, acc, mask=mask)
+            tl.store(new_state + state_base + 0, s1, mask=mask)
+            tl.store(new_state + state_base + 1, s2, mask=mask)
+            tl.store(new_state + state_base + 2, x_value, mask=mask)
 
 
 @triton.jit
@@ -130,63 +325,6 @@ def _single_token_kernel(
             x_value,
             mask=mask,
         )
-
-
-@triton.jit
-def _single_w4_s3_kernel(
-    x,
-    state,
-    weight,
-    bias,
-    out,
-    new_state,
-    dim: tl.constexpr,
-    stride_bias: tl.constexpr,
-    has_bias: tl.constexpr,
-    use_silu: tl.constexpr,
-    BLOCK: tl.constexpr,
-):
-    batch_idx = tl.program_id(0)
-    dim_idx = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
-    if dim % BLOCK == 0:
-        mask = tl.full((BLOCK,), True, tl.int1)
-    else:
-        mask = dim_idx < dim
-    offsets = batch_idx * dim + dim_idx
-    x_value = tl.load(x + offsets, mask=mask, other=0.0).to(tl.float32)
-    k = tl.arange(0, 4)
-    state_base = offsets[:, None] * 3
-    weight_base = dim_idx[:, None] * 4
-    state_values = tl.load(
-        state + state_base + k[None, :],
-        mask=mask[:, None] & (k[None, :] < 3),
-        other=0.0,
-    ).to(tl.float32)
-    values = tl.where(k[None, :] == 3, x_value[:, None], state_values)
-    weight_values = tl.load(
-        weight + weight_base + k[None, :],
-        mask=mask[:, None],
-        other=0.0,
-    ).to(tl.float32)
-    acc = tl.sum(values * weight_values, axis=1)
-    if has_bias:
-        acc += tl.load(bias + dim_idx * stride_bias, mask=mask, other=0.0).to(
-            tl.float32
-        )
-    if use_silu:
-        acc *= tl.sigmoid(acc)
-    tl.store(out + offsets, acc, mask=mask)
-    shifted = tl.load(
-        state + state_base + k[None, :] + 1,
-        mask=mask[:, None] & (k[None, :] < 2),
-        other=0.0,
-    )
-    new_values = tl.where(k[None, :] == 2, x_value[:, None], shifted)
-    tl.store(
-        new_state + state_base + k[None, :],
-        new_values,
-        mask=mask[:, None] & (k[None, :] < 3),
-    )
 
 
 @triton.jit
@@ -331,68 +469,85 @@ def causal_conv1d_update(x, conv_state, weight, bias=None, activation="silu"):
     if batch * dim == 0:
         return out, new_conv_state
     if seqlen == 1:
+        if (
+            x.is_contiguous()
+            and conv_state.is_contiguous()
+            and weight.is_contiguous()
+            and width == 4
+            and state_len == 3
+        ):
+            block = _w4s3_block(dim)
+            n_dim_blocks = triton.cdiv(dim, block)
+            n_total = batch * n_dim_blocks
+            if n_total >= _RB_MIN_TOTAL:
+                chunk = _rb_chunk(n_total, batch)
+                _single_w4_s3_rb_kernel[
+                    (n_dim_blocks, triton.cdiv(batch, chunk))
+                ](
+                    x,
+                    conv_state,
+                    weight,
+                    bias if bias is not None else weight,
+                    out,
+                    new_conv_state,
+                    batch,
+                    dim=dim,
+                    stride_bias=bias.stride(0) if bias is not None else 0,
+                    has_bias=bias is not None,
+                    use_silu=activation in ("silu", "swish"),
+                    even=dim % block == 0,
+                    BD=block,
+                    BC=chunk,
+                    num_warps=_w4s3_warps(block),
+                )
+                return out, new_conv_state
+            _single_w4_s3_kernel[(batch, n_dim_blocks)](
+                x,
+                conv_state,
+                weight,
+                bias if bias is not None else weight,
+                out,
+                new_conv_state,
+                dim=dim,
+                stride_bias=bias.stride(0) if bias is not None else 0,
+                has_bias=bias is not None,
+                use_silu=activation in ("silu", "swish"),
+                even=dim % block == 0,
+                BLOCK=block,
+                num_warps=_w4s3_warps(block),
+            )
+            return out, new_conv_state
         n_elements = batch * dim
         block = _block_size(n_elements)
-        contiguous = (
-            x.stride(0) == dim
-            and conv_state.stride(0) == dim * state_len
-            and out.stride(0) == dim
-            and new_conv_state.stride(0) == dim * state_len
-            and x.stride(1) == 1
-            and conv_state.stride(2) == 1
-            and conv_state.stride(1) == state_len
-            and weight.stride(1) == 1
-            and weight.stride(0) == width
-            and out.stride(1) == 1
-            and new_conv_state.stride(2) == 1
-            and new_conv_state.stride(1) == state_len
+        _single_token_kernel[(triton.cdiv(n_elements, block),)](
+            x,
+            conv_state,
+            weight,
+            bias if bias is not None else weight,
+            out,
+            new_conv_state,
+            n_elements,
+            dim=dim,
+            state_len=state_len,
+            width=width,
+            stride_xb=x.stride(0),
+            stride_xd=x.stride(1),
+            stride_sb=conv_state.stride(0),
+            stride_sd=conv_state.stride(1),
+            stride_st=conv_state.stride(2),
+            stride_wd=weight.stride(0),
+            stride_wk=weight.stride(1),
+            stride_ob=out.stride(0),
+            stride_od=out.stride(1),
+            stride_nb=new_conv_state.stride(0),
+            stride_nd=new_conv_state.stride(1),
+            stride_nt=new_conv_state.stride(2),
+            stride_bias=bias.stride(0) if bias is not None else 0,
+            has_bias=bias is not None,
+            use_silu=activation in ("silu", "swish"),
+            BLOCK=block,
+            num_warps=_WARPS,
         )
-        if contiguous and width == 4 and state_len == 3:
-            block = min(triton.next_power_of_2(dim), 4096)
-            _single_w4_s3_kernel[(batch, triton.cdiv(dim, block))](
-                x,
-                conv_state,
-                weight,
-                bias if bias is not None else weight,
-                out,
-                new_conv_state,
-                dim=dim,
-                stride_bias=bias.stride(0) if bias is not None else 0,
-                has_bias=bias is not None,
-                use_silu=activation in ("silu", "swish"),
-                BLOCK=block,
-                num_warps=_WARPS,
-            )
-        else:
-            _single_token_kernel[(triton.cdiv(n_elements, block),)](
-                x,
-                conv_state,
-                weight,
-                bias if bias is not None else weight,
-                out,
-                new_conv_state,
-                n_elements,
-                dim=dim,
-                state_len=state_len,
-                width=width,
-                stride_xb=x.stride(0),
-                stride_xd=x.stride(1),
-                stride_sb=conv_state.stride(0),
-                stride_sd=conv_state.stride(1),
-                stride_st=conv_state.stride(2),
-                stride_wd=weight.stride(0),
-                stride_wk=weight.stride(1),
-                stride_ob=out.stride(0),
-                stride_od=out.stride(1),
-                stride_nb=new_conv_state.stride(0),
-                stride_nd=new_conv_state.stride(1),
-                stride_nt=new_conv_state.stride(2),
-                stride_bias=bias.stride(0) if bias is not None else 0,
-                has_bias=bias is not None,
-                use_silu=activation in ("silu", "swish"),
-                BLOCK=block,
-                num_warps=_WARPS,
-            )
     else:
         output_elements = batch * dim * seqlen
         output_block = _block_size(output_elements)

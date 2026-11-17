@@ -43,43 +43,121 @@ def _compute_src2dst_kernel(
             tl.store(out_ptr + src, dst.to(tl.int32), mask=mask)
 
 
+@triton.jit
+def _compute_src2dst_flat_kernel(
+    reorder_ptr,
+    out_ptr,
+    n,
+    ID_STRIDE: tl.constexpr,
+    BLOCK: tl.constexpr,
+    EXACT: tl.constexpr,  # n % BLOCK == 0: drop bounds masks
+):
+    dst = tl.program_id(0) * BLOCK + tl.arange(0, BLOCK)
+    if EXACT:
+        src = tl.load(reorder_ptr + ID_STRIDE * dst)
+        tl.store(out_ptr + src, dst.to(tl.int32))
+    else:
+        mask = dst < n
+        src = tl.load(reorder_ptr + ID_STRIDE * dst, mask=mask, other=0)
+        tl.store(out_ptr + src, dst.to(tl.int32), mask=mask)
+
+
+# Flat-grid block ladder (L600 measurements, do_bench kernel mode): the
+# sweet-spot block grows with n so the grid stays in the ~4-32 program band;
+# wide vector ops (>=512 lanes) with num_warps=4 unlock the memory throughput
+# that the old 128-lane/nw=1 sweep left on the table (22.5 -> 9.5 us @131072).
+def _flat_block(n):
+    if n <= 2048:
+        return 128
+    if n <= 4096:
+        return 256
+    if n <= 16384:
+        return 512
+    if n <= 32768:
+        return 2048
+    return 4096
+
+
 def _launch(reorder_words, src2dst, num_toks, id_stride):
-    if num_toks <= 4096:
-        # One program; size the block so masked-out lanes stay minimal. A
-        # wider warp count wins here: the whole block fits in flight and the
-        # extra lanes hide store latency (measured: n=512 w=4 vs w=1 ~ -30%).
-        block = triton.next_power_of_2(max(num_toks, 8))
-        num_warps = 2 if block <= 16 else (4 if block <= 2048 else 8)
-        _compute_src2dst_kernel[(1,)](
+    n = num_toks
+    if n <= 128:
+        # One program covering the whole input; launch floor dominates here
+        # (measured 3.09 us for every config up to n=128).
+        block = triton.next_power_of_2(max(n, 8))
+        _compute_src2dst_flat_kernel[(1,)](
             reorder_words,
             src2dst,
-            num_toks,
+            n,
             ID_STRIDE=id_stride,
             BLOCK=block,
-            NPROG=1,
-            EXACT=(num_toks == block),
-            num_warps=num_warps,
+            EXACT=(n == block),
+            num_warps=4 if block >= 128 else 2,
         )
-    else:
-        # Persistent strided sweep: 64 programs up to 8192 elements (one loop
-        # iteration each), then 256 — the flat grid is capped so launch cost
-        # stops growing with n. Traversal order matches the flat grid, so
-        # scatter locality is unchanged (measured: 131072 -1.6%,
-        # 1048576 -0.1..-0.5% vs flat grid; NPROG=128 loses ~2% at 131072,
-        # NPROG=512 ~0.2%). EXACT fires when the tail is full (every pow2 /
-        # multiple of 32768, and all of 8192 with NPROG=64): bounds masks on
-        # the load and the scattered store are pure overhead then (~1% at
-        # 1048576).
-        nprog = 64 if num_toks <= 8192 else 256
-        _compute_src2dst_kernel[(nprog,)](
+        return
+    if n <= 65536:
+        block = _flat_block(n)
+        _compute_src2dst_flat_kernel[(triton.cdiv(n, block),)](
             reorder_words,
             src2dst,
-            num_toks,
+            n,
             ID_STRIDE=id_stride,
-            BLOCK=128,
-            NPROG=nprog,
-            EXACT=(num_toks % (nprog * 128) == 0),
-            num_warps=1,
+            BLOCK=block,
+            EXACT=(n % block == 0),
+            num_warps=4,
+        )
+        return
+    if n <= 131072:
+        # 24-program sweep of 1024-wide blocks: beats wider persistent forms
+        # in this band (probe 131072: 8.91 vs pers16xB8192 9.53 us) and keeps
+        # the grid at the scatter saturation point (24 programs).
+        _compute_src2dst_kernel[(24,)](
+            reorder_words,
+            src2dst,
+            n,
+            ID_STRIDE=id_stride,
+            BLOCK=1024,
+            NPROG=24,
+            EXACT=(n % (24 * 1024) == 0),
+            num_warps=2,
+        )
+        return
+    if n < 524288:
+        # 24-program sweep of 2048-wide blocks (probe 262144: 14.83 vs
+        # pers16xB8192 15.83 us).
+        _compute_src2dst_kernel[(24,)](
+            reorder_words,
+            src2dst,
+            n,
+            ID_STRIDE=id_stride,
+            BLOCK=2048,
+            NPROG=24,
+            EXACT=(n % (24 * 2048) == 0),
+            num_warps=2,
+        )
+        return
+    # Throughput regime: flat 4096-wide blocks win again above ~512k
+    # (1048576: 49.3 vs pers24xB2048 50.3 us). Guard the grid.x hardware cap
+    # by falling back to the persistent form for absurdly large n.
+    if triton.cdiv(n, 4096) <= 65535:
+        _compute_src2dst_flat_kernel[(triton.cdiv(n, 4096),)](
+            reorder_words,
+            src2dst,
+            n,
+            ID_STRIDE=id_stride,
+            BLOCK=4096,
+            EXACT=(n % 4096 == 0),
+            num_warps=4,
+        )
+    else:
+        _compute_src2dst_kernel[(16,)](
+            reorder_words,
+            src2dst,
+            n,
+            ID_STRIDE=id_stride,
+            BLOCK=8192,
+            NPROG=16,
+            EXACT=False,
+            num_warps=4,
         )
 
 

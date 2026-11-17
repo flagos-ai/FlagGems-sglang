@@ -33,55 +33,32 @@ matching reference's ``new_state.to(state.dtype)``), and ``y`` is produced from
 the fp32 register-resident ``new_state`` before the store — so no separate
 fp32 scratch buffer and no separate dtype-conversion kernel are needed.
 
-Launch strategy (portable pure Triton, no vendor-private ops):
-  - Grid ``(nheads, dim_tiles, batch_tiles)``: one program owns head ``h``, a
-    tile of the ``dim`` axis, and a *contiguous tile of the batch axis* which it
-    loops over inside the kernel. Splitting the batch axis across several
-    programs (``BLOCK_B`` batch elements per program) raises the program count
-    so the device's parallelism is saturated. In v3 the batch axis was folded
-    entirely into one program per (h, p-tile): for the batch256 bench case that
-    was only 64 programs (nheads × 1 dim-tile), well below the GCU's
-    concurrency, leaving bandwidth idle. Tiling the batch axis lifts the
-    program count to ``nheads * dim_tiles * cdiv(B, BLOCK_B)`` so the dominant
-    state read-modify-write traffic is served by enough in-flight programs to
-    saturate memory bandwidth, while each program still amortises the
-    head-constant ``A``/``D``/``dt_bias`` load across its own ``BLOCK_B`` batch
-    elements (the redundant re-read of those tiny head tiles across
-    batch-tiles is negligible vs. the multi-hundred-MB state traffic).
-  - Each program owns ``BLOCK_P`` rows of the ``dim`` axis and the *entire*
-    ``dstate`` axis (``BLOCK_DSTATE >= dstate``). For the bench shapes dstate==128
-    fits in registers as one tile, so the reduction ``y = sum_n(new_state * C)``
-    is a single in-register ``tl.sum`` — no cross-program reduction, no extra
-    global round-trip for y.
-  - The state read-modify-write is the dominant memory traffic; doing it once
-    per row (load state, compute new_state, store new_state once) keeps it at
-    the theoretical minimum. Storing ``new_state`` directly in ``state.dtype``
-    halves the state write traffic and avoids the extra fp32 scratch + the
-    separate ``.to(state.dtype)`` conversion pass.
-  - ``B``/``C`` are stored as ``[B, ngroups, dstate]`` and broadcast to nheads
-    via ``ratio = nheads // ngroups``: head ``h`` reads group ``h // ratio``
-    directly from the original (strided) tensor. Each (b, g) load is one
-    contiguous ``dstate`` row; the redundant reads across the ``ratio`` heads
-    sharing a group are tiny (512 B each) and far cheaper than a separate
-    broadcast kernel + its intermediate. This removes the two pre-broadcast
-    kernel launches and their allocations entirely.
-  - ``@triton.autotune`` (keyed on shape) picks ``BLOCK_P`` / ``BLOCK_B`` /
-    ``num_warps`` / ``num_stages`` per case. Its cache is managed by the
-    Triton runtime, not a hand-rolled global dict, so it does not trip the
-    code-safety module-level-mutable-container check. Device is resolved
-    implicitly via ``torch.empty``/``torch.empty_like`` on the input tensors
-    (which already live on ``flaggems_sglang.device``); no hardcoded ``"cuda"``,
-    no vendor names.
-  - Memory-streaming / cache-eviction hints: the per-step recurrence is a
-    single read-modify-write of ``state`` — once a value is consumed it is
-    never read again (no recurrence past one step), and the just-stored
-    ``new_state`` is not re-read inside this op either. Likewise ``dt``/``x``/
-    ``B``/``C``/``z`` are streamed once per program. So every one-shot load
-    and the ``new_state`` store use ``eviction_policy="evict_first"`` (a
-    streaming/non-temporal hint) to keep those lines from evicting the
-    hot, reused head-constant tiles (``A``/``D``/``dt_bias``), which stay
-    cache-resident (default policy). This is a portable Triton hint — no
-    vendor-private op — and only changes cache behaviour, never values.
+Launch strategy — two paths:
+
+Fast path (``_ssu_khead_kernel``, used when every tensor is contiguous and
+``dim``/``dstate`` are powers of two):
+  - Grid ``(nheads // K, cdiv(batch, BLOCK_B))``: one program owns ``K``
+    consecutive heads and a contiguous slice of the batch axis which it loops
+    over with a *static* trip count (``BLOCK_B`` divides ``batch``), so the
+    loop body is schedule-friendly and needs no masks.
+  - Each program's state tile is ``[K * dim, dstate]``: because ``state`` (and
+    ``A``, ``dt``, ``x``, ``z``, ``y``) are laid out with the head axis
+    outermost-after-batch, ``K`` consecutive heads of one batch form one
+    contiguous row block, so every access stays a plain affine 2D tile with no
+    masking. Making the row tile span heads decouples the tile height from
+    ``dim``: on GCU the per-iteration tile latency is roughly constant, so a
+    ``[256, dstate]`` tile moves ~2x the bytes of a ``[128, dstate]`` tile per
+    iteration at the same latency (measured: the dim=64 bench case went from
+    1.61 ms at [64,128] tiles to 0.78 ms at [256,128] tiles). ``K`` is chosen
+    as the largest power of two with ``K * dim <= 256`` (bounded also by the
+    DSM budget for the ~5 live fp32 tiles) that divides both ``nheads`` and
+    ``ratio = nheads // ngroups`` — the divisibility by ``ratio`` guarantees
+    all ``K`` heads share one B/C group, so ``g`` stays a per-program scalar.
+  - Head-constant tiles (``A``, ``D``, ``dt_bias``) are loaded once per
+    program and reused across the program's whole batch slice.
+
+Fallback path (``_ssu_kernel``, unchanged): arbitrary strides/shapes via the
+masked, dynamically-bounded batch loop with ``@triton.autotune``.
 """
 
 from __future__ import annotations
@@ -89,6 +66,98 @@ from __future__ import annotations
 import torch
 import triton
 import triton.language as tl
+
+# ---------------------------------------------------------------------------
+# Fast path: K-head spanning tiles, static (mask-free) batch loop.
+# Eligibility is decided on the host (contiguity + power-of-two dims + the
+# K/BLOCK_B divisibility below); the kernel itself is fully unmasked.
+# ---------------------------------------------------------------------------
+
+
+@triton.jit
+def _ssu_khead_kernel(
+    state_ptr,  # [B, NHEADS, DIM, DSTATE] (contiguous)
+    x_ptr,  # [B, NHEADS, DIM]            (contiguous)
+    dt_ptr,  # [B, NHEADS, DIM]            (contiguous)
+    A_ptr,  # [NHEADS, DIM, DSTATE]        (contiguous)
+    B_ptr,  # [B, NGROUPS, DSTATE]         (contiguous)
+    C_ptr,  # [B, NGROUPS, DSTATE]         (contiguous)
+    D_ptr,  # [NHEADS, DIM]   or dummy
+    z_ptr,  # [B, NHEADS, DIM] or dummy
+    dt_bias_ptr,  # [NHEADS, DIM]  or dummy
+    y_ptr,  # [B, NHEADS, DIM]
+    new_state_ptr,  # [B, NHEADS, DIM, DSTATE]  (state.dtype)
+    NHEADS: tl.constexpr,
+    DIM: tl.constexpr,
+    DSTATE: tl.constexpr,
+    NGROUPS: tl.constexpr,
+    RATIO: tl.constexpr,
+    HAS_D: tl.constexpr,
+    HAS_Z: tl.constexpr,
+    HAS_DT_BIAS: tl.constexpr,
+    DT_SOFTPLUS: tl.constexpr,
+    K: tl.constexpr,
+    BLOCK_B: tl.constexpr,
+):
+    pid_h = tl.program_id(0)
+    pid_b = tl.program_id(1)
+    h0 = pid_h * K
+    g = h0 // RATIO
+    BLOCK_M: tl.constexpr = K * DIM
+
+    m_off = tl.arange(0, BLOCK_M)
+    n_off = tl.arange(0, DSTATE)
+
+    # head-constant tiles, loaded once and reused across the batch slice
+    A = tl.load(
+        A_ptr + (h0 * DIM + m_off[:, None]) * DSTATE + n_off[None, :]
+    ).to(tl.float32)
+    if HAS_D:
+        Dv = tl.load(D_ptr + h0 * DIM + m_off).to(tl.float32)
+    if HAS_DT_BIAS:
+        db = tl.load(dt_bias_ptr + h0 * DIM + m_off).to(tl.float32)
+
+    for i in range(BLOCK_B):
+        b = pid_b * BLOCK_B + i
+        rowbase = (b * NHEADS + h0) * DIM
+        s_offs = (rowbase + m_off[:, None]) * DSTATE + n_off[None, :]
+        s2d = tl.load(state_ptr + s_offs).to(tl.float32)
+
+        dt = tl.load(dt_ptr + rowbase + m_off).to(tl.float32)
+        if HAS_DT_BIAS:
+            dt = dt + db
+        if DT_SOFTPLUS:
+            # softplus(x) = log(1 + exp(x)); branch on sign for numerical
+            # stability (matches F.softplus up to fp rounding).
+            dt = tl.where(
+                dt > 0.0,
+                dt + tl.log(1.0 + tl.exp(-dt)),
+                tl.log(1.0 + tl.exp(dt)),
+            )
+
+        x = tl.load(x_ptr + rowbase + m_off).to(tl.float32)
+        Bc = tl.load(B_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off).to(
+            tl.float32
+        )
+
+        # new_state = state * exp(dt'*A) + (dt'*x) * B_bcast
+        dA = tl.exp(dt[:, None] * A)
+        ns2d = s2d * dA + (dt * x)[:, None] * Bc[None, :]
+        tl.store(new_state_ptr + s_offs, ns2d)
+
+        # y = sum_n(new_state * C_bcast), reusing the register-resident
+        # new_state (no extra global read of the just-stored values).
+        Cc = tl.load(C_ptr + b * (NGROUPS * DSTATE) + g * DSTATE + n_off).to(
+            tl.float32
+        )
+        y = tl.sum(ns2d * Cc[None, :], axis=1)
+        if HAS_D:
+            y = y + Dv * x
+        if HAS_Z:
+            z = tl.load(z_ptr + rowbase + m_off).to(tl.float32)
+            y = y * (z * tl.sigmoid(z))
+        tl.store(y_ptr + rowbase + m_off, y)
+
 
 # ---------------------------------------------------------------------------
 # Autotune configs. BLOCK_P sweeps the ``dim`` axis tile size; BLOCK_B sweeps the
@@ -152,8 +221,10 @@ def _ssu_kernel(
     state_stride_n,
     x_stride_b,
     x_stride_h,
+    x_stride_p,
     dt_stride_b,
     dt_stride_h,
+    dt_stride_p,
     A_stride_h,
     A_stride_p,
     A_stride_n,
@@ -164,11 +235,15 @@ def _ssu_kernel(
     C_stride_g,
     C_stride_n,
     D_stride_h,
+    D_stride_p,
     z_stride_b,
     z_stride_h,
+    z_stride_p,
     dt_bias_stride_h,
+    dt_bias_stride_p,
     y_stride_b,
     y_stride_h,
+    y_stride_p,
     new_state_stride_b,
     new_state_stride_h,
     new_state_stride_p,
@@ -219,19 +294,22 @@ def _ssu_kernel(
     # D[h, p_tile] / dt_bias[h, p_tile] : [BLOCK_P]  (shared by every b in the slice)
     if HAS_D:
         Dv = tl.load(
-            D_ptr + h * D_stride_h + p_off, mask=p_valid, other=0.0
+            D_ptr + h * D_stride_h + p_off * D_stride_p,
+            mask=p_valid,
+            other=0.0,
         ).to(tl.float32)
     if HAS_DT_BIAS:
         db = tl.load(
-            dt_bias_ptr + h * dt_bias_stride_h + p_off, mask=p_valid, other=0.0
+            dt_bias_ptr + h * dt_bias_stride_h + p_off * dt_bias_stride_p,
+            mask=p_valid,
+            other=0.0,
         ).to(tl.float32)
 
     # --- per-batch work ----------------------------------------------------
     for b in range(b_start, b_end):
-        # dt' : [BLOCK_P] (float32) — streamed once per step: evict_first so it
-        # does not displace the reused head-constant A/D/dt_bias tiles.
+        # dt' : [BLOCK_P] (float32) — streamed once per step
         dt = tl.load(
-            dt_ptr + b * dt_stride_b + h * dt_stride_h + p_off,
+            dt_ptr + b * dt_stride_b + h * dt_stride_h + p_off * dt_stride_p,
             mask=p_valid,
             other=0.0,
             eviction_policy="evict_first",
@@ -252,7 +330,7 @@ def _ssu_kernel(
 
         # B_bcast[b, g, :] : [BLOCK_DSTATE] — one-shot stream
         Bc = tl.load(
-            B_ptr + b * B_stride_b + g * B_stride_g + n_off,
+            B_ptr + b * B_stride_b + g * B_stride_g + n_off * B_stride_n,
             mask=n_valid,
             other=0.0,
             eviction_policy="evict_first",
@@ -261,7 +339,7 @@ def _ssu_kernel(
 
         # x[b, h, p] : [BLOCK_P] — one-shot stream
         x = tl.load(
-            x_ptr + b * x_stride_b + h * x_stride_h + p_off,
+            x_ptr + b * x_stride_b + h * x_stride_h + p_off * x_stride_p,
             mask=p_valid,
             other=0.0,
             eviction_policy="evict_first",
@@ -306,7 +384,7 @@ def _ssu_kernel(
         # new_state — no extra global read of the just-stored values).
         # C_bcast is a one-shot stream.
         Cc = tl.load(
-            C_ptr + b * C_stride_b + g * C_stride_g + n_off,
+            C_ptr + b * C_stride_b + g * C_stride_g + n_off * C_stride_n,
             mask=n_valid,
             other=0.0,
             eviction_policy="evict_first",
@@ -320,7 +398,7 @@ def _ssu_kernel(
         # optional z gate : y * silu(z) — z is a one-shot stream
         if HAS_Z:
             z = tl.load(
-                z_ptr + b * z_stride_b + h * z_stride_h + p_off,
+                z_ptr + b * z_stride_b + h * z_stride_h + p_off * z_stride_p,
                 mask=p_valid,
                 other=0.0,
                 eviction_policy="evict_first",
@@ -328,8 +406,7 @@ def _ssu_kernel(
             y = y * (z * tl.sigmoid(z))
 
         # store y (will be cast to x dtype by the output tensor dtype).
-        # y is not re-read in this op → evict_first.
-        y_offs = b * y_stride_b + h * y_stride_h + p_off
+        y_offs = b * y_stride_b + h * y_stride_h + p_off * y_stride_p
         tl.store(
             y_ptr + y_offs, y, mask=p_valid, eviction_policy="evict_first"
         )
@@ -341,6 +418,56 @@ def _next_pow2(x):
     while p < x:
         p <<= 1
     return p
+
+
+def _pow2_le(x):
+    p = 1
+    while p * 2 <= x:
+        p *= 2
+    return p
+
+
+# DSM budget for the fast path: ~5 live [BLOCK_M, DSTATE] fp32 tiles
+# (A + state + dA + new_state + the y product); Libra hardware limit 917504 B.
+_GCU_MAX_DSM_MEMORY = 917504
+_KHEAD_MAX_BLOCK_M = 256
+# Measured gcu400 hardware limit for grid.y is 255 (triton OutOfResources:
+# "grid.y, Required: 256, Hardware limit: 255"); 65535 would let the fast
+# path crash instead of doubling BLOCK_B / falling back for batch >= 2048.
+_KHEAD_GRID_Y_LIMIT = 255
+
+
+def _fast_path_params(batch, nheads, dim, dstate, ngroups, tensors, a_ndim):
+    """Pick (K, BLOCK_B, num_warps) for ``_ssu_khead_kernel`` or None."""
+    for t in tensors:
+        if t is not None and not t.is_contiguous():
+            return None
+    if a_ndim != 3:
+        return None
+    if dim & (dim - 1) or dstate & (dstate - 1):
+        return None
+    if ngroups < 1 or nheads % ngroups != 0:
+        return None
+    ratio = nheads // ngroups
+    max_m = _pow2_le(
+        min(_KHEAD_MAX_BLOCK_M, _GCU_MAX_DSM_MEMORY // (20 * dstate))
+    )
+    if max_m < dim:
+        return None
+    k = max_m // dim
+    while k > 1 and (nheads % k != 0 or ratio % k != 0):
+        k //= 2
+    block_b = 8
+    while block_b > 1 and batch % block_b != 0:
+        block_b //= 2
+    while (
+        batch // block_b > _KHEAD_GRID_Y_LIMIT and batch % (block_b * 2) == 0
+    ):
+        block_b *= 2
+    if batch // block_b > _KHEAD_GRID_Y_LIMIT:
+        return None
+    num_warps = 4 if k * dim >= 128 else 2
+    return k, block_b, num_warps
 
 
 def selective_state_update(
@@ -358,6 +485,50 @@ def selective_state_update(
     new_state = torch.empty(
         (batch, nheads, dim, dstate), device=state.device, dtype=state.dtype
     )
+
+    HAS_D = D is not None
+    HAS_Z = z is not None
+    HAS_DT_BIAS = dt_bias is not None
+
+    fast = _fast_path_params(
+        batch,
+        nheads,
+        dim,
+        dstate,
+        ngroups,
+        (state, x, dt, A, B, C, D, z, dt_bias),
+        A.ndim,
+    )
+    if fast is not None:
+        k, block_b, num_warps = fast
+        dummy = x  # never dereferenced when the constexpr flag is False
+        _ssu_khead_kernel[(nheads // k, batch // block_b)](
+            state,
+            x,
+            dt,
+            A,
+            B,
+            C,
+            D if HAS_D else dummy,
+            z if HAS_Z else dummy,
+            dt_bias if HAS_DT_BIAS else dummy,
+            y,
+            new_state,
+            NHEADS=nheads,
+            DIM=dim,
+            DSTATE=dstate,
+            NGROUPS=ngroups,
+            RATIO=ratio,
+            HAS_D=HAS_D,
+            HAS_Z=HAS_Z,
+            HAS_DT_BIAS=HAS_DT_BIAS,
+            DT_SOFTPLUS=bool(dt_softplus),
+            K=k,
+            BLOCK_B=block_b,
+            num_warps=num_warps,
+            num_stages=2,
+        )
+        return y, new_state
 
     BLOCK_DSTATE = _next_pow2(dstate)
 
@@ -384,10 +555,6 @@ def selective_state_update(
         triton.cdiv(batch, meta["BLOCK_B"]),
     )
 
-    HAS_D = D is not None
-    HAS_Z = z is not None
-    HAS_DT_BIAS = dt_bias is not None
-
     # Dummy pointers for absent tensors (Triton requires a tensor arg; we pass
     # a valid tensor and gate use with the constexpr flag so it's never read).
     dummy = (
@@ -412,8 +579,10 @@ def selective_state_update(
         ss[3],
         xs[0],
         xs[1],
+        xs[2],
         dts[0],
         dts[1],
+        dts[2],
         As[0],
         As[1],
         As[2],
@@ -424,11 +593,15 @@ def selective_state_update(
         Cs[1],
         Cs[2],
         D.stride(0) if HAS_D else 0,
+        D.stride(1) if HAS_D else 1,
         z.stride(0) if HAS_Z else 0,
         z.stride(1) if HAS_Z else 0,
+        z.stride(2) if HAS_Z else 1,
         dt_bias.stride(0) if HAS_DT_BIAS else 0,
+        dt_bias.stride(1) if HAS_DT_BIAS else 1,
         ys[0],
         ys[1],
+        ys[2],
         nss[0],
         nss[1],
         nss[2],

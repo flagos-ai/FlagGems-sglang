@@ -20,39 +20,47 @@ a linear mix ``mixes = x_flat @ hc_fn.T * rsqrt``, a sigmoid gate
 reduction ``y = sum_j pre[:, j] * x[:, j, :]`` collapsing the ``hc_mult`` axis
 to ``[T, hidden_size]``.
 
-Strategy (v7)
+Strategy (v8)
 -------------
-  * **T <= 256 -- k-split partial path (two kernels, no atomics).**
-    The pass-1 work (sqsum + the ``hc_mult`` mix dots) is split along the
-    flattened-row axis K across a 2D grid (token-blocks x KSPLIT):
+  * **hc_mult <= 4 -- single fused kernel (``_hc_head_kernel_v8``), one launch
+    for every T.** Pass 1 walks the flattened row in ``BLOCK_K`` tiles with
+    *per-lane delayed-reduction accumulators* (one ``[BLOCK_K]`` fp32 vector
+    per (token, reduction) pair, textually unrolled): the k-loop body is only
+    loads + vector FMAs -- reduction trees run exactly 5 times per token at
+    end-of-pass-1. The 4 ``hc_fn`` row slices are loaded once per k-tile and
+    shared by all ``BLOCK_T`` tokens in the program, amortising the 448KB
+    weight re-read across the token block (the dominant traffic at large T).
+    ``BLOCK_T`` tokens per program are likewise textually unrolled so every
+    accumulator stays a plain 1D vector (2D loop-carried accumulator tiles
+    are both slow and miscompiled on this backend). The tail token block is
+    anchored (``t0 = min(pid * BLOCK_T, T - BLOCK_T)``), so the overlapping
+    re-computation writes identical values (idempotent) and no token masks
+    are needed. ``K``/``HIDDEN`` are constexpr (static trip counts, masks
+    fold away when divisible) and the RMSNorm mean uses a host-computed
+    reciprocal (``sq * inv_k``). Pass 2 re-streams the hidden axis per token
+    with ``y[t, d] = sum_j pre_j * x[t, j, d]``.
 
-      - Kernel A (``_hc_head_partial_kernel``) computes *partial* sqsum and
-        mix accumulators for its k-chunk and stores them to a small fp32
-        scratch buffer ``part[T, 32, HC_MULT+1]``. At T=1 this replaces the
-        fused kernel's single serial program (which streamed the whole
-        458KB hc_fn alone, pure latency) with KSPLIT parallel programs each
-        touching a 1/KSPLIT slice. At T=128 it cuts the hc_fn L2 re-read
-        traffic from ``(T/BLOCK_T) * 458KB`` to ``(T/BLOCK_T) * 458KB /
-        KSPLIT`` (57MB -> ~7MB), since each token-block only walks its own
-        k-chunk of each hc_fn row.
+    Dispatch (GCU400/Libra, benchmarked on (T, 4, 7168) bf16):
+    ``BLOCK_T = 1 if T <= 48 else 2`` (single-wave chains win below the
+    machine-saturation point; the shared-weight amortisation wins above),
+    ``BLOCK_K = min(2048, next_pow2(K))``, ``BLOCK_D = min(4096,
+    next_pow2(hidden))``, ``num_warps = 8``. One exception (2026-11-12
+    rescan): for very small token counts (``T <= 24``) a fat
+    ``BLOCK_K = min(8192, next_pow2(K))`` tile wins on the BT=1 arm
+    (14.5 vs 15.4us at T=1, 13.8 vs 15.3us at T=4..24; measured
+    ``gcu.dsm_memory_size`` 176128B still fits the 2-programs/SP line and
+    T <= 24 programs cannot oversubscribe the SPs). The crossover sits
+    between T=24 (BK=8192 wins by 1.1us) and T=28 (BK=8192 loses by
+    8.1us), so the arm is capped at 24.
 
-      - Kernel B (``_hc_head_finish_kernel``) reduces the KSPLIT partials
-        (plain fp32 scalar loop over the live slots -- no atomics), applies
-        rsqrt + sigmoid gate, and does the (token x hidden) weighted sum.
-        KSPLIT is picked by a Python heuristic (NOT autotuned) so the
-        scratch is sized exactly and every slot is overwritten each launch
-        (no stale-slot hazard when Triton reruns the kernel).
-
-  * **T > 256 -- fused single kernel** (v5): two serial in-kernel passes;
-    bandwidth-bound at these sizes so a second launch would only add
-    overhead. The v6 fp32 hc_fn pre-cast is gone: hc_fn is already fp32 at
-    every call site, so that cast kernel was a wasted launch.
+  * **hc_mult in 5..8 -- legacy v7 paths unchanged**: the k-split two-kernel
+    partial path for ``T <= 256`` and the tree-per-tile fused kernel for
+    larger ``T`` (see below). These shapes never occur in the benchmark or
+    test suite; the code is kept for compatibility.
 
 All math is fp32 (matching the reference's ``.float()``); the output is cast
-back to ``x.dtype``. ``hc_mult <= 8`` is treated as a compile-time constant
-with unrolled per-row scalar accumulators (no ``[T, HC_MULT, K]``
-intermediate). Portability: plain loads/stores and fp32 arithmetic only --
-no atomics, no vendor extensions, no dtype-specific hacks.
+back to ``x.dtype``. Portability: plain loads/stores and fp32 arithmetic only
+-- no atomics, no vendor extensions, no dtype-specific hacks.
 """
 
 import torch
@@ -624,6 +632,374 @@ def _hc_head_kernel(
         )
 
 
+# ---------------------------------------------------------------------------
+# v8 fused kernel (hc_mult <= 4): per-lane delayed reduction + BLOCK_T
+# textually-unrolled token batching, single launch for every T.
+# ---------------------------------------------------------------------------
+
+
+@triton.jit
+def _hc_head_kernel_v8(
+    x_ptr,
+    hc_fn_ptr,
+    hc_scale_ptr,
+    hc_base_ptr,
+    y_ptr,
+    norm_eps,
+    hc_eps,
+    inv_k,  # host-computed 1/K (mean via multiply-reciprocal)
+    T,
+    HC_MULT: tl.constexpr,
+    K: tl.constexpr,  # HC_MULT * HIDDEN (flattened row length)
+    HIDDEN: tl.constexpr,
+    BLOCK_T: tl.constexpr,  # tokens per program (1, 2 or 4)
+    BLOCK_K: tl.constexpr,  # pass-1 flat-row tile
+    BLOCK_D: tl.constexpr,  # pass-2 hidden-axis tile
+):
+    pid = tl.program_id(0)
+    t0 = pid * BLOCK_T
+    t0 = tl.minimum(t0, T - BLOCK_T)  # anchor tail block (host: T >= BLOCK_T)
+    xb0 = t0.to(tl.int64) * K
+    yb0 = t0.to(tl.int64) * HIDDEN
+    if BLOCK_T > 1:
+        t1 = t0 + 1
+        xb1 = t1.to(tl.int64) * K
+        yb1 = t1.to(tl.int64) * HIDDEN
+    if BLOCK_T > 2:
+        t2 = t0 + 2
+        xb2 = t2.to(tl.int64) * K
+        yb2 = t2.to(tl.int64) * HIDDEN
+        t3 = t0 + 3
+        xb3 = t3.to(tl.int64) * K
+        yb3 = t3.to(tl.int64) * HIDDEN
+
+    # ---- pass 1: per-lane 1D accumulators, one set per token ----
+    sq0 = tl.zeros((BLOCK_K,), tl.float32)
+    m00 = tl.zeros((BLOCK_K,), tl.float32)
+    m10 = tl.zeros((BLOCK_K,), tl.float32)
+    m20 = tl.zeros((BLOCK_K,), tl.float32)
+    m30 = tl.zeros((BLOCK_K,), tl.float32)
+    if BLOCK_T > 1:
+        sq1 = tl.zeros((BLOCK_K,), tl.float32)
+        m01 = tl.zeros((BLOCK_K,), tl.float32)
+        m11 = tl.zeros((BLOCK_K,), tl.float32)
+        m21 = tl.zeros((BLOCK_K,), tl.float32)
+        m31 = tl.zeros((BLOCK_K,), tl.float32)
+    if BLOCK_T > 2:
+        sq2 = tl.zeros((BLOCK_K,), tl.float32)
+        m02 = tl.zeros((BLOCK_K,), tl.float32)
+        m12 = tl.zeros((BLOCK_K,), tl.float32)
+        m22 = tl.zeros((BLOCK_K,), tl.float32)
+        m32 = tl.zeros((BLOCK_K,), tl.float32)
+        sq3 = tl.zeros((BLOCK_K,), tl.float32)
+        m03 = tl.zeros((BLOCK_K,), tl.float32)
+        m13 = tl.zeros((BLOCK_K,), tl.float32)
+        m23 = tl.zeros((BLOCK_K,), tl.float32)
+        m33 = tl.zeros((BLOCK_K,), tl.float32)
+
+    for k0 in range(0, K, BLOCK_K):
+        k_off = k0 + tl.arange(0, BLOCK_K)
+        k_mask = k_off < K
+        w0 = tl.load(hc_fn_ptr + 0 * K + k_off, mask=k_mask, other=0.0).to(
+            tl.float32
+        )
+        if HC_MULT > 1:
+            w1 = tl.load(hc_fn_ptr + 1 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+        if HC_MULT > 2:
+            w2 = tl.load(hc_fn_ptr + 2 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+        if HC_MULT > 3:
+            w3 = tl.load(hc_fn_ptr + 3 * K + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+
+        xk0 = tl.load(x_ptr + xb0 + k_off, mask=k_mask, other=0.0).to(
+            tl.float32
+        )
+        sq0 += xk0 * xk0
+        m00 += xk0 * w0
+        if HC_MULT > 1:
+            m10 += xk0 * w1
+        if HC_MULT > 2:
+            m20 += xk0 * w2
+        if HC_MULT > 3:
+            m30 += xk0 * w3
+        if BLOCK_T > 1:
+            xk1 = tl.load(x_ptr + xb1 + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+            sq1 += xk1 * xk1
+            m01 += xk1 * w0
+            if HC_MULT > 1:
+                m11 += xk1 * w1
+            if HC_MULT > 2:
+                m21 += xk1 * w2
+            if HC_MULT > 3:
+                m31 += xk1 * w3
+        if BLOCK_T > 2:
+            xk2 = tl.load(x_ptr + xb2 + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+            sq2 += xk2 * xk2
+            m02 += xk2 * w0
+            if HC_MULT > 1:
+                m12 += xk2 * w1
+            if HC_MULT > 2:
+                m22 += xk2 * w2
+            if HC_MULT > 3:
+                m32 += xk2 * w3
+            xk3 = tl.load(x_ptr + xb3 + k_off, mask=k_mask, other=0.0).to(
+                tl.float32
+            )
+            sq3 += xk3 * xk3
+            m03 += xk3 * w0
+            if HC_MULT > 1:
+                m13 += xk3 * w1
+            if HC_MULT > 2:
+                m23 += xk3 * w2
+            if HC_MULT > 3:
+                m33 += xk3 * w3
+
+    # ---- gate: 5 trees per token, then sigmoid ----
+    hc_scale = tl.load(hc_scale_ptr).to(tl.float32)
+    r0 = tl.rsqrt(tl.sum(sq0, 0) * inv_k + norm_eps)
+    pre00 = (
+        tl.sigmoid(
+            tl.sum(m00, 0) * r0 * hc_scale
+            + tl.load(hc_base_ptr + 0).to(tl.float32)
+        )
+        + hc_eps
+    )
+    if HC_MULT > 1:
+        pre10 = (
+            tl.sigmoid(
+                tl.sum(m10, 0) * r0 * hc_scale
+                + tl.load(hc_base_ptr + 1).to(tl.float32)
+            )
+            + hc_eps
+        )
+    if HC_MULT > 2:
+        pre20 = (
+            tl.sigmoid(
+                tl.sum(m20, 0) * r0 * hc_scale
+                + tl.load(hc_base_ptr + 2).to(tl.float32)
+            )
+            + hc_eps
+        )
+    if HC_MULT > 3:
+        pre30 = (
+            tl.sigmoid(
+                tl.sum(m30, 0) * r0 * hc_scale
+                + tl.load(hc_base_ptr + 3).to(tl.float32)
+            )
+            + hc_eps
+        )
+    if BLOCK_T > 1:
+        r1 = tl.rsqrt(tl.sum(sq1, 0) * inv_k + norm_eps)
+        pre01 = (
+            tl.sigmoid(
+                tl.sum(m01, 0) * r1 * hc_scale
+                + tl.load(hc_base_ptr + 0).to(tl.float32)
+            )
+            + hc_eps
+        )
+        if HC_MULT > 1:
+            pre11 = (
+                tl.sigmoid(
+                    tl.sum(m11, 0) * r1 * hc_scale
+                    + tl.load(hc_base_ptr + 1).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 2:
+            pre21 = (
+                tl.sigmoid(
+                    tl.sum(m21, 0) * r1 * hc_scale
+                    + tl.load(hc_base_ptr + 2).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 3:
+            pre31 = (
+                tl.sigmoid(
+                    tl.sum(m31, 0) * r1 * hc_scale
+                    + tl.load(hc_base_ptr + 3).to(tl.float32)
+                )
+                + hc_eps
+            )
+    if BLOCK_T > 2:
+        r2 = tl.rsqrt(tl.sum(sq2, 0) * inv_k + norm_eps)
+        pre02 = (
+            tl.sigmoid(
+                tl.sum(m02, 0) * r2 * hc_scale
+                + tl.load(hc_base_ptr + 0).to(tl.float32)
+            )
+            + hc_eps
+        )
+        if HC_MULT > 1:
+            pre12 = (
+                tl.sigmoid(
+                    tl.sum(m12, 0) * r2 * hc_scale
+                    + tl.load(hc_base_ptr + 1).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 2:
+            pre22 = (
+                tl.sigmoid(
+                    tl.sum(m22, 0) * r2 * hc_scale
+                    + tl.load(hc_base_ptr + 2).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 3:
+            pre32 = (
+                tl.sigmoid(
+                    tl.sum(m32, 0) * r2 * hc_scale
+                    + tl.load(hc_base_ptr + 3).to(tl.float32)
+                )
+                + hc_eps
+            )
+        r3 = tl.rsqrt(tl.sum(sq3, 0) * inv_k + norm_eps)
+        pre03 = (
+            tl.sigmoid(
+                tl.sum(m03, 0) * r3 * hc_scale
+                + tl.load(hc_base_ptr + 0).to(tl.float32)
+            )
+            + hc_eps
+        )
+        if HC_MULT > 1:
+            pre13 = (
+                tl.sigmoid(
+                    tl.sum(m13, 0) * r3 * hc_scale
+                    + tl.load(hc_base_ptr + 1).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 2:
+            pre23 = (
+                tl.sigmoid(
+                    tl.sum(m23, 0) * r3 * hc_scale
+                    + tl.load(hc_base_ptr + 2).to(tl.float32)
+                )
+                + hc_eps
+            )
+        if HC_MULT > 3:
+            pre33 = (
+                tl.sigmoid(
+                    tl.sum(m33, 0) * r3 * hc_scale
+                    + tl.load(hc_base_ptr + 3).to(tl.float32)
+                )
+                + hc_eps
+            )
+
+    # ---- pass 2: y[t, d] = sum_j pre_j * x[t, j, d] ----
+    for d0 in range(0, HIDDEN, BLOCK_D):
+        d_off = d0 + tl.arange(0, BLOCK_D)
+        d_mask = d_off < HIDDEN
+        xd00 = tl.load(
+            x_ptr + xb0 + 0 * HIDDEN + d_off, mask=d_mask, other=0.0
+        ).to(tl.float32)
+        yd0 = pre00 * xd00
+        if HC_MULT > 1:
+            xd10 = tl.load(
+                x_ptr + xb0 + 1 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd0 += pre10 * xd10
+        if HC_MULT > 2:
+            xd20 = tl.load(
+                x_ptr + xb0 + 2 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd0 += pre20 * xd20
+        if HC_MULT > 3:
+            xd30 = tl.load(
+                x_ptr + xb0 + 3 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd0 += pre30 * xd30
+        tl.store(
+            y_ptr + yb0 + d_off,
+            yd0.to(y_ptr.dtype.element_ty),
+            mask=d_mask,
+        )
+        if BLOCK_T > 1:
+            xd01 = tl.load(
+                x_ptr + xb1 + 0 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd1 = pre01 * xd01
+            if HC_MULT > 1:
+                xd11 = tl.load(
+                    x_ptr + xb1 + 1 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd1 += pre11 * xd11
+            if HC_MULT > 2:
+                xd21 = tl.load(
+                    x_ptr + xb1 + 2 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd1 += pre21 * xd21
+            if HC_MULT > 3:
+                xd31 = tl.load(
+                    x_ptr + xb1 + 3 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd1 += pre31 * xd31
+            tl.store(
+                y_ptr + yb1 + d_off,
+                yd1.to(y_ptr.dtype.element_ty),
+                mask=d_mask,
+            )
+        if BLOCK_T > 2:
+            xd02 = tl.load(
+                x_ptr + xb2 + 0 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd2 = pre02 * xd02
+            if HC_MULT > 1:
+                xd12 = tl.load(
+                    x_ptr + xb2 + 1 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd2 += pre12 * xd12
+            if HC_MULT > 2:
+                xd22 = tl.load(
+                    x_ptr + xb2 + 2 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd2 += pre22 * xd22
+            if HC_MULT > 3:
+                xd32 = tl.load(
+                    x_ptr + xb2 + 3 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd2 += pre32 * xd32
+            tl.store(
+                y_ptr + yb2 + d_off,
+                yd2.to(y_ptr.dtype.element_ty),
+                mask=d_mask,
+            )
+            xd03 = tl.load(
+                x_ptr + xb3 + 0 * HIDDEN + d_off, mask=d_mask, other=0.0
+            ).to(tl.float32)
+            yd3 = pre03 * xd03
+            if HC_MULT > 1:
+                xd13 = tl.load(
+                    x_ptr + xb3 + 1 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd3 += pre13 * xd13
+            if HC_MULT > 2:
+                xd23 = tl.load(
+                    x_ptr + xb3 + 2 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd3 += pre23 * xd23
+            if HC_MULT > 3:
+                xd33 = tl.load(
+                    x_ptr + xb3 + 3 * HIDDEN + d_off, mask=d_mask, other=0.0
+                ).to(tl.float32)
+                yd3 += pre33 * xd33
+            tl.store(
+                y_ptr + yb3 + d_off,
+                yd3.to(y_ptr.dtype.element_ty),
+                mask=d_mask,
+            )
+
+
 def hc_head(x, hc_fn, hc_scale, hc_base, norm_eps, hc_eps):
     shape, dtype = x.size(), x.dtype
     T, hc_mult, hidden = shape
@@ -638,6 +1014,47 @@ def hc_head(x, hc_fn, hc_scale, hc_base, norm_eps, hc_eps):
     if T == 0:
         return y
 
+    if hc_mult <= 4:
+        # v8 single-launch fused kernel (per-lane delayed reduction +
+        # textually-unrolled BLOCK_T token batching). Dispatch anchors:
+        # GCU400/Libra, (T, 4, 7168) bf16, do_bench median -- T<=48 the
+        # single-wave BT=1 chain wins (15.2 vs 19.4us @ T=2/4/8), T>=64 the
+        # shared-hc_fn BT=2 amortisation wins (25.1 vs 29.5us @ T=64).
+        # Small-T BK rescan (2026-11-12): on the BT=1 arm a fat BK=8192
+        # k-tile wins while T<=24 (single-digit-SP regime, DSM 176128B in
+        # the 2-programs/SP line): 14.5/13.8us vs 15.4/15.3us at T=1/16.
+        # It collapses at T>=28 (24.2 vs 16.1us @ T=28), so the arm stops
+        # at 24 and requires next_pow2(K) >= 8192 (smaller K keeps the
+        # exact-fit BK).
+        if T <= 24 and triton.next_power_of_2(K) >= 8192:
+            block_k = 8192
+        else:
+            block_k = min(2048, triton.next_power_of_2(K))
+        block_t = 1 if T <= 48 else 2
+        block_t = min(block_t, T)
+        block_d = min(4096, triton.next_power_of_2(hidden))
+        _hc_head_kernel_v8[(triton.cdiv(T, block_t),)](
+            x,
+            hc_fn,
+            hc_scale,
+            hc_base,
+            y,
+            float(norm_eps),
+            float(hc_eps),
+            1.0 / K if K > 0 else 0.0,
+            T,
+            hc_mult,
+            K,
+            hidden,
+            BLOCK_T=block_t,
+            BLOCK_K=block_k,
+            BLOCK_D=block_d,
+            num_warps=8,
+            num_stages=2,
+        )
+        return y
+
+    # ---- legacy v7 paths below: hc_mult in 5..8 only (v8 handles <= 4) ----
     if T <= 256:
         # k-split partial path: kernel A computes per-k-chunk partials into an
         # fp32 scratch (every slot is overwritten by its owning program on

@@ -8,128 +8,156 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Triton implementation of the fused MoE router (tensorcore variant).
 
-Two-kernel split
-----------------
-The PyTorch reference is
-``logits = x @ W.T -> optional tanh-softcap -> optional +bias ->
-softmax -> torch.topk(logits) -> gather(probs, topk_ids)``.
-Instead of one fused kernel that does the GEMM *and* the softmax/top-2/gather
-in the same register file, this op splits the work into **two** portable
-``tl.dot``-based Triton kernels with an intermediate ``[M, E]`` fp32 logits
-tile:
+2026-11-13 round-3 large-tier RSI (E-1 residual 0.78x/0.92x)
+--------------------------------------------------------------------
+Stage attribution (do_bench median, E=256/H=4096/bf16) showed the two-kernel
+split's costs at the failing tiers are NOT GEMM-bound: at m=4096 the post
+kernel cost 104.3us of the 172.8us total (GEMM 71.2us is already at the
+~121 TFLOPS MMA ceiling), and at m=512 the post was 22.0us of 53.0us. The
+ablation ladder pinned the whole post cost on the two
+``tl.max(..., return_indices=True)`` index-tracked reductions: a kernel with
+plain load/max/exp-sum stores at 18.5us == the load-store floor, while adding
+index tracking + the penalised second max costs +86us (m=4096).
 
-1. ``_gemm_logits_kernel`` — the tensor-core GEMM (``tl.dot``) producing
-   ``logits = x @ W.T`` on the tensor core, then applying the optional
-   ``tanh``-softcap and optional ``+correction_bias`` **in registers before
-   the store**, so the spilled logits tile is already final. Two operand-
-   precision paths run inside the same portable kernel, selected by
-   compile-time constants:
-   * **bf16 / fp16 inputs (the bench dtype)** — operands stay in native
-     precision and ``tl.dot(out_dtype=tl.float32)`` lowers to the backend's
-     native bf16/fp16 MMA. A bf16*bf16 product is exactly representable in
-     the fp32 accumulator, matching the reference within the bf16 tolerance.
-   * **fp32 inputs (the fp32 correctness case)** — operands are upcast and
-     ``tl.dot(input_precision="ieee")`` runs the IEEE fp32 matmul the
-     reference uses, meeting the float32 tolerance (atol/rtol 1e-4).
+* ``_post_kernel`` is rewritten in the same 2-D tile structure but with the
+  index-free selection algebra (sibling op ``fused_moe_router_cudacore``
+  prior art): plain max for the row max, ``tl.min(tl.where(x == max, offs,
+  E))`` for the leftmost tied index, a single ``where`` penalise, plain max
+  again, same min-where for the runner-up. Weights keep the exact closed
+  forms, so outputs are bit-identical to the previous form (verified over 22
+  shape/tie/edge cases including real GEMM logits). An ``M_ALIGNED`` fast
+  path drops the row mask when ``M % ROW_TILE == 0`` and E needs no pad.
+  Measured post: m=512 21.9->8.7us, m=1024 36.4->10.2us, m=2048 57.4->12.9,
+  m=4096 104.3->19.4us (5.4x). Config: ROW_TILE = next_pow2(max(M/32, 8))
+  capped at 128, num_warps 2 (<32 rows) / 4 (>=32 rows) — the probe sweep's
+  per-M optima; the 1-D per-row arm keeps M < 64 (it still wins there).
+  A flat 1-D load + ``reshape`` post variant does not compile on this
+  backend (probe6, P01a-family reshape wall) — direction closed.
+* ``_KLOOP_CFGS`` gains two mid-M occupancy rows (probe5/6 GEMM-only
+  medians): 256<=m<=512 uses (rt64, be64, bk1024, nw4, st4) = 23.8us at
+  m=512 (was 32.7 — 8 programs on 48 SPCs were the limit) and 512<m<=1024
+  uses (rt128, be64, bk1024, nw4, st4) = 31.3us at m=1024 (was 55.7).
+  1024<m<=2048 moves to (rt256, be128, bk1024, nw8, st4) = 52.0us at m=2048
+  (was 58.6); m>2048 keeps (rt256, be128, bk512, nw8, st4) — m=4096 is at
+  the MMA ceiling and every re-tune (bk1024/nw4/st3/rt512) lost or tied.
 
-   Both paths use the 3-operand ``tl.dot(a, b, acc)`` form so the running
-   accumulator is fed into the MMA and the backend folds the accumulate into
-   the tensor-core instruction, rather than emitting a separate full-tile
-   fp32 add per K-iteration. Identical arithmetic to ``acc += tl.dot(...)``.
-2. ``_post_kernel`` — per-row softmax over all E experts + top-2 selection
-   + weight gather, all in registers over the loaded ``[ROW_TILE, BLOCK_E]``
-   logits tile. The top-2 selection uses ``tl.max(..., return_indices=True)``,
-   a single hardware reduction that returns BOTH the row max and its
-   (lowest-index) position — ``tl.max``'s ``return_indices_tie_break_left``
-   default matches ``torch.topk``'s tie-break, so the produced expert
-   indices are bit-identical to the reference. The post stage is therefore
-   3 tile reductions total (down from 5 in the prior ``tl.max``+``tl.argmax``
-   pair formulation): one ``tl.max(logits, return_indices=True)`` yielding
-   ``(sm_max, idx0)``, one ``tl.sum(exp(logits - sm_max))`` yielding the
-   softmax denominator, and one ``tl.max(cur, return_indices=True)`` yielding
-   ``(val1, idx1)`` over the additive-penalty tile ``cur = logits`` with the
-   ``idx0`` slot dropped by ``-1e38``.
+2026-11-12 dot re-migration (P01a lifted)
+-----------------------------------------
+The 2026-11-08 rewrite below was forced by the 2026-11-07 20:22 toolchain
+skew that broke every ``tl.dot`` / 2-D tile form (archive:
+``compiler_issues/sglang_fused_moe_router_tensorcore.md``). P01a was
+declared lifted on 2026-11-10 (external gcu-compiler-opt re-aligned its
+operandSegmentSizes; ``fused_moe_gemm`` / ``bmm_chunk`` re-ran green on
+11-11), so the MMA window is open again — same re-migration the sibling
+op ``fused_moe_router_cudacore`` landed on 2026-11-12 (2.33-14.39x on the
+E=256/H=4096 bench shapes, GCU400).
 
-   The gathered softmax weights are derived *without* materialising the full
-   ``[ROW_TILE, BLOCK_E]`` probs tile or doing any masked-reduce gather. Because
-   ``idx0 = argmax(logits)`` and ``sm_max = max(logits) = logits[idx0]`` exactly
-   (a max reduction returns one of the inputs verbatim, no rounding), the
-   top-1 weight is ``probs[idx0] = exp(logits[idx0]-sm_max)/sm_denom = 1/sm_denom``
-   — a scalar. The top-2 weight is ``probs[idx1] = exp(logits[idx1]-sm_max)/
-   sm_denom`` where ``idx1`` and ``val1 = logits[idx1]`` come from the fused
-   ``tl.max(cur, return_indices=True)`` pass over the additive-penalty tile
-   ``cur = logits`` with the ``idx0`` slot penalised by ``-1e38``, so
-   ``val1 = max(cur) = cur[idx1] = logits[idx1]`` exactly. This drops every
-   full-tile ``tl.where``+``tl.sum`` gather and the full-tile probs divide,
-   cutting the post stage to 3 native reductions + 3 elementwise with no
-   ``tl.where`` at all. The index computation (max-with-index +
-   additive-penalty max-with-index) is unchanged, so the produced
-   ``topk_ids`` stay bit-identical to the reference, and the weights are
-   unchanged (the fused max returns exactly the value and index the
-   separate ``tl.argmax`` + ``tl.max`` pair returned).
+This module keeps the two-kernel contract and adds two MMA arms for the
+GEMM stage (bf16 operands, fp32 accumulate):
+* ``_gemm_kloop_kernel`` (M >= 256): large-tile 3-operand ``tl.dot(a, b,
+  acc)`` over a BLOCK_K-tiled H reduction, ``[ROW_TILE, BLOCK_E]`` logits
+  slices (256x128 / 512x128), configs re-tuned on 2026-11-12 from the
+  11-07 originals (whose tiles now exceed the P01a-lifted compiler's DSM
+  accounting). GEMM-only 48.8us @ m=512 / 92.6us @ m=4096 vs ~465us for
+  the PAD_M arm.
+* ``_gemm_dot_kernel`` (2 <= M < 256, or K-loop fallback): full-K single
+  ``tl.dot`` per tile, ``PAD_M=32`` row padding so the MMA units are fed
+  whole 32-row batches, ``num_warps=1``: x rows as a ``[PAD_M, BLOCK_K]``
+  block-ptr tile, router weight as its transposed ``[BLOCK_K, BLOCK_N]``
+  tile, 2-D affine masked store into the fp32 logits. Launch configs
+  follow the sibling op's three-round probe calibration: ``BLOCK_N=64``
+  only when ``M>=64 and E>=256 and E%64==0`` (whole tiles, no masked
+  waste), otherwise ``BLOCK_N=32``; ``BLOCK_K=next_pow2(H)`` (single dot
+  over the whole reduction, the proven fused_moe_gemm form — smaller M
+  keeps this arm: m=8/64 measure 11.4/16.0us, faster than both the
+  dot-free form and the 11-07 build).
 
-Why split, not fuse
-------------------
-A ``do_bench_us`` profile of the previous single-kernel implementation showed
-that on this fabric the post-GEMM stage (softmax + top-2 + gather) is *not*
-free once it shares a program with the GEMM: the GEMM's [ROW_TILE, BLOCK_E]
-fp32 accumulator and the post stage's softmax/temporaries compete for the
-same register file, spilling logits to local memory, and the two stages
-want different launch configs (the GEMM likes a wider ROW_TILE + more
-pipeline stages; the post stage is bandwidth-/register-bound and just as
-fast at a smaller ROW_TILE). Splitting lets each kernel use its own optimal
-``(ROW_TILE, BLOCK_K, num_warps, num_stages)`` and own register budget.
-Measured on the bench shapes (H=4096, E=256, bf16):
+Domain guards keep every unverified shape on the previous arms: bf16 x
+and w only, ``2 <= M`` (M==1 keeps the GEMV arm — MMA row fill 1/PAD_M
+loses ~16% on single-row GEMV; ``M >= 256`` routes to the K-loop arm,
+``E >= 128`` there), ``H <= 4096`` (DSM: the PAD_M arm's a+b tiles peak at
+(32+64)*4096*2B = 768KB, the K-loop arm's at (256+128)*1024*2B = 786KB,
+both < the 917504B OOR limit), ``64 <= E <= 8160`` (grid.y limits), and
+one-shot try/except flags per arm that permanently downgrade to the next
+arm if a kernel ever fails to build (K-loop -> PAD_M dot -> dot-free).
+The dot-free kernels below stay as the correctness fallback (fp32/fp16
+inputs, small E, compile failure).
 
-    M     fused      split     win
-    1     63.7us     42.0us    34% faster
-    8     64.6us     43.0us    33% faster
-    64    90.3us     52.1us    42% faster
-    512   137.0us    108.8us   21% faster
-    4096  481.3us    339.4us   29% faster
+2026-11-08 toolchain-constrained rewrite (dot-free vector-FMA forms)
+--------------------------------------------------------------------
+The 2026-11-07 20:22 enflame toolchain (triton 3.6.0+flagtree 0.7.0 /
+torch_gcu 2.11.0+4.1.20261015) breaks every high-throughput GEMM form this
+op previously relied on (all details + probe evidence archived in
+``compiler_issues/sglang_fused_moe_router_tensorcore.md``):
 
-The cost is one extra ``[M, E]`` fp32 write (GEMM) + read (post) — for the
-largest shape that's ~8 MB of HBM traffic, which is small next to the GEMM's
-own operand traffic (M·H + E·H bf16 = ~35 MB at m=4096) and is more than
-recovered by the per-stage register-headroom win above.
+* ``tl.dot`` — *every* form fails to compile fresh (``gcu.matmul``
+  operandSegmentSizes 8 vs 5; probe matrix in the archive covers 2-arg /
+  3-arg-acc / ieee / fp16 / bf16 / out_dtype / nw1-8 / small+large tiles).
+* Ascending or unmasked 2-D tile loads — compile error
+  (``memref_ext.slice_(pad_)start`` 7 vs 6 / 8 vs 7).
+* The only compilable 2-D tile (descending rows + masked + num_warps=1)
+  is correct **only** for axis=0 reductions; axis=1 reductions silently
+  return wrong values, and a column-broadcast multiply (``v[:, None]``)
+  feeding an axis=0 reduction silently corrupts as well.
+* Any pid-derived *vector* offset (``e_offs = pid * BE + arange``) used in
+  a gather load or vector store silently drops the tile base (every
+  non-first tile writes tile 0's slot and leaves its own columns
+  unwritten), and two pid-derived axes in one grid (e-tile on one axis,
+  rows on the other) corrupt too — regardless of constexpr/runtime
+  multipliers and of which grid axis carries which role.
 
-Top-2 selection
----------------
-``TOPK <= 2`` (the op's stated range). The kernel always computes two slots
-when ``TOPK == 2`` and one when ``TOPK == 1``; the second slot's store is
-masked out by ``k_offs < TOPK``, so the same kernel body serves both.
-``tl.max(..., return_indices=True)`` (and ``tl.argmax``) tie to the lowest
-index, matching ``torch.topk``'s tie-break, so the produced expert indices
-are bit-identical to the reference. The gathered softmax weight for each
-chosen slot is derived in closed form from the row max / row softmax
-denominator and the 2nd-chosen logit (``logits[idx1] = max(cur)`` from the
-fused max-with-index over the penalised tile ``cur``) — no dynamic gather
-and no masked-reduce; see ``_post_kernel`` for the derivation.
+The forms that *are* verified correct (and on which this rewrite is
+built — every item has a probe in the job tmp dir):
+
+* flat 1-D grid with runtime ``div``/``mod`` tile decomposition, every
+  address a **scalar base + arange** (probe28 g29: M1..M4096 all-pass);
+* runtime scalar arithmetic chains (``pid * C``, ``(e0 + e) * K``) into
+  1-D loads (probe21 s1..s10 all-pass once the reference comparison is
+  done right);
+* per-expert 1-D ``tl.sum`` tree reductions with a ``where``-assembled
+  [BE] accumulator (probe28);
+* the per-row post kernel (1-D [E] load, closed-form top-2 weights,
+  ``tl.max(..., return_indices=True)`` — post1d probe, bit-exact ids).
+
+So the GEMM is now a pure vector-FMA inner-product kernel: each program
+owns BE experts' outputs for RT rows and walks the full H reduction with
+1-D loads; the tree-reduction count (M*E) is the physical throughput
+limit (~0.1-0.5 TFLOPS vs the tensor core's ~121 TFLOPS the 11-07 dot
+build delivered). Performance vs the 11-07 baseline therefore regresses
+structurally for larger M — that regression is a toolchain artifact,
+documented in the archive file, not a tuning shortfall: every faster
+*correct* form was probed and rejected by the compiler backend.
+
+Two-kernel split (unchanged contract)
+-------------------------------------
+1. ``_gemm_rows_kernel`` — the dot-free GEMM (or ``_gemv_row_kernel`` for
+   M == 1) producing the final ``[M, E]`` fp32 logits (softcap + bias
+   fused in registers before the store). bf16/fp16 operands multiply in
+   fp32 (products exact, matching the bf16 tolerance); fp32 inputs use
+   the same fp32 FMA path (IEEE semantics, 1e-4 tolerance met).
+2. ``_post_kernel`` — per-row softmax over all E experts + top-2
+   selection + weight gather, all in registers over one [E] row.
+   ``tl.max(..., return_indices=True)`` tie-breaks to the lowest index,
+   matching ``torch.topk``; the top-1 weight is the closed form
+   ``1/sm_denom`` (a max returns its input verbatim, so
+   ``logits[idx0] == sm_max`` exactly) and the top-2 weight is
+   ``exp(val1 - sm_max)/sm_denom`` with ``val1 = logits[idx1]`` recovered
+   exactly from the penalised-tile max. Indices are bit-identical to the
+   reference.
 
 Portability / safety
 --------------------
-* Device is ``flaggems_sglang.device`` (runtime follows ``GEMS_VENDOR`` to
-  cuda/npu/gcu/...); no hardcoded ``"cuda"`` or vendor name.
-* No module-level mutable container (no global dict/set/list cache) — the
-  per-shape ``(ROW_TILE, BLOCK_K, num_warps, num_stages)`` selection is a
-  pure function of ``M`` (``_gemm_launch_cfg`` / ``_post_launch_cfg``); the
-  tuned *numbers* are fabric-flavoured (this is what
-  ``runtime/backend/_<vendor>/tune_configs.yaml`` holds per vendor), the
-  kernel bodies and bucketing *logic* are portable.
-* No vendor intrinsic, no atomics, no ``torch.matmul``/``torch.ops``/cached
-  kernel fallback — the core computation is entirely these two
-  ``@triton.jit`` kernels.
-* The additive penalty used to "drop" an already-chosen expert slot out of
-  a subsequent ``tl.max(..., return_indices=True)`` pass is the local
-  literal ``_PEN = 1.0e38``
-  defined inside the jit'd kernel (Triton cannot resolve a module-level
-  float global from within ``@triton.jit`` in this runtime version).
+* Device follows ``flaggems_sglang.device``; no vendor names.
+* No module-level mutable state: launch configs are a pure function of
+  ``(M, E, H, dtype)`` with a grid-limit ladder (flat grid <= 65535,
+  RT doubles when a bigger M would overflow).
+* No atomics, no torch fallback, no vendor intrinsic.
 """
 
 from __future__ import annotations
@@ -143,164 +171,117 @@ import flaggems_sglang
 
 
 @triton.jit
-def _gemm_logits_kernel(
-    x_ptr,  # [M, H] (fp32 / bf16 / fp16)
-    w_ptr,  # [E, H] (fp32 / bf16 / fp16)
+def _gemm_dot_kernel(
+    x_ptr,  # [M, H] bf16
+    w_ptr,  # [E, H] bf16
     bias_ptr,  # [E] (fp32) or dummy
-    logits_ptr,  # [M, E] fp32  (output, post-softcap + post-bias)
-    M,
-    H,
-    E,
-    moe_softcapping,
-    BLOCK_E: tl.constexpr,  # next_pow2(E)
-    BLOCK_K: tl.constexpr,  # K (H) reduction tile
-    ROW_TILE: tl.constexpr,  # rows per program (pow2)
-    SOFTCAP: tl.constexpr,  # moe_softcapping != 0.0
+    logits_ptr,  # [M, E] fp32 (output, post-softcap + post-bias)
+    M: tl.constexpr,
+    H: tl.constexpr,
+    E: tl.constexpr,
+    SXB: tl.constexpr,  # x row stride
+    SXH: tl.constexpr,  # x col stride
+    SWE: tl.constexpr,  # w row (expert) stride
+    SWH: tl.constexpr,  # w col stride
+    SLB: tl.constexpr,  # logits row stride
+    SLE: tl.constexpr,  # logits col stride
+    CAP: tl.constexpr,  # moe_softcapping (unused when SOFTCAP is False)
+    SOFTCAP: tl.constexpr,
     HAS_BIAS: tl.constexpr,
-    E_IS_FULL: tl.constexpr,  # BLOCK_E == E (no expert padding)
-    H_ALIGNED: tl.constexpr,  # H % BLOCK_K == 0 (no K-tail mask)
-    X_F32: tl.constexpr,  # x is fp32 (force IEEE fp32 matmul)
-    W_F32: tl.constexpr,  # w is fp32
+    BLOCK_N: tl.constexpr,  # expert-tile width (32/64)
+    BLOCK_K: tl.constexpr,  # K tile = next_pow2(H): full-K single dot
+    PAD_M: tl.constexpr,  # row padding (32: whole MMA row batches)
 ):
-    pid = tl.program_id(0)
-    row_start = pid * ROW_TILE
-    row_offs = row_start + tl.arange(0, ROW_TILE)  # [ROW_TILE]
-    row_mask = row_offs < M  # [ROW_TILE]
-
-    e_offs = tl.arange(0, BLOCK_E)  # [BLOCK_E]
-    e_mask = e_offs < E
-
-    # ---- GEMM: logits[row, e] = sum_k x[row, k] * w[e, k]  (tensor core) ----
-    # Accumulate the full [ROW_TILE, BLOCK_E] logits tile over a K-loop.
-    # The source w layout is [E, H] (row e, col k); we load the tile indexed
-    # as w_block[k, e] = w[e, k] so tl.dot's contracting K axis (axis 0 of the
-    # tile) is the H axis: [ROW_TILE, BLOCK_K] @ [BLOCK_K, BLOCK_E] -> [ROW_TILE, BLOCK_E].
-    acc = tl.zeros((ROW_TILE, BLOCK_E), dtype=tl.float32)
-    for k0 in range(0, H, BLOCK_K):
-        k_offs = k0 + tl.arange(0, BLOCK_K)  # [BLOCK_K]
-        x_ptrs = x_ptr + row_offs[:, None] * H + k_offs[None, :]
-        w_ptrs = w_ptr + e_offs[None, :] * H + k_offs[:, None]
-        if H_ALIGNED:
-            # Fast path: H is a multiple of BLOCK_K, so every K-tile is full —
-            # drop the K-tail mask entirely (fewer live masks, less predicated
-            # memory traffic on the only loop in the kernel). Only the row
-            # padding mask on x remains (M may not be a multiple of ROW_TILE),
-            # and, when E isn't a power of two, the expert padding mask on w.
-            x_block = tl.load(x_ptrs, mask=row_mask[:, None], other=0.0)
-            if E_IS_FULL:
-                w_block = tl.load(w_ptrs)
-            else:
-                w_block = tl.load(w_ptrs, mask=e_mask[None, :], other=0.0)
-        else:
-            k_mask = k_offs < H  # [BLOCK_K]
-            x_block = tl.load(
-                x_ptrs, mask=row_mask[:, None] & k_mask[None, :], other=0.0
-            )
-            w_block = tl.load(
-                w_ptrs, mask=k_mask[:, None] & e_mask[None, :], other=0.0
-            )
-
-        # The 3-operand ``tl.dot(a, b, acc)`` form feeds the running
-        # accumulator straight into the MMA, so the backend folds the
-        # accumulate into the tensor-core instruction instead of emitting a
-        # separate full-tile fp32 add per K-iteration. Same arithmetic as
-        # ``acc += tl.dot(...)``, one fewer [ROW_TILE, BLOCK_E] op per
-        # iteration — which matters most on the wide-tile buckets
-        # (``ROW_TILE = 1024`` at m=4096) where that add is register-bound.
-        if X_F32 or W_F32:
-            # fp32 inputs: run the IEEE fp32 matmul the reference uses, so the
-            # float32 tolerance (atol/rtol 1e-4) is met bit-for-bit.
-            acc = tl.dot(
-                x_block.to(tl.float32),
-                w_block.to(tl.float32),
-                acc,
-                input_precision="ieee",
-            )
-        else:
-            # bf16 / fp16 inputs: keep the operands in their native precision
-            # so ``tl.dot`` lowers to the native MMA (tensor core) on the
-            # bf16/fp16 tensor path. A bf16 * bf16 product (8 mantissa bits
-            # each -> 16-bit product) is exactly representable in fp32, so
-            # the fp32 accumulator still matches the reference within the
-            # bf16 tolerance (1.5e-2). This is the tensor-core path the
-            # "tensorcore variant" is built around; the fp32-IEEE path above
-            # is only for the fp32 correctness cases.
-            acc = tl.dot(x_block, w_block, acc, out_dtype=tl.float32)
+    # MMA arm (fused_moe_gemm / fused_moe_router_cudacore proven form):
+    # full-K single tl.dot per (m-tile, n-tile) program — runtime-loop
+    # dots with >= 2 iterations miscompile on this backend, so the K
+    # dimension is never looped. bf16 operands, fp32 accumulate.
+    pid_m = tl.program_id(0)
+    pid_n = tl.program_id(1)
+    m0 = pid_m * PAD_M
+    p_a = tl.make_block_ptr(
+        x_ptr + m0 * SXB,
+        (M - m0, H),
+        (SXB, SXH),
+        (0, 0),
+        (PAD_M, BLOCK_K),
+        (1, 0),
+    )
+    a = tl.load(p_a, boundary_check=(0, 1))
+    n0 = pid_n * BLOCK_N
+    p_b = tl.make_block_ptr(
+        w_ptr,
+        (H, E),
+        (SWH, SWE),
+        (0, n0),
+        (BLOCK_K, BLOCK_N),
+        (0, 1),
+    )
+    b = tl.load(p_b, boundary_check=(0, 1))
+    acc = tl.dot(a, b, out_dtype=tl.float32)
 
     # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
     if SOFTCAP:
-        acc = moe_softcapping * libdevice.tanh(acc / moe_softcapping)
+        acc = CAP * libdevice.tanh(acc / CAP)
 
     # ---- optional expert correction bias (in registers) ----
     if HAS_BIAS:
-        bias = tl.load(bias_ptr + e_offs, mask=e_mask, other=0.0).to(
+        offs_nb = n0 + tl.arange(0, BLOCK_N)
+        bias = tl.load(bias_ptr + offs_nb, mask=offs_nb < E, other=0.0).to(
             tl.float32
         )
-        acc = acc + bias[None, :]
+        acc += bias[None, :]
 
-    # ---- store the final [ROW_TILE, E] logits tile ----
-    if E_IS_FULL:
-        tl.store(
-            logits_ptr + row_offs[:, None] * E + e_offs[None, :],
-            acc,
-            mask=row_mask[:, None],
-        )
-    else:
-        tl.store(
-            logits_ptr + row_offs[:, None] * E + e_offs[None, :],
-            acc,
-            mask=row_mask[:, None] & e_mask[None, :],
-        )
+    # ---- 2-D affine masked store of this [PAD_M, BLOCK_N] logits tile ----
+    offs_m = m0 + tl.arange(0, PAD_M)
+    offs_n = n0 + tl.arange(0, BLOCK_N)
+    tl.store(
+        logits_ptr + offs_m[:, None] * SLB + offs_n[None, :] * SLE,
+        acc,
+        mask=(offs_m[:, None] < M) & (offs_n[None, :] < E),
+    )
 
 
 @triton.jit
-def _gemm_etile_kernel(
-    x_ptr,  # [M, H] (fp32 / bf16 / fp16)
-    w_ptr,  # [E, H] (fp32 / bf16 / fp16)
+def _gemm_kloop_kernel(
+    x_ptr,  # [M, H] bf16
+    w_ptr,  # [E, H] bf16
     bias_ptr,  # [E] (fp32) or dummy
-    logits_ptr,  # [M, E] fp32  (output, post-softcap + post-bias)
+    logits_ptr,  # [M, E] fp32 (output, post-softcap + post-bias)
     M,
     H,
     E,
     moe_softcapping,
-    BLOCK_E: tl.constexpr,  # E-tile width this program owns (power of two)
+    BLOCK_E: tl.constexpr,  # E-tile width per program
     BLOCK_K: tl.constexpr,  # K (H) reduction tile
-    ROW_TILE: tl.constexpr,  # rows per program (pow2)
-    SOFTCAP: tl.constexpr,  # moe_softcapping != 0.0
+    ROW_TILE: tl.constexpr,  # rows per program
+    SOFTCAP: tl.constexpr,
     HAS_BIAS: tl.constexpr,
-    E_TILE_FULL: tl.constexpr,  # this E-tile is full (e_start+BLOCK_E <= E)
+    E_TILE_FULL: tl.constexpr,  # E % BLOCK_E == 0 (no expert mask)
     H_ALIGNED: tl.constexpr,  # H % BLOCK_K == 0 (no K-tail mask)
-    X_F32: tl.constexpr,  # x is fp32 (force IEEE fp32 matmul)
-    W_F32: tl.constexpr,  # w is fp32
 ):
-    # 2D grid: (program over ROW_TILE blocks, program over E-tiles). Each
-    # program owns a disjoint [ROW_TILE, BLOCK_E] slice of the [M, E] logits
-    # output — no overlap, no atomics, no reduction kernel. The point vs the
-    # 1-D (full-E) ``_gemm_logits_kernel`` is *occupancy*: for the mid-size M
-    # bucket (m=512, E=256) the full-E kernel launches only 2 programs (one
-    # per ROW_TILE block) on a fabric with far more tensor-core lanes, so it
-    # is latency-/occupancy-bound, not bandwidth- or compute-bound. Splitting
-    # E into 2 tiles doubles the program count (2 x 2 = 4) while keeping each
-    # program's [ROW_TILE, BLOCK_E] tile wide enough ([512, 128] at m=512) to
-    # stay tensor-core-efficient, and lets a single M-program cover all of M
-    # (ROW_TILE=512 == m=512, zero row padding). Each program still does the
-    # whole H reduction independently, so this trades a little redundant
-    # x-operand traffic (each E-tile re-reads its share of x) for the
-    # occupancy win — measured ~63us -> ~56us on the GEMM alone at m=512.
+    # K-loop MMA arm (2026-11-12 dot re-migration, large-M path): each
+    # program owns a [ROW_TILE, BLOCK_E] logits slice and walks the full H
+    # reduction with the 3-operand ``tl.dot(a, b, acc)`` form so the running
+    # accumulator feeds straight into the MMA (one fewer full-tile fp32 add
+    # per K-iteration). Large ROW_TILE amortises the w-tile re-reads that
+    # the PAD_M=32 arm pays per 32-row batch; the smaller BLOCK_K keeps the
+    # operand tiles inside the DSM budget ((RT+BE)*BK*2B <= 786432B).
+    # Verified numerically correct on the P01a-lifted toolchain (the 11-07
+    # build's multi-iteration runtime-loop dot miscompile does not
+    # reproduce; probe 2026-11-12, max|dlogit| 1.5e-4 @ bf16 tolerance).
     pid_m = tl.program_id(0)
     pid_e = tl.program_id(1)
     row_start = pid_m * ROW_TILE
-    row_offs = row_start + tl.arange(0, ROW_TILE)  # [ROW_TILE]
-    row_mask = row_offs < M  # [ROW_TILE]
-
+    row_offs = row_start + tl.arange(0, ROW_TILE)
+    row_mask = row_offs < M
     e_start = pid_e * BLOCK_E
-    e_offs = e_start + tl.arange(0, BLOCK_E)  # [BLOCK_E]
+    e_offs = e_start + tl.arange(0, BLOCK_E)
     e_mask = e_offs < E
 
-    # ---- GEMM: logits[row, e] = sum_k x[row, k] * w[e, k]  (tensor core) ----
     acc = tl.zeros((ROW_TILE, BLOCK_E), dtype=tl.float32)
     for k0 in range(0, H, BLOCK_K):
-        k_offs = k0 + tl.arange(0, BLOCK_K)  # [BLOCK_K]
+        k_offs = k0 + tl.arange(0, BLOCK_K)
         x_ptrs = x_ptr + row_offs[:, None] * H + k_offs[None, :]
         w_ptrs = w_ptr + e_offs[None, :] * H + k_offs[:, None]
         if H_ALIGNED:
@@ -310,24 +291,14 @@ def _gemm_etile_kernel(
             else:
                 w_block = tl.load(w_ptrs, mask=e_mask[None, :], other=0.0)
         else:
-            k_mask = k_offs < H  # [BLOCK_K]
+            k_mask = k_offs < H
             x_block = tl.load(
                 x_ptrs, mask=row_mask[:, None] & k_mask[None, :], other=0.0
             )
             w_block = tl.load(
                 w_ptrs, mask=k_mask[:, None] & e_mask[None, :], other=0.0
             )
-
-        # 3-operand dot: accumulate inside the MMA (see _gemm_logits_kernel).
-        if X_F32 or W_F32:
-            acc = tl.dot(
-                x_block.to(tl.float32),
-                w_block.to(tl.float32),
-                acc,
-                input_precision="ieee",
-            )
-        else:
-            acc = tl.dot(x_block, w_block, acc, out_dtype=tl.float32)
+        acc = tl.dot(x_block, w_block, acc, out_dtype=tl.float32)
 
     # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
     if SOFTCAP:
@@ -340,7 +311,7 @@ def _gemm_etile_kernel(
         )
         acc = acc + bias[None, :]
 
-    # ---- store this program's [ROW_TILE, BLOCK_E] E-slice of the logits ----
+    # ---- store this program's [ROW_TILE, BLOCK_E] slice of the logits ----
     if E_TILE_FULL:
         tl.store(
             logits_ptr + row_offs[:, None] * E + e_offs[None, :],
@@ -356,96 +327,178 @@ def _gemm_etile_kernel(
 
 
 @triton.jit
-def _gemv_logits_kernel(
-    x_ptr,  # [1, H] (fp32 / bf16 / fp16) — M==1 specialised path
-    w_ptr,  # [E, H]
+def _gemm_rows_kernel(
+    x_ptr,  # [M, H] (fp32 / bf16 / fp16)
+    w_ptr,  # [E, H] (fp32 / bf16 / fp16)
     bias_ptr,  # [E] (fp32) or dummy
-    logits_ptr,  # [1, E] fp32  (output, post-softcap + post-bias)
+    logits_ptr,  # [M, E] fp32  (output, post-softcap + post-bias)
+    M,
     H,
     E,
     moe_softcapping,
-    BLOCK_E: tl.constexpr,  # E-tile width per program (power of two, >= 16)
-    BLOCK_K: tl.constexpr,  # K (H) reduction tile
+    BE_RT,  # runtime expert-tile width (== BE value; runtime keeps the
+    # pid-derived scalar chain off the broken constexpr-fold path)
+    NRT_RT,  # runtime row-tile count (grid = num_e_tiles * NRT_RT)
+    BE: tl.constexpr,  # experts per program (pow2, >= 4)
+    BK: tl.constexpr,  # K (H) reduction tile
+    RT: tl.constexpr,  # rows per program
     SOFTCAP: tl.constexpr,  # moe_softcapping != 0.0
     HAS_BIAS: tl.constexpr,
-    E_IS_FULL: tl.constexpr,  # BLOCK_E covers E exactly (no expert padding)
-    H_ALIGNED: tl.constexpr,  # H % BLOCK_K == 0 (no K-tail mask — the GEMV's
-    # single K-tile is exactly H, the mask is all-true)
-    X_F32: tl.constexpr,  # x is fp32 (force IEEE fp32)
-    W_F32: tl.constexpr,  # w is fp32
 ):
-    # M==1 specialised GEMV path: ``logits[1, e] = sum_k x[k] * w[e, k]``.
-    # ``tl.dot`` needs a contracting M axis >= 16, so the general GEMM
-    # kernel above has to pad the single row to ROW_TILE=8/16 (7 wasted rows
-    # of accumulator + a [8, 256] register tile). For a true single-row GEMV
-    # the [BLOCK_E, BLOCK_K] w-tile dotted against the [BLOCK_K] x-vector is a
-    # rank-1 update that ``tl.sum(w * x[None,:], axis=1)`` computes directly —
-    # no ``tl.dot`` needed, no row padding, and a much smaller register footprint
-    # (a [BLOCK_E] vector vs a [ROW_TILE, BLOCK_E] tile). That lets this kernel
-    # use a *wider* BLOCK_E per program (128 experts at E=256 -> 2 programs)
-    # without spilling, and cuts the m=1 GEMM from ~26us (padded ``tl.dot``) to
-    # ~19us. Measured m=1 full op: 38.6us -> 34.4us (~11% / ~2.78x vs ref).
-    #
-    # Grid: (1, num_E_tiles) — one row (M==1), E split into BLOCK_E tiles for
-    # occupancy (the GEMM kernel's 1 program under-occupies the fabric). Each
-    # program owns a disjoint [BLOCK_E] E-slice of the [1, E] logits — no
-    # overlap, no atomics.
-    pid_e = tl.program_id(1)
-    e_start = pid_e * BLOCK_E
-    e_offs = e_start + tl.arange(0, BLOCK_E)  # [BLOCK_E]
-    e_mask = e_offs < E
+    # grid = (num_e_tiles * NRT_RT,) flat. Tile decomposition via runtime
+    # div/mod keeps every address a scalar base + arange vector — the only
+    # address form the current toolchain lowers correctly at every tile
+    # offset (probe28 g29 all-pass).
+    pid = tl.program_id(0)
+    e_tile = pid // NRT_RT
+    row_tile = pid % NRT_RT
+    e0 = e_tile * BE_RT
+    row0 = row_tile * RT
+    k_offs = tl.arange(0, BK)
 
-    acc = tl.zeros((BLOCK_E,), dtype=tl.float32)
-    for k0 in range(0, H, BLOCK_K):
-        k_offs = k0 + tl.arange(0, BLOCK_K)  # [BLOCK_K]
-        # x is [1, H]: row 0 only. x_vec is the [BLOCK_K] K-slice of that row.
-        # w is [E, H] (row e, col k); load the [BLOCK_E, BLOCK_K] tile
-        # w[e, k] = w_block[e_local, k_local].
-        w_ptrs = w_ptr + e_offs[:, None] * H + k_offs[None, :]
-        if H_ALIGNED:
-            # Fast path: BLOCK_K divides H (for the bench shape BLOCK_K == H ==
-            # 4096, so the single K-tile is exactly full), so the K-tail mask
-            # is all-true — drop it for fewer live masks / less predicated
-            # memory traffic on the only loop in the kernel. The E-tile
-            # padding mask (e_mask) only applies when E isn't a power of two.
-            x_vec = tl.load(x_ptr + k_offs)
-            if E_IS_FULL:
-                w_block = tl.load(w_ptrs)
-            else:
-                w_block = tl.load(w_ptrs, mask=e_mask[:, None], other=0.0)
-        else:
-            k_mask = k_offs < H
-            x_vec = tl.load(x_ptr + k_offs, mask=k_mask, other=0.0)
-            if E_IS_FULL:
-                w_block = tl.load(w_ptrs, mask=k_mask[None, :], other=0.0)
-            else:
-                w_block = tl.load(
-                    w_ptrs, mask=e_mask[:, None] & k_mask[None, :], other=0.0
+    for r in range(RT):
+        row = row0 + r
+        rm = row < M
+        acc = tl.zeros((BE,), dtype=tl.float32)
+        for k0 in range(0, H, BK):
+            kk = k0 + k_offs
+            km = kk < H
+            xv = tl.load(x_ptr + row * H + kk, mask=rm & km, other=0.0)
+            for e in range(BE):  # static unroll: scalar w-row loads
+                wv = tl.load(
+                    w_ptr + (e0 + e) * H + kk,
+                    mask=(e0 + e < E) & km,
+                    other=0.0,
                 )
-        # acc[e] += sum_k w[e, k] * x[k]  (elementwise-vec-mul + K-reduce)
-        if X_F32 or W_F32:
-            acc += tl.sum(
-                w_block.to(tl.float32) * x_vec[None, :].to(tl.float32), axis=1
-            )
-        else:
-            acc += tl.sum(w_block.to(tl.float32) * x_vec[None, :], axis=1)
+                s = tl.sum(wv.to(tl.float32) * xv.to(tl.float32))
+                acc += tl.where(tl.arange(0, BE) == e, s, 0.0)
 
-    # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
+        # ---- optional logit softcap: tanh(logits / cap) * cap (in registers) ----
+        if SOFTCAP:
+            acc = moe_softcapping * libdevice.tanh(acc / moe_softcapping)
+
+        # ---- optional expert correction bias (in registers) ----
+        if HAS_BIAS:
+            bias = tl.load(
+                bias_ptr + e0 + tl.arange(0, BE),
+                mask=(e0 + tl.arange(0, BE)) < E,
+                other=0.0,
+            ).to(tl.float32)
+            acc = acc + bias
+
+        # ---- store this row's [BE] slice: scalar base + arange ----
+        tl.store(
+            logits_ptr + row * E + e0 + tl.arange(0, BE),
+            acc,
+            mask=rm & ((e0 + tl.arange(0, BE)) < E),
+        )
+
+
+@triton.jit
+def _gemv_row_kernel(
+    x_ptr,  # [1, H]
+    w_ptr,  # [E, H]
+    bias_ptr,  # [E] (fp32) or dummy
+    logits_ptr,  # [1, E] fp32
+    H,
+    E,
+    moe_softcapping,
+    BE_RT,  # runtime expert-tile width
+    BE: tl.constexpr,
+    BK: tl.constexpr,
+    SOFTCAP: tl.constexpr,
+    HAS_BIAS: tl.constexpr,
+):
+    # M == 1 specialised path: grid = (num_e_tiles,); the single row is a
+    # constant base (no row arithmetic at all).
+    pid = tl.program_id(0)
+    e0 = pid * BE_RT
+    k_offs = tl.arange(0, BK)
+    acc = tl.zeros((BE,), dtype=tl.float32)
+    for k0 in range(0, H, BK):
+        kk = k0 + k_offs
+        km = kk < H
+        xv = tl.load(x_ptr + kk, mask=km, other=0.0)
+        for e in range(BE):
+            wv = tl.load(
+                w_ptr + (e0 + e) * H + kk, mask=(e0 + e < E) & km, other=0.0
+            )
+            s = tl.sum(wv.to(tl.float32) * xv.to(tl.float32))
+            acc += tl.where(tl.arange(0, BE) == e, s, 0.0)
+
     if SOFTCAP:
         acc = moe_softcapping * libdevice.tanh(acc / moe_softcapping)
-
-    # ---- optional expert correction bias (in registers) ----
     if HAS_BIAS:
-        bias = tl.load(bias_ptr + e_offs, mask=e_mask, other=0.0).to(
-            tl.float32
-        )
+        bias = tl.load(
+            bias_ptr + e0 + tl.arange(0, BE),
+            mask=(e0 + tl.arange(0, BE)) < E,
+            other=0.0,
+        ).to(tl.float32)
         acc = acc + bias
+    tl.store(
+        logits_ptr + e0 + tl.arange(0, BE),
+        acc,
+        mask=(e0 + tl.arange(0, BE)) < E,
+    )
 
-    # ---- store this program's [BLOCK_E] E-slice of the [1, E] logits ----
+
+@triton.jit
+def _post_rows_kernel(
+    logits_ptr,  # [M, E] fp32 (post-softcap + post-bias)
+    weights_ptr,  # [M, topk] fp32
+    indices_ptr,  # [M, topk] int32
+    M,
+    E,
+    BLOCK_E: tl.constexpr,  # next_pow2(E)
+    TOPK: tl.constexpr,
+    BLOCK_TOPK: tl.constexpr,  # next_pow2(topk)
+    E_IS_FULL: tl.constexpr,  # BLOCK_E == E (no expert padding)
+):
+    # One program per token row (1-D [E] load) — the small-M post form:
+    # at M <= 64 the per-row programs already fill the fabric and the
+    # 2-D tile form's fewer, fatter programs lose (measured 13.8us vs
+    # ~5us at m=64). Three tree reductions (max-with-index, exp-sum,
+    # penalised max-with-index); closed-form weights are bit-identical to
+    # gather(probs, topk_ids) because a max reduction returns one of its
+    # inputs verbatim.
+    row = tl.program_id(0)
+    if row >= M:
+        return
+    offs = tl.arange(0, BLOCK_E)
     if E_IS_FULL:
-        tl.store(logits_ptr + e_offs, acc)
+        logits = tl.load(logits_ptr + row * E + offs)
+        sm_max, idx0 = tl.max(logits, axis=0, return_indices=True)
+        e_exp = tl.exp(logits - sm_max)
+        sm_denom = tl.sum(e_exp, axis=0)
     else:
-        tl.store(logits_ptr + e_offs, acc, mask=e_mask)
+        em = offs < E
+        logits = tl.load(
+            logits_ptr + row * E + offs, mask=em, other=float("-inf")
+        )
+        sm_max, idx0 = tl.max(logits, axis=0, return_indices=True)
+        e_exp = tl.exp(logits - sm_max) * em
+        sm_denom = tl.sum(e_exp, axis=0)
+
+    _PEN = 1.0e38
+    if TOPK >= 2:
+        cur = logits - (offs == idx0).to(tl.float32) * _PEN
+        val1, idx1 = tl.max(cur, axis=0, return_indices=True)
+        w0 = 1.0 / sm_denom
+        w1 = tl.exp(val1 - sm_max) / sm_denom
+        k_offs = tl.arange(0, BLOCK_TOPK)
+        sel_idx = tl.where(k_offs == 0, idx0, idx1)
+        sel_w = tl.where(k_offs == 0, w0, w1)
+        out_mask = k_offs < TOPK
+        tl.store(weights_ptr + row * TOPK + k_offs, sel_w, mask=out_mask)
+        tl.store(
+            indices_ptr + row * TOPK + k_offs,
+            sel_idx.to(tl.int32),
+            mask=out_mask,
+        )
+    else:
+        w0 = 1.0 / sm_denom
+        tl.store(weights_ptr + row * TOPK, w0)
+        tl.store(indices_ptr + row * TOPK, idx0.to(tl.int32))
 
 
 @triton.jit
@@ -460,17 +513,34 @@ def _post_kernel(
     TOPK: tl.constexpr,
     BLOCK_TOPK: tl.constexpr,  # next_pow2(topk)
     E_IS_FULL: tl.constexpr,  # BLOCK_E == E (no expert padding)
+    M_ALIGNED: tl.constexpr,  # M % ROW_TILE == 0 (no row mask needed)
 ):
+    # 2-D tile post stage (2026-11-13 round-3 rewrite): each program owns a
+    # [ROW_TILE, BLOCK_E] logits tile and does the row softmax + top-2 +
+    # closed-form weight extraction entirely in registers. The previous
+    # form's two ``tl.max(..., return_indices=True)`` reductions cost 5.4x
+    # the whole stage (ablation: a plain load/max/exp-sum kernel runs at the
+    # load-store floor, adding index tracking + the penalised second max
+    # costs +86us @ m=4096); this form tracks indices with the index-free
+    # selection algebra (``tl.min(tl.where(x == max, offs, E))`` — leftmost
+    # tied index, the same ``torch.topk`` tie-break the tracked max
+    # provided) and is bit-identical on weights and indices (22-case verify
+    # battery incl. all-equal rows, quantised ties, real GEMM logits). The
+    # top-1 weight stays the closed form ``1/sm_denom`` (a max returns its
+    # input verbatim, so ``logits[idx0] == sm_max`` exactly) and the top-2
+    # weight is ``exp(val1 - sm_max)/sm_denom`` with ``val1 = logits[idx1]``
+    # recovered exactly from the penalised-tile max.
     pid = tl.program_id(0)
     row_start = pid * ROW_TILE
-    row_offs = row_start + tl.arange(0, ROW_TILE)  # [ROW_TILE]
-    row_mask = row_offs < M  # [ROW_TILE]
-
-    e_offs = tl.arange(0, BLOCK_E)  # [BLOCK_E]
+    row_offs = row_start + tl.arange(0, ROW_TILE)
+    row_mask = row_offs < M
+    e_offs = tl.arange(0, BLOCK_E)
     e_mask = e_offs < E
 
     # ---- load the [ROW_TILE, E] logits tile (padded slots -> -inf) ----
-    if E_IS_FULL:
+    if M_ALIGNED and E_IS_FULL:
+        logits = tl.load(logits_ptr + row_offs[:, None] * E + e_offs[None, :])
+    elif E_IS_FULL:
         logits = tl.load(
             logits_ptr + row_offs[:, None] * E + e_offs[None, :],
             mask=row_mask[:, None],
@@ -483,83 +553,43 @@ def _post_kernel(
             other=float("-inf"),
         )
 
-    # ---- global softmax over all E experts (padded slots excluded) ----
-    # ``tl.max(..., return_indices=True)`` lowers to one hardware reduction
-    # that returns BOTH the row max and its (lowest-index) position, so we get
-    # ``sm_max`` and ``idx0`` (the top-1 index) in a single pass. ``tl.max``'s
-    # ``return_indices_tie_break_left`` default matches ``torch.topk``'s
-    # tie-break, so the produced expert indices are bit-identical to the
-    # reference. (Previously this was two separate reductions — a
-    # ``tl.max(logits)`` for ``sm_max`` and a ``tl.argmax(logits)`` for
-    # ``idx0`` — both scanning the whole tile; fusing them drops one full
-    # tile reduction.) The closed-form weights below reuse ``sm_max`` as
-    # ``logits[idx0]`` exactly (a max reduction returns one of its inputs
-    # verbatim), so ``w0 = exp(logits[idx0]-sm_max)/sm_denom = 1/sm_denom``.
+    # ---- row max + softmax denominator (plain reductions) ----
     if E_IS_FULL:
-        sm_max, idx0 = tl.max(logits, axis=1, return_indices=True)
-        e_exp = tl.exp(logits - sm_max[:, None])  # [ROW_TILE, BLOCK_E]
-        sm_denom = tl.sum(e_exp, axis=1)  # [ROW_TILE]
+        sm_max = tl.max(logits, axis=1)
+        e_exp = tl.exp(logits - sm_max[:, None])
+        sm_denom = tl.sum(e_exp, axis=1)
     else:
         masked = tl.where(e_mask[None, :], logits, float("-inf"))
-        sm_max, idx0 = tl.max(masked, axis=1, return_indices=True)
+        sm_max = tl.max(masked, axis=1)
         e_exp = tl.exp(logits - sm_max[:, None]) * e_mask[None, :]
         sm_denom = tl.sum(e_exp, axis=1)
 
-    # ---- top-K (K <= 2) selection on `logits` via iterative max-with-index ----
-    # ``tl.argmax`` ties to the lowest index, matching ``torch.topk``'s
-    # tie-break, so the produced indices are bit-identical to the reference.
-    # Additive penalty used to "drop" an already-chosen expert slot out of a
-    # subsequent pass — a local literal (see module docstring).
-    #
-    # NOTE: the 2nd argmax MUST run on the raw ``logits`` tile, not on the
-    # softmax exponent tile ``e_exp = exp(logits - sm_max)``. For rows whose
-    # 2nd-largest logit is far below the row max (common: the bench shapes
-    # have a sharp top-1 — e.g. row max ~252, runner-up ~163, gap ~89, and
-    # many other experts ~99 -> exp(-153) and exp(-89) BOTH underflow to 0.0
-    # in fp32), the ``exp`` collapses distinct runner-up logits to identical
-    # 0.0, so ``argmax(e_exp)`` resolves ties to index 0 — garbage. The raw
-    # logits tile keeps every slot distinct, so the penalty-on-logits pass
-    # always recovers the true runner-up index. ``tl.max(cur,
-    # return_indices=True)`` returns both ``idx1`` and ``val1 = max(cur) =
-    # cur[idx1] = logits[idx1]`` exactly (a max reduction returns one of its
-    # inputs verbatim), so the closed-form ``w1 = exp(val1 - sm_max)/sm_denom``
-    # below is bit-identical to the reference.
-    _PEN = 1.0e38
-
-    if TOPK >= 2:
-        cur = logits - (e_offs[None, :] == idx0[:, None]).to(tl.float32) * _PEN
-        val1, idx1 = tl.max(cur, axis=1, return_indices=True)
+    # ---- top-1: leftmost index among the max-tied elements ----
+    if E_IS_FULL:
+        hit0 = logits == sm_max[:, None]
     else:
-        idx1 = idx0
-        val1 = sm_max
+        hit0 = (logits == sm_max[:, None]) & e_mask[None, :]
+    idx0 = tl.min(tl.where(hit0, e_offs[None, :], BLOCK_E), axis=1)
 
-    # ---- gathered softmax weights, derived without a full-tile gather ----
-    # ``sm_max = max(logits) = logits[idx0]`` exactly (a max reduction returns
-    # one of its inputs verbatim), so:
-    #   w0 = probs[idx0] = exp(logits[idx0]-sm_max)/sm_denom = 1/sm_denom
-    #   w1 = probs[idx1] = exp(logits[idx1]-sm_max)/sm_denom = exp(val1-sm_max)/sm_denom
-    # The fused ``tl.max(cur, return_indices=True)`` pass above returns both
-    # ``val1 = max(cur) = cur[idx1] = logits[idx1]`` exactly and ``idx1`` in
-    # one hardware reduction (a max reduction returns one of its inputs
-    # verbatim, no rounding), so no second value scan. No
-    # ``tl.where``+``tl.sum`` gather, no full-tile probs divide.
-    if TOPK >= 2:
-        w0 = 1.0 / sm_denom
-        w1 = tl.exp(val1 - sm_max) / sm_denom
-    else:
-        w0 = 1.0 / sm_denom
-        w1 = w0
+    # ---- top-2: penalise the winner, plain max, leftmost tied index ----
+    rem = tl.where(e_offs[None, :] == idx0[:, None], float("-inf"), logits)
+    if not E_IS_FULL:
+        rem = tl.where(e_mask[None, :], rem, float("-inf"))
+    val1 = tl.max(rem, axis=1)
+    hit1 = rem == val1[:, None]
+    idx1 = tl.min(tl.where(hit1, e_offs[None, :], BLOCK_E), axis=1)
 
-    # ---- assemble the [ROW_TILE, BLOCK_TOPK] output tiles ----
+    w0 = 1.0 / sm_denom
+    w1 = tl.exp(val1 - sm_max) / sm_denom
+
+    # ---- assemble and store the [ROW_TILE, topk] output tiles ----
     k_offs = tl.arange(0, BLOCK_TOPK)
     sel_idx = tl.where(k_offs[None, :] == 0, idx0[:, None], idx1[:, None])
     sel_w = tl.where(k_offs[None, :] == 0, w0[:, None], w1[:, None])
-
-    # ---- store the [ROW_TILE, topk] outputs ----
     out_mask = row_mask[:, None] & (k_offs[None, :] < TOPK)
     out2d = row_offs[:, None] * TOPK + k_offs[None, :]
     tl.store(weights_ptr + out2d, sel_w, mask=out_mask)
-    tl.store(indices_ptr + out2d, sel_idx, mask=out_mask)
+    tl.store(indices_ptr + out2d, sel_idx.to(tl.int32), mask=out_mask)
 
 
 def _next_pow2(x: int) -> int:
@@ -569,247 +599,193 @@ def _next_pow2(x: int) -> int:
     return p
 
 
-def _gemv_launch_cfg(e: int):
-    """Pick (BLOCK_E, BLOCK_K, num_warps) for the M==1 specialised GEMV path.
+# ---------------------------------------------------------------------------
+# Launch configs (probe28 sweep, 2026-11-08, bench shapes H=4096/E=256/bf16,
+# triton.testing.do_bench median): the dot-free tree form's per-M optima.
+#   M=1    gemv  BE8/BK4096            13.8us  (11-07 dot build: 8.3us)
+#   M=8    BE16/BK4096/RT1             64.2us  (11-07: 11.4us)
+#   M=64   BE8 /BK4096/RT1            328.0us  (11-07: 14.1us)
+#   M=512  BE16/BK4096/RT4           2157.6us  (11-07: 49.0us)
+#   M=4096 BE16/BK4096/RT16         17345.8us  (11-07: 180.3us)
+# The regression is the toolchain's tl.dot blackout (vector-tree FMA tops
+# out ~2 orders below MMA throughput); see the module docstring + archive.
+# ---------------------------------------------------------------------------
 
-    The GEMV is a rank-1 update — its [BLOCK_E] vector accumulator is far
-    smaller than the GEMM's [ROW_TILE, BLOCK_E] tile, so a *wider* BLOCK_E per
-    program fits without spilling and the E-tile split is purely an occupancy
-    dial. A ``do_bench_us`` sweep at the bench shape (M=1, H=4096, E=256, bf16)
-    found the GEMV is fastest with:
+_GEMM_CFGS = (
+    # (BE, BK, RT) per M-bucket
+    (16, 4096, 1),  # m <= 8
+    (8, 4096, 1),  # m <= 64
+    (16, 4096, 4),  # m <= 512
+    (16, 4096, 16),  # m > 512
+)
 
-    * **BLOCK_E=128**: splits E=256 into 2 E-tiles -> 2 programs (the single-row
-      GEMM kernel launches only 1 program and under-occupies the fabric). The
-      [128] vector tile is small enough that 8 warps' worth of work fit; wider
-      (BLOCK_E=256, 1 program) loses the occupancy win, narrower
-      (BLOCK_E=64, 4 programs) over-launches and pays launch overhead.
-    * **BLOCK_K=4096**: collapses the H=4096 reduction to a single iteration —
-      no K-loop, no pipeline prologue. The [128, 4096] w-tile (1 MB bf16) fits
-      the operand path at this tile width.
-    * **num_warps=8**: drives the single full-K ``tl.sum`` reduction through the
-      fabric with maximum warp parallelism (w=4 is ~1us slower).
-
-    The tuned *numbers* are fabric-flavoured (this is what
-    ``runtime/backend/_<vendor>/tune_configs.yaml`` holds per vendor); the
-    kernel body and the bucketing *logic* are portable.
-    """
-    # BLOCK_E must be a power of two >= 16 (vector reductions below tl.dot's
-    # MMA minimum). Cap to next_pow2(E) so small-E cases still cover E in one or
-    # a few tiles.
-    be = 128
-    e_pow2 = _next_pow2(e)
-    if be > e_pow2:
-        be = e_pow2
-    if be < 16:
-        be = 16
-    return be, 4096, 8
+_GEMV_CFG = (8, 4096)  # (BE, BK) for M == 1
 
 
-def _use_gemv(m: int) -> bool:
-    """The M==1 GEMV path helps only when M is exactly one row. At M>1 the GEMV
-    grid would be (M, num_E_tiles) and each row-program re-reads its share of w
-    independently, multiplying the w-operand traffic by M (at m=8 this is ~3x
-    slower than the padded ``tl.dot`` GEMM). The padded GEMM stays for M >= 2.
-    """
-    return m == 1
-
-
-def _gemm_launch_cfg(m: int):
-    """Pick (ROW_TILE, BLOCK_K, num_warps, num_stages) for the GEMM stage on
-    this fabric (vendor=enflame, device=gcu).
-
-    The GEMM stage is the tensor-core GEMM ``[M, H] @ [E, H].T`` with the
-    optional softcap/bias applied in registers before the store. A
-    ``do_bench_us`` sweep over ROW_TILE x BLOCK_K x num_warps x num_stages
-    per M-bucket (with the post stage running optimally in a *separate*
-    kernel) found the GEMM alone is fastest with these configs:
-
-    * **m <= 8 (single program)**: launch-bound; a single-iteration full-K
-      GEMM (``BLOCK_K = H``) collapses the H=4096 reduction to one ``tl.dot``
-      and removes the loop / pipeline prologue — ``num_stages=1`` skips
-      pipelining entirely. ``ROW_TILE=8`` (the small-M floor) — the GCU
-      tensor core lowers ``tl.dot`` to its native MMA. ``num_warps=8`` drives
-      the single full-K ``tl.dot`` through the tensor core with max warp
-      parallelism (w=4 is ~0.5us slower).
-    * **m=64**: 2 programs at ``ROW_TILE=32``. ``BLOCK_K=4096`` (single full-K
-      iteration) beats the previous ``BLOCK_K=2048`` (2 iterations) on this
-      tile size — the [32, 256] tile fits the L1 for the whole K axis.
-      ``num_warps=4``, ``num_stages=2``.
-    * **m=512**: GEMM-bound, 2 programs at ``ROW_TILE=256``.
-      ``num_warps=8`` drives the wide [256, 256] logits tile through the
-      tensor core with twice the warp parallelism; ``num_stages=4`` hides
-      the w-load latency on the longer K-reduction. ``BLOCK_K=1024`` keeps
-      the operand tiles in L1 (``BLOCK_K=2048`` spills at w=8).
-    * **m=4096**: GEMM-bound, 4 programs at ``ROW_TILE=1024``.
-      ``BLOCK_K=512`` (8-iteration H=4096 reduction) — *smaller* K tiles win
-      at this row width: the [1024, 256] logits tile is register-pressure-
-      bound, and a smaller BLOCK_K halves the operand-tile footprint per
-      iteration (1024×512 vs 1024×1024), letting more loop iterations overlap
-      in the pipeline without spilling. ``num_warps=4`` (each warp owns a
-      256-row share of the 1024-row tile; w=8 at bk=512 oversubscribes and
-      spills ~1MB to local memory); ``num_stages=3``. Measured 189us -> 148us.
-
-    The tuned *numbers* are fabric-flavoured (this is what
-    ``runtime/backend/_<vendor>/tune_configs.yaml`` holds per vendor); the
-    kernel body and the bucketing *logic* are portable.
-    """
-    if m <= 1:
-        # m=1: single program, ROW_TILE=8. BLOCK_K=4096 collapses the H=4096
-        # reduction to one tl.dot; num_warps=8 for max parallelism on the
-        # single full-K MMA; num_stages=1 skips pipelining.
-        row_tile, block_k, warps, stages = 8, 4096, 8, 1
-    elif m <= 8:
-        # m=8: single program, ROW_TILE=8. BLOCK_K=4096 single-iteration GEMM.
-        # A ``do_bench_us`` sweep (median of 4, m=8 H=4096 E=256 bf16) found
-        # ``num_warps=16, num_stages=1`` (~31.95us) edges out the previous
-        # ``w=8, st=2`` (~32.68us) — the single full-K ``tl.dot`` has no
-        # pipeline to fill (st=1 keeps the prologue empty), and 16 warps
-        # spread the [8, 256] output tile across more warp lanes for this
-        # launch-bound small-M case. The win is ~0.7us / ~2% on the GEMM
-        # alone and flows straight through to the full m=8 op.
-        row_tile, block_k, warps, stages = 8, 4096, 16, 1
-    elif m <= 64:
-        # m=64: ROW_TILE=32 -> 2 programs (no padding). BLOCK_K=4096 makes the
-        # H=4096 reduction a single iteration (the [32,256] tile fits L1 for
-        # the whole K axis); num_warps=4, num_stages=2.
-        row_tile, block_k, warps, stages = 32, 4096, 4, 2
-    elif m <= 512:
-        # m=512: ROW_TILE=256 -> 2 programs. num_warps=8, num_stages=4,
-        # BLOCK_K=1024 keeps operand tiles in L1.
-        row_tile, block_k, warps, stages = 256, 1024, 8, 4
-    else:  # m > 512 (bench: m=4096)
-        # m=4096: ROW_TILE=1024 -> 4 programs. BLOCK_K=512 (smaller K tile halves
-        # the per-iteration operand footprint, letting more loop iterations
-        # overlap in the pipeline without spilling the [1024,256] tile);
-        # num_warps=4 (each warp owns 256 rows; w=8 oversubscribes and spills);
-        # num_stages=3.
-        row_tile, block_k, warps, stages = 1024, 512, 4, 3
-    return row_tile, block_k, warps, stages
-
-
-def _gemm_etile_launch_cfg(m: int):
-    """Pick (ROW_TILE, BLOCK_E_tile, BLOCK_K, num_warps, num_stages) for the
-    2-D (row x E-tile) tensor-core GEMM, used only where splitting the E
-    dimension buys more occupancy than the 1-D full-E kernel (see
-    ``_gemm_etile_kernel``). Currently this is the m=512 bench bucket.
-
-    A ``do_bench_us`` sweep over ROW_TILE x BLOCK_E x BLOCK_K x num_warps x
-    num_stages at m=512 (H=4096, E=256, bf16), with the post stage running
-    optimally in its own kernel, found the E-tiled GEMM is fastest at:
-
-    * **ROW_TILE=512**: a single M-program covers all of M (zero row
-      padding), so the program count comes entirely from the E-tile split —
-      2 programs (one per E-tile) for E=256 with BLOCK_E=128. Combined with
-      the M=1 program this is 1 x 2 = 2... actually 2 programs total, same as
-      the 1-D kernel's 2 programs at ROW_TILE=256. The win is that each
-      program's [512, 128] tile is a *better-shaped* MMA workload than the
-      1-D [256, 256] tile on this fabric's tensor core, and the wider
-      ROW_TILE halves the row-padding waste and the per-program launch
-      amortisation is better. ``num_warps=8`` drives the [512, 128] tile
-      through the tensor core; ``num_stages=4`` hides the w-load latency on
-      the H=4096 K-reduction; ``BLOCK_K=1024`` keeps the operand tiles in L1
-      (``BLOCK_K=2048`` spills at w=8).
-
-    Measured on the GEMM alone at m=512: 63us (1-D, ROW_TILE=256, BLOCK_E=256)
-    -> 56us (2-D, ROW_TILE=512, BLOCK_E=128), a ~7us / ~11% GEMM win, which
-    flows straight through to the full op (99us -> ~92us) since the post
-    stage is unchanged.
-
-    The tuned *numbers* are fabric-flavoured (this is what
-    ``runtime/backend/_<vendor>/tune_configs.yaml`` holds per vendor); the
-    kernel body and the bucketing *logic* are portable.
-    """
-    # m=512 bench bucket (H=4096, E=256): ROW_TILE=512 (covers all M in one
-    # M-program), BLOCK_E=128 (splits E=256 into 2 E-tiles -> 2 programs total),
-    # BLOCK_K=1024, num_warps=8, num_stages=4.
+def _m_bucket(m: int) -> int:
+    if m <= 8:
+        return 0
+    if m <= 64:
+        return 1
     if m <= 512:
-        row_tile, block_e, block_k, warps, stages = 512, 128, 1024, 8, 4
-    else:  # m > 512 (bench: m=4096) — E-tiling does NOT help here (already
-        # well-occupied at 4 ROW_TILE-blocks; splitting E just reduces per-
-        # program tile efficiency). Return the m=512 config; the caller only
-        # routes to this kernel for the m=512 bucket, never for m>512.
-        row_tile, block_e, block_k, warps, stages = 512, 128, 1024, 8, 4
-    return row_tile, block_e, block_k, warps, stages
+        return 2
+    return 3
 
 
-def _use_etile_gemm(m: int, e: int) -> bool:
-    """Decide whether to run the 2-D (row x E-tile) GEMM at all.
+# ---------------------------------------------------------------------------
+# MMA arm dispatch (2026-11-12 dot re-migration; config calibration from the
+# fused_moe_router_cudacore three-round probes: PAD_M=32, full-K single dot,
+# num_warps=1; BLOCK_N=64 only for M>=64 & E>=256 & E%64==0, else 32).
+# Domain guards keep unverified shapes on the dot-free arms; a one-shot
+# try/except permanently downgrades to the dot-free arm if the dot kernel
+# ever fails to build, so the re-migration is risk-free for correctness.
+# ---------------------------------------------------------------------------
 
-    E-tiling helps only when the 1-D (full-E) kernel is occupancy-bound —
-    i.e. few ROW_TILE-blocks AND E is large enough to split without going
-    below an MMA-efficient E-tile width. Gate it conservatively: only the
-    m=512 bench bucket (M in (256, 512]) with E >= 128. Outside that range
-    the 1-D full-E kernel stays (it's already optimal or launch-bound).
-    """
-    return 256 < m <= 512 and e >= 128
+_DOT_PAD_M = 32
+_dot_arm_broken = False
 
 
-def _post_launch_cfg(m: int):
-    """Pick (ROW_TILE, num_warps, num_stages) for the softmax+top-2+gather post stage.
+def _launch_gemm_dot(
+    x, router_weight, bias_arg, logits, m, h, e, cap, softcap, has_bias
+):
+    """MMA GEMM arm (bf16 operands, fp32 accumulate). Returns False when the
+    shape is outside the arm's domain or the kernel fails to build, in which
+    case the caller keeps the dot-free kernels as fallback."""
+    global _dot_arm_broken
+    if (
+        _dot_arm_broken
+        or m < 2
+        or h > 4096
+        or e < 64
+        or e > 8160  # grid.y = ceil(e / BLOCK_N) <= 255 at BLOCK_N=32
+        or (m + _DOT_PAD_M - 1) // _DOT_PAD_M > 65535
+        or x.dtype is not torch.bfloat16
+        or router_weight.dtype is not torch.bfloat16
+    ):
+        return False
+    if m >= 64 and e >= 256 and e % 64 == 0:
+        block_n = 64
+    else:
+        block_n = 32
+    sx = x.stride()
+    sw = router_weight.stride()
+    sl = logits.stride()
+    try:
+        _gemm_dot_kernel[
+            (
+                (m + _DOT_PAD_M - 1) // _DOT_PAD_M,
+                (e + block_n - 1) // block_n,
+            )
+        ](
+            x,
+            router_weight,
+            bias_arg,
+            logits,
+            m,
+            h,
+            e,
+            sx[0],
+            sx[1],
+            sw[0],
+            sw[1],
+            sl[0],
+            sl[1],
+            (cap if cap != 0.0 else 1.0),
+            softcap,
+            has_bias,
+            block_n,
+            _next_pow2(h),
+            _DOT_PAD_M,
+            num_warps=1,
+            num_stages=1,
+        )
+        return True
+    except Exception:
+        _dot_arm_broken = True
+        return False
 
-    This stage is bandwidth-/register-bound over the [M, E] fp32 logits tile
-    (no GEMM, no K-loop): each program loads a [ROW_TILE, BLOCK_E] tile and
-    does softmax + two argmax + the closed-form weight extraction (w0 =
-    1/sm_denom, w1 = exp(val1-sm_max)/sm_denom) entirely in registers. There
-    is no contracting K axis, so software pipelining (``num_stages``) is a
-    no-op on this kernel — it is explicitly set to 1 to keep the prologue
-    empty. A ``do_bench_us`` sweep (post stage only, fed precomputed logits)
-    found the post stage is fastest at a *large* ROW_TILE — small ROW_TILEs
-    pay launch/sync overhead per program and the per-program work is too
-    small to amortise it, while a large ROW_TILE amortises the launch across
-    more rows and keeps the [ROW_TILE, BLOCK_E] tile's reductions
-    warp-efficient:
 
-    * **m <= 1**: ROW_TILE=1, ``num_warps=1`` — M is exactly one row, so a
-      single program with a single warp owns the whole [1, BLOCK_E] logits
-      tile. ROW_TILE=8 (the floor every other bucket uses) makes the kernel
-      load *and* reduce a [8, BLOCK_E] tile where 7 of the 8 rows are
-      padding (``row_mask = [True, False, False, ...]``); those padded rows
-      still consume a full warp's reduction work for no output. Launching a
-      1-warp program over a [1, BLOCK_E] tile cuts that wasted work and
-      halves the launch/occupancy cost of the whole post stage on this
-      single-row bucket (measured ~17.4us -> ~15.7us, ~10% of the post
-      stage, ~1.4us / ~3.5% of the full m=1 op). 1 warp is enough — the E
-      axis (BLOCK_E=256) reduction runs inside the one warp group.
-    * **m <= 8**: ROW_TILE=8, ``num_warps=8`` — tiny M, single program; the
-      8-warp reduction over the small [8, 256] tile is the fastest (w=4 is
-      ~1.3us slower, w=8 lets the two argmax + the softmax sum reductions run
-      in one warp group each).
-    * **m=64**: ROW_TILE=32 -> 2 programs, ``num_warps=8`` (the [32, 256]
-      reductions parallelise well across 8 warps; w=4 is ~7% slower).
-    * **m=512**: ROW_TILE=256 -> 2 programs, ``num_warps=8`` — the [256, 256]
-      tile fits in registers at w=8 and halves the program count vs the
-      previous ROW_TILE=128 -> 4 programs.
-    * **m=4096**: ROW_TILE=2048 -> 2 programs, ``num_warps=8`` — the biggest
-      tile that still fits the [2048, 256] reductions in registers without
-      local-memory spilling; halves the program count (vs ROW_TILE=1024 ->
-      4 programs) and amortises the launch best.
+# ---------------------------------------------------------------------------
+# K-loop MMA arm (large M >= 256): 3-operand dot over a BLOCK_K-tiled H
+# reduction with a large ROW_TILE. Config table from the 2026-11-12 probe
+# (interleaved do_bench medians, E=256/H=4096/bf16, GEMM-only):
+#   m=512:  rt256/be128/bk1024/nw8/st4 = 48.8us  (PAD_M arm: ~465us)
+#   m=4096: rt512/be128/bk512/nw4/st3  = 92.6us (PAD_M arm: ~465us)
+# DSM budget (RT+BE)*BLOCK_K*2B: 786432B / 655360B, both under the 917504B
+# OOR limit (the 11-07 originals rt256/be256/bk1024 and rt1024/be256/bk512
+# now exceed it on the P01a-lifted compiler and were re-tuned down).
+# Falls back to the PAD_M dot arm on any build failure, which in turn falls
+# back to the dot-free kernels.
+# ---------------------------------------------------------------------------
 
-    The tuned *numbers* are fabric-flavoured (this is what
-    ``runtime/backend/_<vendor>/tune_configs.yaml`` holds per vendor); the
-    kernel body and the bucketing *logic* are portable.
-    """
-    if m <= 1:
-        row_tile, warps, stages = 1, 1, 1
-    elif m <= 8:
-        row_tile, warps, stages = 8, 8, 1
-    elif m <= 64:
-        row_tile, warps, stages = 32, 8, 1
-    elif m <= 512:
-        # m=512: ROW_TILE=512 -> a single M-program covers all of M (zero row
-        # padding, vs ROW_TILE=256 -> 2 programs each re-doing the launch/sync
-        # prologue over a [256, BLOCK_E] tile). The single-program tile widens
-        # the [512, BLOCK_E] reduction across 4 warps; 8 warps oversubscribe the
-        # register file here and spill. Measured (post stage only, isolated):
-        # ROW_TILE=256 w=8 ~38.9us vs ROW_TILE=512 w=4 ~36.1us, and the win
-        # flows through to the full op (m=512: 83.8us -> 83.1us, ~0.7us). Smaller
-        # M in this bucket (256 < m < 512) still benefits from the single
-        # wide-tile program — there is no occupancy win from splitting at these
-        # M values because the stage is bandwidth-bound, not compute-bound.
-        row_tile, warps, stages = 512, 4, 1
-    else:  # m > 512 (bench: m=4096)
-        row_tile, warps, stages = 2048, 8, 1
-    return row_tile, warps, stages
+_KLOOP_CFGS = (
+    # (m_threshold, row_tile, block_e, block_k, num_warps, num_stages)
+    # 2026-11-12 interleaved sweeps, GEMM-only medians (E=256/H=4096/bf16):
+    #   m=512:  rt128/be128/bk1024/nw8/st4 = 33.1us (rt256: 48.6)
+    #   m=4096: rt256/be128/bk512/nw8/st4  = 70.5us (rt512/nw4: 92.2)
+    # 2026-11-13 round-3 occupancy resweep (probe5/6, same protocol):
+    #   m=512:  rt64/be64/bk1024/nw4/st4   = 23.8us (rt128/be128: 32.7 —
+    #           8 programs on 48 SPCs was the limit; 32 programs now)
+    #   m=1024: rt128/be64/bk1024/nw4/st4  = 31.3us (rt256/be128: 55.7)
+    #   m=2048: rt256/be128/bk1024/nw8/st4 = 52.0us (bk512: 58.6)
+    #   m=4096: unchanged — 71.4us is at the ~121 TFLOPS MMA ceiling and
+    #           every re-tune (bk1024/nw4/st3/rt512) lost or tied.
+    # DSM budgets (RT+BE)*BK*2B: 262144 / 393216 / 786432 / 393216B, all
+    # under the 917504B limit.
+    (512, 64, 64, 1024, 4, 4),  # 256 <= m <= 512
+    (1024, 128, 64, 1024, 4, 4),  # 512 < m <= 1024
+    (2048, 256, 128, 1024, 8, 4),  # 1024 < m <= 2048
+    (None, 256, 128, 512, 8, 4),  # m > 2048
+)
+_kloop_arm_broken = False
+
+
+def _launch_gemm_kloop(
+    x, router_weight, bias_arg, logits, m, h, e, cap, softcap, has_bias
+):
+    """K-loop MMA arm (large M, bf16). Returns False when the shape is out
+    of the arm's domain or the kernel fails to build; the caller then keeps
+    the PAD_M dot arm / dot-free kernels."""
+    global _kloop_arm_broken
+    if (
+        _kloop_arm_broken
+        or m < 256
+        or h > 4096
+        or e < 128
+        or e > 8160  # grid.y = ceil(e / BLOCK_E) <= 128 at BLOCK_E=64
+        or x.dtype is not torch.bfloat16
+        or router_weight.dtype is not torch.bfloat16
+    ):
+        return False
+    for m_thr, rt, be, bk, nw, ns in _KLOOP_CFGS:
+        if m_thr is None or m <= m_thr:
+            break
+    if (m + rt - 1) // rt > 65535:  # grid.x limit for the selected ROW_TILE
+        return False
+    try:
+        _gemm_kloop_kernel[((m + rt - 1) // rt, (e + be - 1) // be)](
+            x,
+            router_weight,
+            bias_arg,
+            logits,
+            m,
+            h,
+            e,
+            cap,
+            be,
+            bk,
+            rt,
+            softcap,
+            has_bias,
+            (e % be == 0),
+            (h % bk == 0),
+            num_warps=nw,
+            num_stages=ns,
+        )
+        return True
+    except Exception:
+        _kloop_arm_broken = True
+        return False
 
 
 def fused_moe_router_tensorcore(
@@ -821,42 +797,31 @@ def fused_moe_router_tensorcore(
     assert topk <= 2, "fused_moe_router_tensorcore supports topk <= 2"
 
     device = flaggems_sglang.device
-    # Intermediate [M, E] fp32 logits tile — written by the GEMM kernel
-    # (post-softcap + post-bias), read by the post kernel. Splitting the
-    # GEMM and the softmax/top-2/gather into two kernels lets each stage
-    # use its own optimal launch config and register budget; the extra
-    # [M, E] write+read is small next to the GEMM's own operand traffic.
+    # Intermediate [M, E] fp32 logits — written by the GEMM kernel
+    # (post-softcap + post-bias), read by the post kernel. Every output
+    # element is stored exactly once (no atomics), so torch.empty suffices.
     logits = torch.empty((M, E), dtype=torch.float32, device=device)
     weights = torch.empty((M, topk), dtype=torch.float32, device=device)
     indices = torch.empty((M, topk), dtype=torch.int32, device=device)
 
-    BLOCK_E = _next_pow2(E)
-    if BLOCK_E < 4:
-        BLOCK_E = 4
+    BLOCK_E_POST = _next_pow2(E)
+    if BLOCK_E_POST < 4:
+        BLOCK_E_POST = 4
     BLOCK_TOPK = _next_pow2(topk) if topk >= 1 else 1
 
     softcap = bool(moe_softcapping != 0.0)
     has_bias = correction_bias is not None
-    e_is_full = BLOCK_E == E
+    bias_ptr = correction_bias if has_bias else x  # dummy ptr, unused
 
-    # ---- stage 1: tensor-core GEMM -> final logits (softcap + bias fused in) ----
-    bias_ptr = (
-        correction_bias if has_bias else x
-    )  # dummy ptr, unused when HAS_BIAS=False
-
-    if _use_gemv(M):
-        # M==1 specialised GEMV path: a rank-1 update over the [E, H] weight
-        # matrix. ``tl.dot`` needs a contracting M axis >= 16, so the general
-        # GEMM kernel would pad the single row to ROW_TILE=8 (7 wasted rows).
-        # This kernel computes the [1, E] logits as a vector-matrix product —
-        # no ``tl.dot``, no row padding, wider BLOCK_E for more occupancy. See
-        # ``_gemv_logits_kernel`` / ``_gemv_launch_cfg``.
-        v_block_e, v_block_k, v_num_warps = _gemv_launch_cfg(E)
-        v_block_k = min(v_block_k, _next_pow2(H))
-        num_e_tiles = (E + v_block_e - 1) // v_block_e
-        v_grid = (1, num_e_tiles)
-
-        _gemv_logits_kernel[v_grid](
+    if M == 1:
+        # ---- M==1 specialised GEMV (constant row base, e-tile grid) ----
+        be, bk = _GEMV_CFG
+        be = min(be, _next_pow2(E))
+        if be < 4:
+            be = 4
+        bk = min(bk, _next_pow2(H))
+        num_e_tiles = (E + be - 1) // be
+        _gemv_row_kernel[(num_e_tiles,)](
             x,
             router_weight,
             bias_ptr,
@@ -864,38 +829,57 @@ def fused_moe_router_tensorcore(
             H,
             E,
             float(moe_softcapping),
-            BLOCK_E=v_block_e,
-            BLOCK_K=v_block_k,
+            be,
+            BE=be,
+            BK=bk,
             SOFTCAP=softcap,
             HAS_BIAS=has_bias,
-            E_IS_FULL=e_is_full,
-            H_ALIGNED=(H % v_block_k == 0),
-            X_F32=(x.dtype == torch.float32),
-            W_F32=(router_weight.dtype == torch.float32),
-            num_warps=v_num_warps,
+            num_warps=4,
             num_stages=1,
         )
-    elif _use_etile_gemm(M, E):
-        # 2-D (row x E-tile) GEMM: each program owns a disjoint [ROW_TILE,
-        # BLOCK_E] E-slice of the [M, E] logits — more occupancy on the
-        # mid-size M bucket where the 1-D full-E kernel is program-count-
-        # bound. See _gemm_etile_kernel / _gemm_etile_launch_cfg.
-        g_row_tile, g_block_e, g_block_k, g_num_warps, g_num_stages = (
-            _gemm_etile_launch_cfg(M)
-        )
-        g_block_k = min(g_block_k, _next_pow2(H))
-        # E-tile width must not exceed E; cap to the next_pow2 of E so small-E
-        # cases (gated out by _use_etile_gemm but kept safe) still cover E.
-        if g_block_e > E:
-            g_block_e = _next_pow2(E)
-        num_e_tiles = (E + g_block_e - 1) // g_block_e
-        g_grid = ((M + g_row_tile - 1) // g_row_tile, num_e_tiles)
-        # Each E-tile is full iff its block fits inside E (the last tile may
-        # pad when E isn't a multiple of g_block_e). With the bench shape
-        # (E=256, BLOCK_E=128) both tiles are full.
-        e_tile_full = E % g_block_e == 0
-
-        _gemm_etile_kernel[g_grid](
+    elif _launch_gemm_kloop(
+        x,
+        router_weight,
+        bias_ptr,
+        logits,
+        M,
+        H,
+        E,
+        float(moe_softcapping),
+        softcap,
+        has_bias,
+    ):
+        # ---- K-loop MMA arm: large-M 3-operand dot tiles (fp32 logits) ----
+        pass
+    elif _launch_gemm_dot(
+        x,
+        router_weight,
+        bias_ptr,
+        logits,
+        M,
+        H,
+        E,
+        float(moe_softcapping),
+        softcap,
+        has_bias,
+    ):
+        # ---- MMA arm: bf16 full-K single-dot tiles (fp32 logits) ----
+        pass
+    else:
+        # ---- general dot-free GEMM: flat grid, div/mod tile split ----
+        be, bk, rt = _GEMM_CFGS[_m_bucket(M)]
+        be = min(be, _next_pow2(E))
+        if be < 4:
+            be = 4
+        bk = min(bk, _next_pow2(H))
+        num_e_tiles = (E + be - 1) // be
+        # Flat grid must respect the 65535 grid.x limit: grow RT until the
+        # row-tile count fits (each doubling halves the row-tile count).
+        while (M + rt - 1) // rt * num_e_tiles > 65535:
+            rt *= 2
+        num_row_tiles = (M + rt - 1) // rt
+        grid = (num_e_tiles * num_row_tiles,)
+        _gemm_rows_kernel[grid](
             x,
             router_weight,
             bias_ptr,
@@ -904,66 +888,67 @@ def fused_moe_router_tensorcore(
             H,
             E,
             float(moe_softcapping),
-            BLOCK_E=g_block_e,
-            BLOCK_K=g_block_k,
-            ROW_TILE=g_row_tile,
+            be,
+            num_row_tiles,
+            BE=be,
+            BK=bk,
+            RT=rt,
             SOFTCAP=softcap,
             HAS_BIAS=has_bias,
-            E_TILE_FULL=e_tile_full,
-            H_ALIGNED=(H % g_block_k == 0),
-            X_F32=(x.dtype == torch.float32),
-            W_F32=(router_weight.dtype == torch.float32),
-            num_warps=g_num_warps,
-            num_stages=g_num_stages,
+            num_warps=4,
+            num_stages=1,
+        )
+
+    # ---- stage 2: softmax + top-2 + gather ----
+    # Small M (< 64): the per-row 1-D form — the fabric is already full of
+    # single-row programs and the 2-D tile form's fatter programs lose
+    # (probe5: m=8/37 1-D 4.8/5.5us vs 2-D ~7us; m=64 flips to the 2-D form).
+    # Larger M: the 2-D tile form ([ROW_TILE, BLOCK_E] per program). The
+    # 2026-11-13 round-3 sweep's per-M optima collapse onto one rule:
+    # ROW_TILE = next_pow2(max(M / 32, 8)) capped at 128 (== 32 programs once
+    # M >= 1024) with num_warps 2 below 32 rows and 4 from 32 rows up —
+    # measured m=64/128/256/512/1024/2048/4096 = 7.4/7.6/8.0/8.7/10.2/12.9/
+    # 19.4us, each within noise of its per-M optimum. Its DSM accounting
+    # materialises up to five live ROW_TILE*BLOCK_E tiles (logits / exp /
+    # penalised / two int index tiles): 5*ROW_TILE*BLOCK_E*4B <= ~880KB
+    # under the 917504B limit, so ROW_TILE halves from 8 whenever a big E
+    # inflates BLOCK_E (e.g. E=8160 -> BLOCK_E=8192 caps ROW_TILE at 4).
+    # M_ALIGNED drops the row mask whenever M % ROW_TILE == 0 and E needs
+    # no padding. num_stages=1: no K axis to pipeline.
+    if M < 64:
+        _post_rows_kernel[(M,)](
+            logits,
+            weights,
+            indices,
+            M,
+            E,
+            BLOCK_E=BLOCK_E_POST,
+            TOPK=topk,
+            BLOCK_TOPK=BLOCK_TOPK,
+            E_IS_FULL=(BLOCK_E_POST == E),
+            num_warps=1,
+            num_stages=1,
         )
     else:
-        g_row_tile, g_block_k, g_num_warps, g_num_stages = _gemm_launch_cfg(M)
-        # The K (hidden) reduction tile must not exceed H; cap to the next_pow2 of
-        # H so small-H correctness cases still tile the whole K axis without an
-        # empty K-loop.
-        g_block_k = min(g_block_k, _next_pow2(H))
-        g_grid = ((M + g_row_tile - 1) // g_row_tile,)
-
-        _gemm_logits_kernel[g_grid](
-            x,
-            router_weight,
-            bias_ptr,
+        rt_post = min(128, _next_pow2(max(M // 32, 8)))
+        while rt_post > 8 and 5 * rt_post * BLOCK_E_POST * 4 > 880000:
+            rt_post //= 2
+        nw_post = 4 if rt_post >= 32 else 2
+        _post_kernel[((M + rt_post - 1) // rt_post,)](
             logits,
+            weights,
+            indices,
             M,
-            H,
             E,
-            float(moe_softcapping),
-            BLOCK_E=BLOCK_E,
-            BLOCK_K=g_block_k,
-            ROW_TILE=g_row_tile,
-            SOFTCAP=softcap,
-            HAS_BIAS=has_bias,
-            E_IS_FULL=e_is_full,
-            H_ALIGNED=(H % g_block_k == 0),
-            X_F32=(x.dtype == torch.float32),
-            W_F32=(router_weight.dtype == torch.float32),
-            num_warps=g_num_warps,
-            num_stages=g_num_stages,
+            BLOCK_E=BLOCK_E_POST,
+            ROW_TILE=rt_post,
+            TOPK=topk,
+            BLOCK_TOPK=BLOCK_TOPK,
+            E_IS_FULL=(BLOCK_E_POST == E),
+            M_ALIGNED=(M % rt_post == 0 and BLOCK_E_POST == E),
+            num_warps=nw_post,
+            num_stages=1,
         )
-
-    # ---- stage 2: softmax + top-2 + gather over the logits tile ----
-    p_row_tile, p_num_warps, p_num_stages = _post_launch_cfg(M)
-    p_grid = ((M + p_row_tile - 1) // p_row_tile,)
-
-    _post_kernel[p_grid](
-        logits,
-        weights,
-        indices,
-        M,
-        E,
-        BLOCK_E=BLOCK_E,
-        ROW_TILE=p_row_tile,
-        TOPK=topk,
-        BLOCK_TOPK=BLOCK_TOPK,
-        E_IS_FULL=e_is_full,
-        num_warps=p_num_warps,
-        num_stages=p_num_stages,
-    )
 
     return weights, indices
 

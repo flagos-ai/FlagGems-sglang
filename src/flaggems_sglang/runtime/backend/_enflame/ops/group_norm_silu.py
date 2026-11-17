@@ -229,22 +229,46 @@ def _centered(
     E: tl.constexpr,
 ):
     row = tl.program_id(0)
-    d = tl.arange(0, DP)
-    s = tl.arange(0, SP)
-    valid = (d[:, None] < D) & (s[None, :] < S)
-    off = row * D * S + d[:, None] * S + s[None, :]
+    K: tl.constexpr = D * S
     i = tl.arange(0, DP * SP)
-    flat = tl.load(X + row * D * S + i).to(tl.float32)
-    mean = tl.sum(flat, 0) / (D * S)
-    flat = flat - mean
-    var = tl.sum(flat * flat, 0) / (D * S)
-    v = tl.reshape(flat, (DP, SP))
+    x = tl.load(X + row * K + i).to(tl.float32)
+    mu = tl.sum(x, 0) / K
+    var = tl.maximum(tl.sum(x * x, 0) / K - mu * mu, 0.0)
     r = tl.rsqrt(var + E)
-    ch = row % G * D + d
-    w = tl.load(W + ch, d < D, 0).to(tl.float32)
-    b = tl.load(B + ch, d < D, 0).to(tl.float32)
-    y = v * (r * w)[:, None] + b[:, None]
-    tl.store(Y + off, y * tl.sigmoid(y), valid)
+    ch = (row % G) * D + i // S
+    w = tl.load(W + ch).to(tl.float32)
+    b = tl.load(B + ch).to(tl.float32)
+    y = (x - mu) * (r * w) + b
+    tl.store(Y + row * K + i, y * tl.sigmoid(y))
+
+
+@triton.jit
+def _paired(
+    X,
+    W,
+    B,
+    Y,
+    S: tl.constexpr,
+    D: tl.constexpr,
+    G: tl.constexpr,
+    DP: tl.constexpr,
+    SP: tl.constexpr,
+    E: tl.constexpr,
+):
+    pair = tl.program_id(0)
+    K: tl.constexpr = D * S
+    i = tl.arange(0, DP * SP)
+    for rr in tl.static_range(2):
+        row = pair * 2 + rr
+        x = tl.load(X + row * K + i).to(tl.float32)
+        mu = tl.sum(x, 0) / K
+        var = tl.maximum(tl.sum(x * x, 0) / K - mu * mu, 0.0)
+        r = tl.rsqrt(var + E)
+        ch = (row % G) * D + i // S
+        w = tl.load(W + ch).to(tl.float32)
+        b = tl.load(B + ch).to(tl.float32)
+        y = (x - mu) * (r * w) + b
+        tl.store(Y + row * K + i, y * tl.sigmoid(y))
 
 
 @triton.jit
@@ -328,19 +352,34 @@ def group_norm_silu(x, weight, bias, num_groups, eps):
             num_warps=1,
         )
     elif depth == deep and spatial == span and deep * span <= 16384:
-        _centered[(rows,)](
-            x,
-            weight,
-            bias,
-            out,
-            spatial,
-            depth,
-            num_groups,
-            deep,
-            span,
-            eps,
-            num_warps=1,
-        )
+        if rows >= 48 and rows % 2 == 0 and deep == 4 and span == 4096:
+            _paired[(rows // 2,)](
+                x,
+                weight,
+                bias,
+                out,
+                spatial,
+                depth,
+                num_groups,
+                deep,
+                span,
+                eps,
+                num_warps=8,
+            )
+        else:
+            _centered[(rows,)](
+                x,
+                weight,
+                bias,
+                out,
+                spatial,
+                depth,
+                num_groups,
+                deep,
+                span,
+                eps,
+                num_warps=8,
+            )
     else:
         cols = min(span, 4096)
         _fused[(rows,)](

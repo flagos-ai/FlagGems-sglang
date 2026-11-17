@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Enflame candidate: coarser tiles with a bounded one-dimensional grid.
+"""Enflame candidate: exact-shape persistent kernel plus a bounded fallback.
+
+The exact kernel serves contiguous production layouts: one persistent
+program writes whole ``N + R`` output rows as a single contiguous masked
+store (no write expansion at the 384-byte row pitch), with NoPE and RoPE
+values blended by a bitwise OR of complementary constant-masked loads —
+bit-exact for every payload including ``-0.0`` and NaN.  The launch stays
+at ``min(48, tiles)`` programs with ``num_warps=1`` (GCU400 wide-vector
+streaming sweet spot).  Anything irregular (non-contiguous NoPE, odd head
+counts, oversized tiles, very long per-program loops) falls back to the
+original bounded-grid masked kernel.
 
 Standard Triton only. This file is standalone and selected by its chip suffix.
 Hardware performance must be established by the official evaluation.
@@ -85,6 +95,98 @@ def _concat_mla_k_kernel_enflame(
         )
 
 
+@triton.jit
+def _concat_mla_k_exact_kernel(
+    out_ptr,
+    nope_ptr,
+    rope_ptr,
+    H: tl.constexpr,
+    N: tl.constexpr,
+    R: tl.constexpr,
+    RS0: tl.constexpr,
+    W: tl.constexpr,
+    ROWS: tl.constexpr,
+    TILES,
+    PROGRAMS,
+    IT: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    rows = tl.arange(0, ROWS)
+    cols = tl.arange(0, W)
+    mask_nope = cols < N
+    mask_rope = (cols >= N) & (cols < N + R)
+    mask_out = cols < N + R
+    for tile in tl.range(pid, TILES, PROGRAMS):
+        r0 = tile * ROWS
+        token = r0 // H
+        nope = tl.load(
+            nope_ptr + (r0 + rows)[:, None] * N + cols[None, :],
+            mask=mask_nope[None, :],
+            other=0,
+        )
+        rope = tl.load(
+            rope_ptr + token * RS0 + (cols[None, :] - N),
+            mask=mask_rope[None, :],
+            other=0,
+        )
+        blended = (nope.to(IT, bitcast=True) | rope.to(IT, bitcast=True)).to(
+            nope.dtype, bitcast=True
+        )
+        tl.store(
+            out_ptr + (r0 + rows)[:, None] * (N + R) + cols[None, :],
+            blended,
+            mask=mask_out[None, :],
+        )
+
+
+def _launch_exact(out, k_nope, k_rope, tokens, heads, nope_dim, rope_dim):
+    if not k_nope.is_contiguous() or k_rope.stride(2) != 1:
+        return False
+    if not (
+        out.dtype.is_floating_point
+        and k_nope.dtype == out.dtype
+        and k_rope.dtype == out.dtype
+    ):
+        return False
+    elem = out.element_size()
+    if elem not in (2, 4):
+        return False
+    int_type = tl.int16 if elem == 2 else tl.int32
+    if tokens * heads * (nope_dim + rope_dim) >= 2**31:
+        return False
+    width = triton.next_power_of_2(nope_dim + rope_dim)
+    if width > 1024:
+        return False
+    rows = 128
+    while rows > 8 and (heads % rows != 0 or rows * width * elem > 65536):
+        rows //= 2
+    if heads % rows != 0 or rows * width * elem > 65536:
+        return False
+    tiles = (tokens * heads) // rows
+    while tiles < 8 and rows > 16:
+        rows //= 2
+        tiles = (tokens * heads) // rows
+    programs = min(48, tiles)
+    if tiles // programs > 256:
+        return False
+    _concat_mla_k_exact_kernel[(programs,)](
+        out,
+        k_nope,
+        k_rope,
+        H=heads,
+        N=nope_dim,
+        R=rope_dim,
+        RS0=k_rope.stride(0),
+        W=width,
+        ROWS=rows,
+        TILES=tiles,
+        PROGRAMS=programs,
+        IT=int_type,
+        num_warps=1,
+    )
+    return True
+
+
 def concat_mla_k(k, k_nope, k_rope):
     """Copy NoPE and broadcast RoPE into new storage; all inputs are read-only."""
     tokens, heads = k.shape[:2]
@@ -93,6 +195,8 @@ def concat_mla_k(k, k_nope, k_rope):
         (tokens, heads, nope_dim + rope_dim), device=k.device, dtype=k.dtype
     )
     if tokens == 0 or heads == 0:
+        return out
+    if _launch_exact(out, k_nope, k_rope, tokens, heads, nope_dim, rope_dim):
         return out
     block_h = 8 if tokens < 16 else 32
     # One-parameter experiment on the measured v6 copy kernel. Retain its

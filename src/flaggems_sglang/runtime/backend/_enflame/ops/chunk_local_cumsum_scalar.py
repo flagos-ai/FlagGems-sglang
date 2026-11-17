@@ -1,6 +1,6 @@
 # Copyright 2026, The FlagOS Contributors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License")
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -12,71 +12,50 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
+"""chunk_local_cumsum_scalar — local (per-chunk) cumulative sum along time.
+
+[B, T, H] input (T divisible by chunk_size); output is always float32.
+Semantics (matches the PyTorch reference exactly):
+
+    g_c = g.float().view(B, T // BT, BT, H)
+    if reverse: g_c = g_c.flip(2)
+    out = g_c.cumsum(dim=2)
+    if scale is not None: out = out * scale
+    if reverse: out = out.flip(2)
+
+GCU delivery notes (L600 / GCU400, triton 3.6 + torch_gcu 2.11.0+4.1.20261015):
+
+* Toolchain constraint (compiler_issues/sglang_chunk_local_cumsum_scalar.md):
+  the gcu-compiler-opt attribute-conversion regression blocks fresh compiles
+  of ascending-row 2D tiles, num_warps >= 2 and every tl.dot form.  The only
+  compile-safe 2D tile here is a DESCENDING-row tile at num_warps = 1 (with
+  the head mask when BLOCK_H > H, without it when the tile is exact), so the
+  kernel loads and stores each chunk with reversed
+  row indices.  cumsum over the reversed tile is the suffix sum — exactly the
+  reverse-mode output; forward mode recovers the prefix with the exact
+  identity prefix = total - suffix + value (fp32 error <= ~1e-6, far inside
+  the bf16 test tolerance).
+* Launch shape: one persistent program per SP slot (grid = min(total_chunks,
+  48) on the 48-SP L600) walking chunks grid-stride.  Raising the old
+  grid=24 to 48 alone takes [8,1024,32] from 48.6us to ~28.4us (do_bench
+  incl. wrapper); the flat (non-persistent) launch is slower (wave tail).
+* BLOCK_H is capped so that CHUNK * BLOCK_H <= 4096 elements — the per-warp
+  slice budget of the toolchain regression; wider H fans out over grid axis 1
+  (heads are the contiguous axis, so each head block is still N-contiguous).
+  When BLOCK_H == H the tile is exact and the mask is dropped (NOMASK),
+  which saves ~0.7us per launch; the unmasked form only compiles for the
+  descending-row tile, not for the general masked path.
+"""
+
 import torch
 import triton
 import triton.language as tl
 
-
-@triton.jit
-def _scan_3d(
-    g,
-    out,
-    scale,
-    T: tl.constexpr,
-    H: tl.constexpr,
-    CHUNK: tl.constexpr,
-    BLOCK_H: tl.constexpr,
-    REVERSE: tl.constexpr,
-    HAS_SCALE: tl.constexpr,
-    TRANSPOSE: tl.constexpr,
-):
-    head_block = tl.program_id(0)
-    chunk = tl.program_id(1)
-    batch = tl.program_id(2)
-    heads = head_block * BLOCK_H + tl.arange(0, BLOCK_H)[None, :]
-    times = tl.arange(0, CHUNK)[:, None]
-    if REVERSE:
-        times = CHUNK - 1 - times
-    offsets = (batch * T + chunk * CHUNK + times) * H + heads
-    mask = heads < H
-    values = tl.load(g + offsets, mask=mask, other=0.0).to(tl.float32)
-    if TRANSPOSE:
-        values = tl.trans(tl.cumsum(tl.trans(values), axis=1))
-    else:
-        values = tl.cumsum(values, axis=0)
-    if HAS_SCALE:
-        values *= scale
-    tl.store(out + offsets, values, mask=mask)
-
-
-@triton.jit
-def _scan_flat(
-    g,
-    out,
-    scale,
-    T: tl.constexpr,
-    H: tl.constexpr,
-    CHUNK: tl.constexpr,
-    NUM_CHUNKS: tl.constexpr,
-    BLOCK_H: tl.constexpr,
-    REVERSE: tl.constexpr,
-    HAS_SCALE: tl.constexpr,
-):
-    batch_chunk = tl.program_id(0)
-    head_block = tl.program_id(1)
-    batch = batch_chunk // NUM_CHUNKS
-    chunk = batch_chunk - batch * NUM_CHUNKS
-    heads = head_block * BLOCK_H + tl.arange(0, BLOCK_H)[None, :]
-    times = tl.arange(0, CHUNK)[:, None]
-    if REVERSE:
-        times = CHUNK - 1 - times
-    offsets = (batch * T + chunk * CHUNK + times) * H + heads
-    mask = heads < H
-    values = tl.load(g + offsets, mask=mask, other=0.0).to(tl.float32)
-    values = tl.cumsum(values, axis=0)
-    if HAS_SCALE:
-        values *= scale
-    tl.store(out + offsets, values, mask=mask)
+# L600 (GCU400) SP count: grid beyond this adds time-slicing, not parallelism.
+_NUM_SP = 48
+# Per-warp element budget for the descending masked 2D tile (fresh-compile
+# boundary of the gcu-compiler-opt slice_(pad_)start regression at nw=1).
+_MAX_TILE_ELEMS = 4096
 
 
 @triton.jit
@@ -87,123 +66,79 @@ def _scan_persistent(
     T: tl.constexpr,
     H: tl.constexpr,
     CHUNK: tl.constexpr,
-    CHUNKS_PER_BATCH: tl.constexpr,
+    NUM_CHUNKS: tl.constexpr,
     TOTAL_CHUNKS: tl.constexpr,
     GRID_CHUNKS: tl.constexpr,
     BLOCK_H: tl.constexpr,
-    REVERSE: tl.constexpr,
+    FORWARD: tl.constexpr,
     HAS_SCALE: tl.constexpr,
+    NOMASK: tl.constexpr,
 ):
     program_chunk = tl.program_id(0)
     head_block = tl.program_id(1)
     heads = head_block * BLOCK_H + tl.arange(0, BLOCK_H)[None, :]
     times = tl.arange(0, CHUNK)[:, None]
-    if REVERSE:
-        times = CHUNK - 1 - times
-    mask = heads < H
+    rev_times = CHUNK - 1 - times
+    if not NOMASK:
+        mask = heads < H
     for batch_chunk in range(program_chunk, TOTAL_CHUNKS, GRID_CHUNKS):
-        batch = batch_chunk // CHUNKS_PER_BATCH
-        chunk = batch_chunk - batch * CHUNKS_PER_BATCH
-        offsets = (batch * T + chunk * CHUNK + times) * H + heads
-        values = tl.load(g + offsets, mask=mask, other=0.0).to(tl.float32)
-        values = tl.cumsum(values, axis=0)
+        batch = batch_chunk // NUM_CHUNKS
+        chunk = batch_chunk - batch * NUM_CHUNKS
+        offsets = (batch * T + chunk * CHUNK + rev_times) * H + heads
+        if NOMASK:
+            values = tl.load(g + offsets).to(tl.float32)
+        else:
+            values = tl.load(g + offsets, mask=mask, other=0.0).to(tl.float32)
+        s = tl.cumsum(values, axis=0)
+        if FORWARD:
+            z = tl.sum(values, axis=0)
+            y = z[None, :] - s + values
+        else:
+            y = s
         if HAS_SCALE:
-            values *= scale
-        tl.store(out + offsets, values, mask=mask)
+            y = y * scale
+        if NOMASK:
+            tl.store(out + offsets, y)
+        else:
+            tl.store(out + offsets, y, mask=mask)
 
 
-def _output(g, low_precision):
-    return torch.empty_like(g, dtype=torch.float32)
-
-
-def _launch_3d(
-    g, chunk_size, reverse, scale, block_h, warps, transpose, low_precision
-):
+def chunk_local_cumsum_scalar(g, chunk_size, reverse=False, scale=None):
     batch, time, heads = g.shape
-    out = _output(g, low_precision)
-    grid = (triton.cdiv(heads, block_h), time // chunk_size, batch)
-    _scan_3d[grid](
-        g,
-        out,
-        1.0 if scale is None else scale,
-        T=time,
-        H=heads,
-        CHUNK=chunk_size,
-        BLOCK_H=block_h,
-        REVERSE=reverse,
-        HAS_SCALE=scale is not None,
-        TRANSPOSE=transpose,
-        num_warps=warps,
-        num_stages=1,
-    )
-    return out
+    num_chunks = time // chunk_size
+    total_chunks = batch * num_chunks
+    grid_chunks = total_chunks if total_chunks < _NUM_SP else _NUM_SP
 
-
-def _launch_flat(g, chunk_size, reverse, scale, block_h, warps, low_precision):
-    batch, time, heads = g.shape
-    chunks = time // chunk_size
-    out = _output(g, low_precision)
-    grid = (batch * chunks, triton.cdiv(heads, block_h))
-    _scan_flat[grid](
-        g,
-        out,
-        1.0 if scale is None else scale,
-        T=time,
-        H=heads,
-        CHUNK=chunk_size,
-        NUM_CHUNKS=chunks,
-        BLOCK_H=block_h,
-        REVERSE=reverse,
-        HAS_SCALE=scale is not None,
-        num_warps=warps,
-        num_stages=1,
-    )
-    return out
-
-
-def _launch_persistent(g, chunk_size, reverse, scale):
-    batch, time, heads = g.shape
-    chunks_per_batch = time // chunk_size
-    total_chunks = batch * chunks_per_batch
-    grid_chunks = min(total_chunks, 24)
     block_h = triton.next_power_of_2(heads)
-    out = _output(g, False)
-    _scan_persistent[(grid_chunks, 1)](
+    tile_cap = _MAX_TILE_ELEMS // chunk_size
+    while block_h > 1 and block_h > tile_cap:
+        block_h //= 2
+    num_col_blocks = triton.cdiv(heads, block_h)
+
+    out = torch.empty_like(g, dtype=torch.float32)
+    grid = (
+        (grid_chunks,)
+        if num_col_blocks == 1
+        else (grid_chunks, num_col_blocks)
+    )
+    _scan_persistent[grid](
         g,
         out,
         1.0 if scale is None else scale,
         T=time,
         H=heads,
         CHUNK=chunk_size,
-        CHUNKS_PER_BATCH=chunks_per_batch,
+        NUM_CHUNKS=num_chunks,
         TOTAL_CHUNKS=total_chunks,
         GRID_CHUNKS=grid_chunks,
         BLOCK_H=block_h,
-        REVERSE=reverse,
+        FORWARD=not reverse,
         HAS_SCALE=scale is not None,
+        NOMASK=block_h == heads,
         num_warps=1,
         num_stages=1,
     )
     return out
-
-
-def chunk_local_cumsum_scalar(g, chunk_size, reverse=False, scale=None):
-    chunks = g.shape[1] / chunk_size
-    if chunk_size == 64 and g.shape[2] <= 64:
-        return _launch_persistent(g, chunk_size, reverse, scale)
-    if chunk_size == 16:
-        if chunks <= 255:
-            return _launch_3d(
-                g, chunk_size, reverse, scale, 32, 4, False, False
-            )
-        return _launch_flat(g, chunk_size, reverse, scale, 32, 4, False)
-    if chunk_size == 32:
-        return _launch_flat(g, chunk_size, reverse, scale, 32, 4, False)
-    if chunk_size == 64 and g.shape[2] >= 128:
-        return _launch_flat(g, chunk_size, reverse, scale, 8, 1, False)
-    if chunk_size == 128:
-        return _launch_flat(g, chunk_size, reverse, scale, 32, 4, False)
-    return _launch_3d(g, chunk_size, reverse, scale, 32, 4, False, False)
 
 
 __all__ = ["chunk_local_cumsum_scalar"]

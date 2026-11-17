@@ -12,9 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 import triton
 import triton.language as tl
+
+# GCU400: 48 SPs. Persistent single-wave grid keeps the scattered-row store
+# pipeline at the flat-copy floor; more programs only add dispatch waves.
+_NUM_SP = 48
+
+# 11-07 20:22 toolchain regression guard (memref_ext.slice_pad_start 8 vs 7):
+# per-warp slice must stay <= 4096 elems (8KB) and per-CTA <= 32KB. bf16
+# BLOCK=8192 @ nw2 = 4096 elems/warp and 16KB/CTA; @ nw4 mode2 = 2048/4KB.
+_MAX_BLOCK = 8192
 
 
 @triton.jit
@@ -22,39 +30,213 @@ def _permute_kernel(
     in_ptr,
     out_ptr,
     slot_ptr,
-    HIDDEN: tl.constexpr,
-    TOPK: tl.constexpr,
-    BLOCK: tl.constexpr,
-    EVEN: tl.constexpr,
+    n_tokens,
+    H: tl.constexpr,
+    K: tl.constexpr,
+    B: tl.constexpr,
+    NB: tl.constexpr,
     WIDE: tl.constexpr,
+    EVEN: tl.constexpr,
+):
+    # E-1 round-2 (2026-11-13): hoist all K destination scalars to the top of
+    # the token iteration so the K slot loads issue back-to-back (independent)
+    # instead of alternating load->store->load; the scattered stores then fire
+    # as one burst per row. Specialized arms for the production widths K=8/4/2
+    # (bench core -13%/-15%/-20% at t=8/64/512 vs the in-loop scalar chain),
+    # generic static_range fallback keeps arbitrary K correct.
+    out_dtype = out_ptr.dtype.element_ty
+    pid = tl.program_id(0)
+    npg = tl.num_programs(0)
+    for token in range(pid, n_tokens, npg):
+        base = slot_ptr + token * K
+        if K == 8:
+            d0 = tl.load(base + 0)
+            d1 = tl.load(base + 1)
+            d2 = tl.load(base + 2)
+            d3 = tl.load(base + 3)
+            d4 = tl.load(base + 4)
+            d5 = tl.load(base + 5)
+            d6 = tl.load(base + 6)
+            d7 = tl.load(base + 7)
+            if WIDE:
+                d0 = d0.to(tl.int64)
+                d1 = d1.to(tl.int64)
+                d2 = d2.to(tl.int64)
+                d3 = d3.to(tl.int64)
+                d4 = d4.to(tl.int64)
+                d5 = d5.to(tl.int64)
+                d6 = d6.to(tl.int64)
+                d7 = d7.to(tl.int64)
+            for j in tl.static_range(NB):
+                offs = j * B + tl.arange(0, B)
+                if EVEN:
+                    src = tl.load(in_ptr + token * H + offs).to(out_dtype)
+                else:
+                    src = tl.load(
+                        in_ptr + token * H + offs, mask=offs < H, other=0
+                    ).to(out_dtype)
+                if d0 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d0 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d0 * H + offs, src, mask=offs < H)
+                if d1 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d1 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d1 * H + offs, src, mask=offs < H)
+                if d2 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d2 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d2 * H + offs, src, mask=offs < H)
+                if d3 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d3 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d3 * H + offs, src, mask=offs < H)
+                if d4 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d4 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d4 * H + offs, src, mask=offs < H)
+                if d5 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d5 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d5 * H + offs, src, mask=offs < H)
+                if d6 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d6 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d6 * H + offs, src, mask=offs < H)
+                if d7 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d7 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d7 * H + offs, src, mask=offs < H)
+        elif K == 4:
+            d0 = tl.load(base + 0)
+            d1 = tl.load(base + 1)
+            d2 = tl.load(base + 2)
+            d3 = tl.load(base + 3)
+            if WIDE:
+                d0 = d0.to(tl.int64)
+                d1 = d1.to(tl.int64)
+                d2 = d2.to(tl.int64)
+                d3 = d3.to(tl.int64)
+            for j in tl.static_range(NB):
+                offs = j * B + tl.arange(0, B)
+                if EVEN:
+                    src = tl.load(in_ptr + token * H + offs).to(out_dtype)
+                else:
+                    src = tl.load(
+                        in_ptr + token * H + offs, mask=offs < H, other=0
+                    ).to(out_dtype)
+                if d0 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d0 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d0 * H + offs, src, mask=offs < H)
+                if d1 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d1 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d1 * H + offs, src, mask=offs < H)
+                if d2 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d2 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d2 * H + offs, src, mask=offs < H)
+                if d3 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d3 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d3 * H + offs, src, mask=offs < H)
+        elif K == 2:
+            d0 = tl.load(base + 0)
+            d1 = tl.load(base + 1)
+            if WIDE:
+                d0 = d0.to(tl.int64)
+                d1 = d1.to(tl.int64)
+            for j in tl.static_range(NB):
+                offs = j * B + tl.arange(0, B)
+                if EVEN:
+                    src = tl.load(in_ptr + token * H + offs).to(out_dtype)
+                else:
+                    src = tl.load(
+                        in_ptr + token * H + offs, mask=offs < H, other=0
+                    ).to(out_dtype)
+                if d0 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d0 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d0 * H + offs, src, mask=offs < H)
+                if d1 >= 0:
+                    if EVEN:
+                        tl.store(out_ptr + d1 * H + offs, src)
+                    else:
+                        tl.store(out_ptr + d1 * H + offs, src, mask=offs < H)
+        else:
+            for j in tl.static_range(NB):
+                offs = j * B + tl.arange(0, B)
+                if EVEN:
+                    src = tl.load(in_ptr + token * H + offs).to(out_dtype)
+                else:
+                    src = tl.load(
+                        in_ptr + token * H + offs, mask=offs < H, other=0
+                    ).to(out_dtype)
+                for i in tl.static_range(K):
+                    dst = tl.load(base + i)
+                    if WIDE:
+                        dst = dst.to(tl.int64)
+                    if dst >= 0:
+                        if EVEN:
+                            tl.store(out_ptr + dst * H + offs, src)
+                        else:
+                            tl.store(
+                                out_ptr + dst * H + offs, src, mask=offs < H
+                            )
+
+
+@triton.jit
+def _permute_one_kernel(
+    in_ptr,
+    out_ptr,
+    slot_ptr,
+    H: tl.constexpr,
+    K: tl.constexpr,
+    B: tl.constexpr,
+    NB: tl.constexpr,
+    WIDE: tl.constexpr,
+    EVEN: tl.constexpr,
 ):
     out_dtype = out_ptr.dtype.element_ty
     token = tl.program_id(0)
-    offs = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
-    mask = offs < HIDDEN
-    if EVEN:
-        src = tl.load(in_ptr + token * HIDDEN + offs).to(out_dtype)
-    else:
-        src = tl.load(in_ptr + token * HIDDEN + offs, mask=mask, other=0).to(
-            out_dtype
-        )
-    base = slot_ptr + token * TOPK
-    for i in tl.static_range(TOPK):
-        dst = tl.load(base + i)
-        if WIDE:
-            dst = dst.to(tl.int64)
-        if dst >= 0:
+    slot = tl.program_id(1)
+    dst = tl.load(slot_ptr + token * K + slot)
+    if WIDE:
+        dst = dst.to(tl.int64)
+    if dst >= 0:
+        for j in tl.static_range(NB):
+            offs = j * B + tl.arange(0, B)
             if EVEN:
-                tl.store(out_ptr + dst * HIDDEN + offs, src)
+                src = tl.load(in_ptr + token * H + offs).to(out_dtype)
+                tl.store(out_ptr + dst * H + offs, src)
             else:
-                tl.store(out_ptr + dst * HIDDEN + offs, src, mask=mask)
+                src = tl.load(
+                    in_ptr + token * H + offs, mask=offs < H, other=0
+                ).to(out_dtype)
+                tl.store(out_ptr + dst * H + offs, src, mask=offs < H)
 
 
-def _block(hidden):
-    return triton.next_power_of_2(hidden)
+def _plan(hidden):
+    block = min(triton.next_power_of_2(hidden), _MAX_BLOCK)
+    nblocks = triton.cdiv(hidden, block)
+    return block, nblocks, hidden % block == 0
 
 
-def _fallback(input, gateup_input, src2dst, topk_ids, topk, hidden_size):
+def deepep_permute(input, gateup_input, src2dst, topk_ids, topk, hidden_size):
     source = input.contiguous()
     target = gateup_input.contiguous()
     slots = src2dst
@@ -62,97 +244,39 @@ def _fallback(input, gateup_input, src2dst, topk_ids, topk, hidden_size):
         slots = slots.contiguous()
     rows = target.shape[0]
     hidden = source.shape[1]
-    count = slots.numel()
-    tokens = min(source.shape[0], count // topk)
-    block = _block(hidden)
-    wide = rows * hidden >= 2**31
-    _permute_kernel[(max(tokens, 1), max(triton.cdiv(hidden, block), 1))](
-        source,
-        target,
-        slots,
-        hidden,
-        topk,
-        block,
-        hidden % block == 0,
-        wide,
-        num_warps=1,
-    )
-    return target
-
-
-@triton.jit
-def _route(
-    X,
-    OUT,
-    INDICES,
-    N: tl.constexpr,
-    H: tl.constexpr,
-    K: tl.constexpr,
-    B: tl.constexpr,
-    MODE: tl.constexpr,
-    P: tl.constexpr,
-):
-    col = tl.program_id(1) * B + tl.arange(0, B)
-    for token in range(tl.program_id(0), N, P):
-        value = tl.load(X + token * H + col, col < H, 0).to(
-            OUT.dtype.element_ty
-        )
-        if MODE == 2:
-            slot = tl.program_id(2)
-            dst = tl.load(INDICES + token * K + slot).to(tl.int64)
-            tl.store(OUT + dst * H + col, value, (dst >= 0) & (col < H))
-        else:
-            for slot in tl.static_range(K):
-                dst = tl.load(INDICES + token * K + slot).to(tl.int64)
-                if MODE == 0:
-                    if dst >= 0:
-                        tl.store(OUT + dst * H + col, value, col < H)
-                else:
-                    tl.store(
-                        OUT + dst * H + col, value, (dst >= 0) & (col < H)
-                    )
-
-
-def deepep_permute(input, gateup_input, src2dst, topk_ids, topk, hidden_size):
-    n, h = input.shape
-    if not ((n >= 256 and topk <= 2 and h >= 4096) or (n == 1 and h <= 4096)):
-        return _fallback(
-            input, gateup_input, src2dst, topk_ids, topk, hidden_size
-        )
-    source = input.contiguous()
-    target = gateup_input.contiguous()
-    slots = src2dst.contiguous()
-    n = min(n, slots.numel() // topk) if topk else 0
-    if not n or not h:
+    tokens = min(source.shape[0], slots.numel() // topk) if topk else 0
+    if not tokens or not hidden:
         return target
-    written = target
-    if (
-        n >= 256
-        and source.dtype == target.dtype
-        and source.element_size() == 2
-        and h % 2 == 0
-    ):
-        source = source.view(torch.int32)
-        written = target.view(torch.int32)
-        h //= 2
-    b = min(4096, triton.next_power_of_2(h))
-    p = min(n, 12)
-    mode = 2 if n == 1 else 0
-    _route.run(
-        source,
-        written,
-        slots,
-        n,
-        h,
-        topk,
-        b,
-        mode,
-        p,
-        grid=(p, triton.cdiv(h, b), topk if mode == 2 else 1),
-        warmup=False,
-        num_warps=1 if n == 1 else 2,
-        num_stages=1,
-    )
+    wide = rows * hidden >= 2**31
+    block, nblocks, even = _plan(hidden)
+    if tokens == 1:
+        _permute_one_kernel[(1, topk)](
+            source,
+            target,
+            slots,
+            hidden,
+            topk,
+            block,
+            nblocks,
+            wide,
+            even,
+            num_warps=4,
+        )
+    else:
+        _permute_kernel[(min(tokens, _NUM_SP),)](
+            source,
+            target,
+            slots,
+            tokens,
+            hidden,
+            topk,
+            block,
+            nblocks,
+            wide,
+            even,
+            num_warps=2,
+            num_stages=2,
+        )
     return target
 
 
