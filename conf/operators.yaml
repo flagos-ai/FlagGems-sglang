@@ -13,6 +13,35 @@
 # limitations under the License.
 
 ops:
+  - id: absorbed_bmm_concat_cast_q_fp8
+    description: |
+      Absorbed per-head bmm, nope/rope concat and the bf16-to-fp8 cast in one kernel, for the Q8KV8 sparse-prefill path.
+      No intermediate bf16 q_nope_out and no separate concat-cast launch; the padding rows and heads are left untouched.
+    for:
+      - absorbed_bmm_concat_cast_q_fp8
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: act_quant
+    description: |
+      Per-token-group fp8 quantization of DSA indexer activations, with an absmax floor of 1e-4.
+      Optionally rounds the scale up to a power of two for UE8M0-style formats, computed by bit assembly rather than exp2.
+    for:
+      - act_quant
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: add3
     description: |
       Three-way elementwise addition that preserves the double rounding: bf16(bf16(a + b) + c).
@@ -61,6 +90,20 @@ ops:
       The slots are packed into the flat out_cache_loc buffer consumed by the draft forward pass.
     for:
       - assign_draft_cache_locs_contiguous
+    labels:
+      - fused
+      - sglang
+      - Speculative
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: assign_extend_cache_locs_uniform
+    description: |
+      Gathers each request's newly extended KV slots out of req_to_token into a flat out_cache_loc for spec target-verify.
+      The uniform variant: every row extends by exactly draft_token_num, so no end-offset tensor and no cross-row prefix sum.
+    for:
+      - assign_extend_cache_locs_uniform
     labels:
       - fused
       - sglang
@@ -557,6 +600,34 @@ ops:
       - Reduction
     stages:
       - stable: '1.0'
+  - id: dequantize_k_cache_fast
+    description: |
+      Dequantizes a packed DeepSeek MLA fp8 KV-cache row: per-128-channel fp8 groups plus a raw bf16 rope tail.
+      The scale and rope fields are bit-cast out of the fp8 storage rather than numerically converted.
+    for:
+      - dequantize_k_cache_fast
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: dequantize_k_cache_paged
+    description: |
+      dequantize_k_cache_fast with a gather in front: each output row is looked up through a flattened page table.
+      Several output rows may map to one physical cache slot, which is what prefix sharing needs.
+    for:
+      - dequantize_k_cache_paged
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: draft_topk1
     description: |
       Top-1 draft token selection for speculative decoding.
@@ -721,6 +792,21 @@ ops:
       - fused
       - sglang
       - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fp8_per_token_to_per_tensor_quant
+    description: |
+      Requantizes an fp8 tensor from per-token-group scales to a single known per-tensor scale.
+      Only rows below each expert's masked_m are defined, and the cast deliberately skips the fp8 clamp the generic path applies.
+    for:
+      - fp8_per_token_to_per_tensor_quant
+    labels:
+      - fused
+      - sglang
+      - MoE
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -1048,6 +1134,21 @@ ops:
       - fused
       - sglang
       - LoRA
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: gather_dequant_requant_fp8_paged
+    description: |
+      Gathers paged Q8KV8 KV tokens and repacks them into the flat 576-wide fp8 layout the SM90 sparse-MLA kernel reads.
+      Fuses gather, per-group dequant and per-tensor requant, and zeroes the landing-pad rows every -1 topk slot clamps into.
+    for:
+      - gather_dequant_requant_fp8_paged
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -1443,6 +1544,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: mla_kv_pack_quantize_fp8
+    description: |
+      Builds the packed fp8 MLA KV in one pass: k_nope concatenated with the head-broadcast k_pe, quantized alongside v.
+      k_pe has a single head and is read once per token rather than once per (token, head).
+    for:
+      - mla_kv_pack_quantize_fp8
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: moe_align_block_size
     description: |
       The MoE sort and pad that every block-tiled fused-MoE GEMM depends on.
@@ -1626,6 +1742,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: pad_sequence_with_mask
+    description: |
+      Turns a ragged token batch into a dense [B, max_len, hidden] tensor and the matching boolean attention mask in one launch.
+      The output buffer arrives pre-zeroed, so only the valid region and the mask are written; max_len sets the tile size.
+    for:
+      - pad_sequence_with_mask
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: per_group_transpose
     description: |
       Per-expert group transpose operation for MoE models.
@@ -1666,6 +1796,20 @@ ops:
       - quantization
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_tensor_quant_mla_fp8
+    description: |
+      Per-tensor fp8 quantization that computes its own scale, reducing a global absmax over a 3D [head, seq, dim] tensor.
+      Used by the MLA absorbed-decode path as a workaround for a cuBLAS bmm_fp8 problem.
+    for:
+      - per_tensor_quant_mla_fp8
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: per_token_group_quant_8bit_v2
@@ -1721,6 +1865,20 @@ ops:
       - fused
       - sglang
       - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: per_token_group_quant_mla_masked_fp8
+    description: |
+      Per-token-group fp8 quantization of 3D MLA activations, laid out for DeepGEMM's grouped_gemm_masked.
+      Rows are padded up to a multiple of 256 and the scales come back transposed, so the returned tensor is not contiguous.
+    for:
+      - per_token_group_quant_mla_masked_fp8
+    labels:
+      - fused
+      - sglang
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -1867,6 +2025,34 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: quantize_k_cache_fast
+    description: |
+      The quantizing counterpart of dequantize_k_cache_fast: per-128-channel fp8 for the nope half, raw bf16 rope alongside it.
+      No eps floor on the tile scale, matching the fast kernel rather than the generic reference.
+    for:
+      - quantize_k_cache_fast
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: quantize_k_cache_fast_separate
+    description: |
+      Split-buffer variant of quantize_k_cache_fast: the same quantization into two uint8 tensors instead of one packed row.
+      Dropping the concat lets the caller hand both halves straight to set_mla_kv_buffer.
+    for:
+      - quantize_k_cache_fast_separate
+    labels:
+      - fused
+      - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: recompute_w_u
     description: |
       The w and u recomputation step of the chunked Gated DeltaNet forward pass.
@@ -1891,6 +2077,20 @@ ops:
       - pointwise
       - sglang
       - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: reshape_and_cache_flash
+    description: |
+      Writes token-major K/V into the paged FlashAttention cache layout, with optional SWA slot remapping and write-time scaling.
+      A negative slot drops the token and touches no cache row; the scale divides, following the dequantization convention.
+    for:
+      - reshape_and_cache_flash
+    labels:
+      - fused
+      - sglang
+      - Attention
     kind:
       - NeuralNetwork
     stages:
@@ -2045,6 +2245,21 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: set_mla_kv_buffer_fp8_quant
+    description: |
+      Fuses the MLA K row's cast to fp8 with its paged-KV write, so no bf16 staging tensor is needed.
+      The buffer is allocated in the source dtype and reinterpreted as fp8; the 128-element block that straddles the nope/rope boundary is the case that matters.
+    for:
+      - set_mla_kv_buffer_fp8_quant
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -2338,6 +2553,22 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: swiglu_oai_mxfp8_quant
+    description: |
+      SwiGLU-OAI fused with MiniMax MXFP8 quantization over 32-element groups of the activated row.
+      The activation stays fp32 all the way into the E8M0 scale selection, which is the point of the fusion; the scales are plain row-major.
+    for:
+      - swiglu_oai_mxfp8_quant
+    labels:
+      - fused
+      - sglang
+      - MoE
+      - Activation
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: swiglu_oai_split
     description: |
       OpenAI-style SwiGLU over a split gate/up tensor: gate * sigmoid(alpha * gate) * (up + beta).
@@ -2460,6 +2691,21 @@ ops:
     labels:
       - fused
       - sglang
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: triton_sparse_mla_fwd
+    description: |
+      Sparse MLA forward for the DSA fp8 prefill path: flash attention over only the topk KV rows the indexer selected.
+      Q, K/V and the probability matrix are all fp8; a row whose every key is invalid produces zeros rather than NaN.
+    for:
+      - triton_sparse_mla_fwd
+    labels:
+      - fused
+      - sglang
+      - Attention
       - quantization
     kind:
       - NeuralNetwork
