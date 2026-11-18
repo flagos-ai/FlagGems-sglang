@@ -15,17 +15,13 @@
 """Benchmark for activation_norm/silu_and_mul."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import silu_and_mul as workload
 from flaggems_sglang.reference import get_reference
 
 from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
-
-# Shapes match kernel-comp-baseline/problems/activation_norm/silu_and_mul.
-SHAPES = [(bs, 4096) for bs in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(bs, d) for bs in (1, 8, 64, 512, 4096) for d in (1024, 8192)]
 
 
 def _case_fn(shape, cur_dtype):
@@ -40,12 +36,7 @@ def _case_fn(shape, cur_dtype):
 
 def _build_inputs(plan, cur_dtype, device):
     bs, d = plan.builder_args
-    # The op reads x1/x3 from a single [bs, 2 * d] tensor.
-    g = torch.Generator(device=device).manual_seed(0)
-    hidden_states = torch.randn(
-        bs, 2 * d, dtype=torch.float32, device=device, generator=g
-    ).to(cur_dtype)
-    return (hidden_states,)
+    return workload.build_inputs({"bs": bs, "d": d}, cur_dtype, device)[0]
 
 
 @pytest.mark.silu_and_mul
@@ -55,9 +46,9 @@ def test_perf_silu_and_mul():
         torch_op=get_reference("silu_and_mul"),
         case_fn=_case_fn,
         build_inputs_fn=_build_inputs,
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, d",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,34 +15,20 @@
 """Benchmark for speculative/fill_accept_out_cache_loc."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fill_accept_out_cache_loc as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/fill_accept_out_cache_loc.
-SHAPES = [(s,) for s in (8, 64, 512)]
-MORE_SHAPES = [(4096,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    (size,) = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    accept_index = torch.arange(size, dtype=torch.int64, device=device)
-    accept_index[torch.rand(size, device=device, generator=g) > 0.5] = -1
-    out_cache_loc = torch.randint(
-        1,
-        1 << 20,
-        (size,),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    accept_out_cache_loc = torch.zeros(size, dtype=torch.int64, device=device)
-    yield accept_index, out_cache_loc, accept_out_cache_loc, size
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -64,10 +50,11 @@ def test_perf_fill_accept_out_cache_loc():
         op_name="fill_accept_out_cache_loc",
         torch_op=get_reference("fill_accept_out_cache_loc"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="size",
     )
     bench.set_gems_from_module(flaggems_sglang)

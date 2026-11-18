@@ -15,43 +15,24 @@
 """Benchmark for attention/fixup_zero_kv."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fixup_zero_kv as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/fixup_zero_kv.
-SHAPES = [(bs, 16, 128, 4) for bs in (1, 8, 64, 512)]
-MORE_SHAPES = [(bs, 16, 128, 4) for bs in (2048,)]
-
-_ZERO_FRAC = 0.3
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, num_heads, v_head_dim, max_q = shape
-    g = torch.Generator(device=device).manual_seed(11)
-    q_lens = torch.randint(
-        1, max_q + 1, (bs,), dtype=torch.int32, device=device, generator=g
-    )
-    cum = torch.zeros(bs + 1, dtype=torch.int32, device=device)
-    cum[1:] = torch.cumsum(q_lens, dim=0)
-    total = int(cum[-1])
-    kv_lens = torch.randint(
-        1, 4096, (bs,), dtype=torch.int32, device=device, generator=g
-    )
-    kv_lens[torch.rand(bs, device=device, generator=g) < _ZERO_FRAC] = 0
-    out = torch.randn(
-        total, num_heads, v_head_dim, device=device, generator=g
-    ).to(cur_dtype)
-    lse = torch.randn(total, num_heads, device=device, generator=g)
-    yield out, lse, kv_lens, cum, int(q_lens.max())
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, num_heads, v_head_dim, max_q) = shape
+    bs, num_heads, v_head_dim, max_q = shape
     yield BenchmarkCasePlan(
         shape={
             "out": ("sum(q_lens)", num_heads, v_head_dim),
@@ -62,12 +43,20 @@ def _case_fn(shape, cur_dtype):
         params={
             "configuration": shape,
             "seed": 11,
-            "_ZERO_FRAC": _ZERO_FRAC,
+            "_ZERO_FRAC": workload._ZERO_FRAC,
             "bs": bs,
             "num_heads": num_heads,
             "v_head_dim": v_head_dim,
             "max_q": max_q,
         },
+        baseline_key=workload.key_shape(
+            {
+                "bs": bs,
+                "num_heads": num_heads,
+                "v_head_dim": v_head_dim,
+                "max_q": max_q,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -78,10 +67,11 @@ def test_perf_fixup_zero_kv():
         op_name="fixup_zero_kv",
         torch_op=get_reference("fixup_zero_kv"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, num_heads, v_head_dim, max_q",
     )
     bench.set_gems_from_module(flaggems_sglang)

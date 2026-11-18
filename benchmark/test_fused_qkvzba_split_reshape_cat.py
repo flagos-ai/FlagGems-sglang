@@ -15,44 +15,24 @@
 """Benchmark for attention/fused_qkvzba_split_reshape_cat."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_qkvzba_split_reshape_cat as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/fused_qkvzba_split_reshape_cat.
-SHAPES = [(batch, 16, 32, 128, 128) for batch in (1, 8, 64, 512)]
-MORE_SHAPES = [(batch, 16, 32, 128, 128) for batch in (4096,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, nqk, nv, head_qk, head_v = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    r = nv // nqk
-    mixed_qkvz = torch.randn(
-        batch,
-        nqk * (2 * head_qk + 2 * r * head_v),
-        device=device,
-        generator=g,
-    ).to(cur_dtype)
-    mixed_ba = torch.randn(batch, nqk * 2 * r, device=device, generator=g).to(
-        cur_dtype
-    )
-    yield (
-        mixed_qkvz.contiguous(),
-        mixed_ba.contiguous(),
-        nqk,
-        nv,
-        head_qk,
-        head_v,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, nqk, nv, head_qk, head_v) = shape
+    batch, nqk, nv, head_qk, head_v = shape
     yield BenchmarkCasePlan(
         shape={
             "mixed_qkvz": (
@@ -80,10 +60,10 @@ def test_perf_fused_qkvzba_split_reshape_cat():
         op_name="fused_qkvzba_split_reshape_cat",
         torch_op=get_reference("fused_qkvzba_split_reshape_cat"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, num_heads_qk, num_heads_v, head_qk, head_v",
     )
     bench.set_gems_from_module(flaggems_sglang)

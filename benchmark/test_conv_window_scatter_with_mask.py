@@ -15,60 +15,24 @@
 """Benchmark for mamba/conv_window_scatter_with_mask."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import conv_window_scatter_with_mask as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/conv_window_scatter_with_mask.
-SHAPES = [(8, 512, requests, 4, 128, 4) for requests in (8, 64)]
-MORE_SHAPES = [(8, 512, requests, 4, 128, 4) for requests in (256,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    layers, cache, requests, draft, dim, k = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    # randperm is generated on CPU and moved: some vendor backends have
-    # no on-device kernel for it.
-    perm_g = torch.Generator(device="cpu").manual_seed(9)
-    win = k - 1
-    dst = torch.randn(layers, cache, dim, win, device=device, generator=g).to(
-        cur_dtype
-    )
-    # src is an as_strided window over a shared buffer, so its per-step
-    # windows overlap; that layout is the point of this variant.
-    base = torch.randn(
-        layers, requests, dim, draft + win - 1, device=device, generator=g
-    ).to(cur_dtype)
-    src = base.as_strided(
-        (layers, requests, draft, dim, win),
-        (
-            base.stride(0),
-            base.stride(1),
-            base.stride(3),
-            base.stride(2),
-            base.stride(3),
-        ),
-    )
-    dst_idx = torch.randperm(cache, device="cpu", generator=perm_g)[
-        :requests
-    ].to(device=device, dtype=torch.int32)
-    step = torch.randint(
-        0,
-        draft,
-        (requests,),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    yield dst.contiguous(), src, dst_idx, step
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (layers, cache, requests, draft, dim, k) = shape
+    layers, cache, requests, draft, dim, k = shape
     yield BenchmarkCasePlan(
         shape={
             "dst": (layers, cache, dim, k - 1),
@@ -96,10 +60,11 @@ def test_perf_conv_window_scatter_with_mask():
         op_name="conv_window_scatter_with_mask",
         torch_op=get_reference("conv_window_scatter_with_mask"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="layers, cache, requests, draft, dim, k",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,59 +15,26 @@
 """Benchmark for attention/decode_attention."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import decode_attention as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/decode_attention. The
 # KV buffer scales with B * seq_len, so the generator builds one shape's
 # tensors at a time rather than holding every case in memory.
-SHAPES = [
-    (B, 32, 8, 128, seq_len)
-    for B, seq_len in (
-        (1, 2048),
-        (8, 2048),
-        (64, 512),
-        (512, 128),
-        (4096, 128),
-    )
-]
-MORE_SHAPES = [
-    (2, 4, 4, 64, 10),
-    (2, 4, 2, 64, 10),
-    (2, 4, 4, 80, 10),
-    (2, 16, 1, 512, 128),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    B, H_Q, H_KV, D, seq_len = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    total_tokens = B * seq_len
-    q = torch.randn(
-        B, H_Q, D, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    k_buffer = torch.randn(
-        total_tokens, H_KV, D, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    v_buffer = torch.randn(
-        total_tokens, H_KV, D, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    # Every request holds seq_len contiguous KV slots.
-    kv_indptr = torch.zeros((B + 1,), dtype=torch.int32, device=device)
-    kv_indptr[1:] = torch.cumsum(
-        torch.full((B,), seq_len, dtype=torch.int32, device=device), dim=0
-    )
-    kv_indices = torch.arange(total_tokens, device=device, dtype=torch.int32)
-    yield q, k_buffer, v_buffer, kv_indptr, kv_indices, 1.0 / (D**0.5)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (B, H_Q, H_KV, D, seq_len) = shape
+    B, H_Q, H_KV, D, seq_len = shape
     yield BenchmarkCasePlan(
         shape={
             "q": (B, H_Q, D),
@@ -85,6 +52,9 @@ def _case_fn(shape, cur_dtype):
             "D": D,
             "seq_len": seq_len,
         },
+        baseline_key=workload.key_shape(
+            {"B": B, "H_Q": H_Q, "H_KV": H_KV, "D": D, "seq_len": seq_len}
+        ),
         builder_args=(shape,),
     )
 
@@ -95,10 +65,11 @@ def test_perf_decode_attention():
         op_name="decode_attention",
         torch_op=get_reference("decode_attention"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="B, H_Q, H_KV, D, seq_len",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -99,6 +99,7 @@ class BenchConfig:
         self.bench_level = consts.BenchLevel.COMPREHENSIVE
         self.warm_up = consts.DEFAULT_WARMUP_TIME
         self.repetition = consts.DEFAULT_ITER_TIME
+        self.timing_overrides = False
 
         # Speed Up Benchmark Test, Big Shape Will Cause Timeout
         if vendor_name == "kunlunxin":
@@ -206,13 +207,13 @@ def pytest_addoption(parser):
 
     parser.addoption(
         "--warmup",
-        default=consts.DEFAULT_WARMUP_TIME,
+        default=None,
         help="Time(ms) of warmup runs before benchmark run.",
     )
 
     parser.addoption(
         "--iter",
-        default=consts.DEFAULT_ITER_TIME,
+        default=None,
         help="Time(ms) of reps for each benchmark run.",
     )
 
@@ -393,10 +394,18 @@ def pytest_configure(config):
     Config.bench_level = consts.BenchLevel(level_value)
 
     warmup_value = config.getoption("--warmup")
-    Config.warm_up = int(warmup_value)
-
     iter_value = config.getoption("--iter")
-    Config.repetition = int(iter_value)
+    Config.timing_overrides = (
+        warmup_value is not None or iter_value is not None
+    )
+    Config.warm_up = (
+        int(warmup_value)
+        if warmup_value is not None
+        else consts.DEFAULT_WARMUP_TIME
+    )
+    Config.repetition = (
+        int(iter_value) if iter_value is not None else consts.DEFAULT_ITER_TIME
+    )
 
     types_str = config.getoption("--dtypes")
     dtypes = (

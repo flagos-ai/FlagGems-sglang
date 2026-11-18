@@ -15,36 +15,25 @@
 """Benchmark for rope/interleaved_rope."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import interleaved_rope as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
 # Shapes match kernel-comp-baseline/problems/rope/interleaved_rope. The last
 # entry is the mrope section split.
-SHAPES = [(s, 128, (16, 24, 24)) for s in (1, 128, 2048, 8192)]
-MORE_SHAPES = [
-    (1, 48, (8, 8, 8)),
-    (37, 96, (16, 16, 16)),
-    (257, 128, (16, 24, 24)),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    s, d, mrope_section = shape
-    # The op reads the three rope variants from a single [3, s, d] tensor.
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(
-        3, s, d, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    yield x, list(mrope_section)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (s, d, mrope_section) = shape
+    s, d, mrope_section = shape
     yield BenchmarkCasePlan(
         shape={"x": (3, s, d)},
         params={
@@ -70,10 +59,10 @@ def test_perf_interleaved_rope():
         op_name="interleaved_rope",
         torch_op=get_reference("interleaved_rope"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="s, d, mrope_section",
     )
     bench.set_gems(gems_op)

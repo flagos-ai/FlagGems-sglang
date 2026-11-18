@@ -15,48 +15,24 @@
 """Benchmark for mamba/bmm_chunk."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import bmm_chunk as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-CAUSAL = True
-
 # Shapes match kernel-comp-baseline/problems/mamba/bmm_chunk.
-SHAPES = [(8, 16, 256, 8, 64), (32, 4, 256, 8, 64)]
-MORE_SHAPES = [(1, 1, 8, 2, 16), (2, 3, 16, 2, 32), (3, 2, 32, 4, 64)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, nchunks, chunk_size, ngroups, k = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    seqlen = nchunks * chunk_size
-    a = torch.randn(
-        batch,
-        seqlen,
-        ngroups,
-        k,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    b = torch.randn(
-        batch,
-        seqlen,
-        ngroups,
-        k,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    yield a, b, chunk_size, CAUSAL
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, nchunks, chunk_size, ngroups, k) = shape
+    batch, nchunks, chunk_size, ngroups, k = shape
     yield BenchmarkCasePlan(
         shape={
             "a": (batch, nchunks * chunk_size, ngroups, k),
@@ -65,7 +41,7 @@ def _case_fn(shape, cur_dtype):
         params={
             "configuration": shape,
             "seed": 0,
-            "CAUSAL": CAUSAL,
+            "CAUSAL": workload.CAUSAL,
             "batch": batch,
             "nchunks": nchunks,
             "chunk_size": chunk_size,
@@ -82,10 +58,10 @@ def test_perf_bmm_chunk():
         op_name="bmm_chunk",
         torch_op=get_reference("bmm_chunk"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, ngroups, k",
     )
     bench.set_gems_from_module(flaggems_sglang)

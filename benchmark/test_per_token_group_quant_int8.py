@@ -18,36 +18,23 @@ import pytest
 import torch
 
 import flaggems_sglang
+from baseline import per_token_group_quant_int8 as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
-# Shapes match kernel-comp-baseline/problems/quantization/
-# per_token_group_quant_int8. The last entry is the quantization group size.
-SHAPES = [
-    (m, k, 128) for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)
-]
-MORE_SHAPES = [(7, 128, 128), (83, 512, 128), (256, 4096, 128), (3, 256, 64)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    m, k, group_size = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = (
-        (
-            torch.rand(m, k, generator=g, device=device, dtype=torch.float32)
-            * 2
-            - 1
-        )
-        .to(cur_dtype)
-        .contiguous()
+def _build_inputs(plan, cur_dtype, device):
+    m, k, group_size = plan.builder_args[0]
+    args, _ = workload.build_inputs(
+        {"m": m, "k": k, "group_size": group_size}, cur_dtype, device
     )
-    yield x, group_size, torch.int8
+    return (*args, torch.int8)
 
 
 def _case_fn(shape, cur_dtype):
-    (m, k, group_size) = shape
+    m, k, group_size = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, k)},
         params={
@@ -63,7 +50,6 @@ def _case_fn(shape, cur_dtype):
 
 @pytest.mark.per_token_group_quant_int8
 def test_perf_per_token_group_quant_int8():
-    # This op has a reference but no Triton implementation yet.
     gems_op = None
     if not is_case_listing():
         gems_op = flaggems_sglang.get_op("per_token_group_quant_int8")
@@ -75,10 +61,10 @@ def test_perf_per_token_group_quant_int8():
         op_name="per_token_group_quant_int8",
         torch_op=get_reference("per_token_group_quant_int8"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, k, group_size",
     )
     bench.set_gems(gems_op)

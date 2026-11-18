@@ -15,58 +15,51 @@
 """Benchmark for rope/mrope_fused."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import mrope_fused as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-MROPE_SECTION = [16, 24, 24]
-MAX_POSITION = 4096
-
 # Shapes match kernel-comp-baseline/problems/rope/mrope_fused.
-SHAPES = [(n, 8, 2, 128, 128) for n in (1, 128, 2048, 8192)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
-    q = torch.randn(
-        num_tokens, n_qh * head_size, device=device, dtype=cur_dtype
-    )
-    k = torch.randn(
-        num_tokens, n_kh * head_size, device=device, dtype=cur_dtype
-    )
-    cos_sin_cache = torch.randn(
-        MAX_POSITION, rotary_dim, device=device, dtype=cur_dtype
-    )
-    positions = torch.randint(
-        0, MAX_POSITION, (3, num_tokens), device=device, dtype=torch.int64
-    )
-    yield q, k, cos_sin_cache, positions, MROPE_SECTION, head_size, rotary_dim
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, n_qh, n_kh, head_size, rotary_dim) = shape
+    num_tokens, n_qh, n_kh, head_size, rotary_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "q": (num_tokens, n_qh * head_size),
             "k": (num_tokens, n_kh * head_size),
-            "cos_sin_cache": (MAX_POSITION, rotary_dim),
+            "cos_sin_cache": (workload.MAX_POSITION, rotary_dim),
             "positions": (3, num_tokens),
         },
         params={
             "configuration": shape,
             "random_source": "global_torch_rng",
-            "MAX_POSITION": MAX_POSITION,
-            "MROPE_SECTION": MROPE_SECTION,
+            "MAX_POSITION": workload.MAX_POSITION,
+            "MROPE_SECTION": workload.MROPE_SECTION,
             "num_tokens": num_tokens,
             "n_qh": n_qh,
             "n_kh": n_kh,
             "head_size": head_size,
             "rotary_dim": rotary_dim,
         },
+        baseline_key=workload.key_shape(
+            {
+                "num_tokens": num_tokens,
+                "n_qh": n_qh,
+                "n_kh": n_kh,
+                "head_size": head_size,
+                "rotary_dim": rotary_dim,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -77,9 +70,10 @@ def test_perf_mrope_fused():
         op_name="mrope_fused",
         torch_op=get_reference("mrope_fused"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
         shape_desc="num_tokens, n_qh, n_kh, head_size, rotary_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

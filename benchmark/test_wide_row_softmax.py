@@ -15,32 +15,24 @@
 """Benchmark for speculative/wide_row_softmax."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import wide_row_softmax as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/wide_row_softmax.
-SHAPES = [(b, v) for b in (1, 4) for v in (32000, 131072)]
-MORE_SHAPES = [(b, v) for b in (32,) for v in (32000, 131072)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, vocab = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    logits = (
-        torch.randn(bs, vocab, dtype=torch.float32, device=device, generator=g)
-        * 4
-    )
-    out = torch.full((bs, vocab), -1.0, dtype=torch.float32, device=device)
-    yield logits.contiguous(), None, out
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, vocab) = shape
+    bs, vocab = shape
     yield BenchmarkCasePlan(
         shape={"logits": (bs, vocab), "out": (bs, vocab)},
         params={"configuration": shape, "seed": 9, "bs": bs, "vocab": vocab},
@@ -54,10 +46,11 @@ def test_perf_wide_row_softmax():
         op_name="wide_row_softmax",
         torch_op=get_reference("wide_row_softmax"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, vocab",
     )
     bench.set_gems_from_module(flaggems_sglang)

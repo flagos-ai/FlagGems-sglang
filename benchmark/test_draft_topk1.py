@@ -15,70 +15,49 @@
 """Benchmark for speculative/draft_topk1."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import draft_topk1 as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
-NUM_DRAFT_COLS = 4
-
 # Shapes match kernel-comp-baseline/problems/speculative/draft_topk1.
-SHAPES = [(bs, 151936, True, 0) for bs in (1, 8, 64, 512)]
-MORE_SHAPES = [
-    (1, 32000, False, 0),
-    (37, 12000, True, 2),
-    (129, 8192 + 500, False, 0),
-    (8, 151936, True, 0),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, vocab_size, with_draft_tokens, draft_token_column = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    # The logits stay fp32; the op only argmaxes over them.
-    next_token_logits = torch.randn(
-        bs, vocab_size, generator=g, device=device, dtype=torch.float32
-    )
-    positions = torch.randint(
-        0, 4096, (bs,), generator=g, device=device, dtype=torch.int64
-    )
-
-    draft_tokens = None
-    if with_draft_tokens:
-        draft_tokens = torch.randint(
-            0,
-            vocab_size,
-            (bs, NUM_DRAFT_COLS),
-            generator=g,
-            device=device,
-            dtype=torch.int64,
-        )
-
-    yield next_token_logits, positions, draft_tokens, draft_token_column
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, vocab_size, with_draft_tokens, draft_token_column) = shape
+    bs, vocab_size, with_draft_tokens, draft_token_column = shape
     yield BenchmarkCasePlan(
         shape={
             "next_token_logits": (bs, vocab_size),
             "positions": (bs,),
             "draft_tokens": (
-                (bs, NUM_DRAFT_COLS) if with_draft_tokens else None
+                (bs, workload.NUM_DRAFT_COLS) if with_draft_tokens else None
             ),
         },
         params={
             "configuration": shape,
             "seed": 0,
-            "NUM_DRAFT_COLS": NUM_DRAFT_COLS,
+            "NUM_DRAFT_COLS": workload.NUM_DRAFT_COLS,
             "bs": bs,
             "vocab_size": vocab_size,
             "with_draft_tokens": with_draft_tokens,
             "draft_token_column": draft_token_column,
         },
+        baseline_key=workload.key_shape(
+            {
+                "bs": bs,
+                "vocab_size": vocab_size,
+                "with_draft_tokens": with_draft_tokens,
+                "draft_token_column": draft_token_column,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -95,10 +74,11 @@ def test_perf_draft_topk1():
         op_name="draft_topk1",
         torch_op=get_reference("draft_topk1"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(1, 2),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, vocab_size, with_draft_tokens, draft_token_column",
     )
     bench.set_gems(gems_op)

@@ -15,29 +15,20 @@
 """Benchmark for moe/topk_softmax."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import topk_softmax as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # (num_tokens, num_experts, k).
-SHAPES = [(t, 256, 8) for t in (1, 8, 64, 512)]
-MORE_SHAPES = [(4096, 256, 8)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, num_experts, k = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    # fp32 logits keep the top-k ordering well defined; see the test module.
-    gating = torch.randn(num_tokens, num_experts, device=device, generator=g)
-    topk_weights = torch.zeros(
-        num_tokens, k, dtype=torch.float32, device=device
-    )
-    topk_ids = torch.zeros(num_tokens, k, dtype=torch.int32, device=device)
-    yield topk_weights, topk_ids, gating, {"renormalize": True}
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -56,6 +47,7 @@ def _case_fn(shape, cur_dtype):
             "k": k,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -65,10 +57,11 @@ def test_perf_topk_softmax():
         op_name="topk_softmax",
         torch_op=get_reference("topk_softmax"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(0, 1),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, num_experts, k",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,49 +15,27 @@
 """Benchmark for kvcache/set_mla_kv_buffer."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import set_mla_kv_buffer as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/kvcache/set_mla_kv_buffer.
-SHAPES = [(n, 512, 64) for n in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(n, 512, 64) for n in (16384,)]
-
-_NUM_SLOTS = 65536
 
 
-def _input_fn(shape, cur_dtype, device):
-    n_loc, nope_dim, rope_dim = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    kv_buffer = torch.zeros(
-        _NUM_SLOTS, nope_dim + rope_dim, dtype=cur_dtype, device=device
-    )
-    # torch_gcu randperm hangs on-device; generate on CPU then move.
-    loc = (
-        torch.randperm(
-            _NUM_SLOTS, generator=torch.Generator(device="cpu").manual_seed(9)
-        )[:n_loc]
-        .to(torch.int64)
-        .to(device)
-    )
-    nope = torch.randn(n_loc, nope_dim, device=device, generator=g).to(
-        cur_dtype
-    )
-    rope = torch.randn(n_loc, rope_dim, device=device, generator=g).to(
-        cur_dtype
-    )
-    yield kv_buffer, loc, nope, rope
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (n_loc, nope_dim, rope_dim) = shape
+    n_loc, nope_dim, rope_dim = shape
     yield BenchmarkCasePlan(
         shape={
-            "kv_buffer": (_NUM_SLOTS, nope_dim + rope_dim),
+            "kv_buffer": (workload._NUM_SLOTS, nope_dim + rope_dim),
             "loc": (n_loc,),
             "nope": (n_loc, nope_dim),
             "rope": (n_loc, rope_dim),
@@ -65,11 +43,19 @@ def _case_fn(shape, cur_dtype):
         params={
             "configuration": shape,
             "seed": 9,
-            "_NUM_SLOTS": _NUM_SLOTS,
+            "_NUM_SLOTS": workload._NUM_SLOTS,
             "n_loc": n_loc,
             "nope_dim": nope_dim,
             "rope_dim": rope_dim,
         },
+        baseline_key=workload.key_shape(
+            {
+                "n_loc": n_loc,
+                "nope_dim": nope_dim,
+                "rope_dim": rope_dim,
+                **{"num_slots": workload._NUM_SLOTS},
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -80,10 +66,11 @@ def test_perf_set_mla_kv_buffer():
         op_name="set_mla_kv_buffer",
         torch_op=get_reference("set_mla_kv_buffer"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n_loc, nope_dim, rope_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

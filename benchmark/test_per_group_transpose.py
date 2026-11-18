@@ -15,50 +15,34 @@
 """Benchmark for quantization/per_group_transpose."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import per_group_transpose as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
-
-NUM_EXPERTS = 8
 
 # Shapes match kernel-comp-baseline/problems/quantization/per_group_transpose;
 # every expert gets ``rows_per_expert`` rows.
-SHAPES = [(k, n) for k in (128, 512, 4096) for n in (16, 128, 1024)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    k, rows_per_expert = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    a = torch.randn(
-        rows_per_expert * NUM_EXPERTS,
-        k,
-        generator=g,
-        device=device,
-        dtype=cur_dtype,
-    ).contiguous()
-    expert_offsets = torch.tensor(
-        [i * rows_per_expert for i in range(NUM_EXPERTS + 1)],
-        dtype=torch.int32,
-        device=device,
-    )
-    yield a, expert_offsets
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (k, rows_per_expert) = shape
+    k, rows_per_expert = shape
     yield BenchmarkCasePlan(
         shape={
-            "a": (rows_per_expert * NUM_EXPERTS, k),
-            "expert_offsets": (NUM_EXPERTS + 1,),
+            "a": (rows_per_expert * workload.NUM_EXPERTS, k),
+            "expert_offsets": (workload.NUM_EXPERTS + 1,),
         },
         params={
             "configuration": shape,
             "seed": 0,
-            "NUM_EXPERTS": NUM_EXPERTS,
+            "NUM_EXPERTS": workload.NUM_EXPERTS,
             "k": k,
             "rows_per_expert": rows_per_expert,
         },
@@ -72,9 +56,9 @@ def test_perf_per_group_transpose():
         op_name="per_group_transpose",
         torch_op=get_reference("per_group_transpose"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
         shape_desc="k, rows_per_expert",
     )
     bench.set_gems_from_module(flaggems_sglang)

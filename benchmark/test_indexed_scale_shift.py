@@ -15,37 +15,24 @@
 """Benchmark for diffusion/indexed_scale_shift."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import indexed_scale_shift as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/diffusion/indexed_scale_shift.
-SHAPES = [(rows, 3072, 8) for rows in (1, 64, 1024, 8192)]
-MORE_SHAPES = [(rows, 3072, 8) for rows in (32768,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    rows, hidden, variants = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    x = torch.randn(rows, hidden, device=device, generator=g).to(cur_dtype)
-    shift = torch.randn(variants, hidden, device=device, generator=g).to(
-        cur_dtype
-    )
-    scale = torch.randn(variants, hidden, device=device, generator=g).to(
-        cur_dtype
-    )
-    indices = torch.randint(
-        0, variants, (rows,), dtype=torch.int32, device=device, generator=g
-    )
-    yield x, shift, scale, indices
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (rows, hidden, variants) = shape
+    rows, hidden, variants = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (rows, hidden),
@@ -70,10 +57,11 @@ def test_perf_indexed_scale_shift():
         op_name="indexed_scale_shift",
         torch_op=get_reference("indexed_scale_shift"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="rows, hidden, variants",
     )
     bench.set_gems_from_module(flaggems_sglang)

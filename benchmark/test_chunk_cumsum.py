@@ -15,45 +15,25 @@
 """Benchmark for mamba/chunk_cumsum."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import chunk_cumsum as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/mamba/chunk_cumsum; every case
 # benchmarks the fully-featured path (dt_bias + dt_softplus).
-SHAPES = [(8, 16, 256, 32), (32, 4, 256, 64)]
-MORE_SHAPES = [(1, 1, 8, 4), (2, 3, 16, 8), (3, 2, 32, 16)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, nchunks, chunk_size, nheads = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    seqlen = nchunks * chunk_size
-    dt = torch.randn(
-        batch,
-        seqlen,
-        nheads,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    # A must stay negative for the decay to be stable.
-    a = (
-        -torch.rand(nheads, generator=g, device=device, dtype=torch.float32)
-        - 0.1
-    )
-    dt_bias = torch.randn(
-        nheads, generator=g, device=device, dtype=torch.float32
-    )
-    yield dt, a, chunk_size, dict(dt_bias=dt_bias, dt_softplus=True)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, nchunks, chunk_size, nheads) = shape
+    batch, nchunks, chunk_size, nheads = shape
     yield BenchmarkCasePlan(
         shape={
             "dt": (batch, nchunks * chunk_size, nheads),
@@ -78,10 +58,10 @@ def test_perf_chunk_cumsum():
         op_name="chunk_cumsum",
         torch_op=get_reference("chunk_cumsum"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, nchunks, chunk_size, nheads",
     )
     bench.set_gems_from_module(flaggems_sglang)

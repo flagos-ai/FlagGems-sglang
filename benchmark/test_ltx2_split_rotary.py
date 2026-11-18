@@ -15,38 +15,31 @@
 """Benchmark for diffusion/ltx2_split_rotary."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import ltx2_split_rotary as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-# Shapes match kernel-comp-baseline/problems/diffusion/ltx2_split_rotary.
-SHAPES = [(1, t, 16, 128) for t in (1, 64, 1024)]
-MORE_SHAPES = [(1, t, 16, 128) for t in (8192,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    batch, seq_len, num_heads, head_dim = shape
-    half = head_dim // 2
-    g = torch.Generator(device=device).manual_seed(9)
-    x = torch.randn(
-        batch, seq_len, num_heads * head_dim, device=device, generator=g
-    ).to(cur_dtype)
-    ang = torch.randn(
-        batch, num_heads, seq_len, half, device=device, generator=g
-    )
-    yield (
-        x,
-        torch.cos(ang).to(cur_dtype),
-        torch.sin(ang).to(cur_dtype),
-    )
+def _build_inputs(plan, cur_dtype, device):
+    batch, seq_len, num_heads, head_dim = plan.builder_args[0]
+    return workload.build_inputs(
+        {
+            "batch": batch,
+            "seq_len": seq_len,
+            "num_heads": num_heads,
+            "head_dim": head_dim,
+        },
+        cur_dtype,
+        device,
+    )[0]
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, seq_len, num_heads, head_dim) = shape
+    batch, seq_len, num_heads, head_dim = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (batch, seq_len, num_heads * head_dim),
@@ -71,10 +64,10 @@ def test_perf_ltx2_split_rotary():
         op_name="ltx2_split_rotary",
         torch_op=get_reference("ltx2_split_rotary"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, seq_len, num_heads, head_dim",
     )
     bench.set_gems_from_module(flaggems_sglang)

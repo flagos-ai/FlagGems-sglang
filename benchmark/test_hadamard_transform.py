@@ -15,27 +15,23 @@
 """Benchmark for quantization/hadamard_transform."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import hadamard_transform as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(m, n) for m in (1, 8, 64, 512) for n in (128, 512, 2048)]
-MORE_SHAPES = [(4096, n) for n in (128, 512, 2048)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    m, n = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    x = torch.randn(m, n, device=device, generator=g).to(cur_dtype)
-    yield x, 1.0
+def _build_inputs(plan, cur_dtype, device):
+    m, n = plan.builder_args[0]
+    args, kwargs = workload.build_inputs({"m": m, "n": n}, cur_dtype, device)
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (num_rows, hadamard_size) = shape
+    num_rows, hadamard_size = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (num_rows, hadamard_size),
@@ -56,10 +52,10 @@ def test_perf_hadamard_transform():
         op_name="hadamard_transform",
         torch_op=get_reference("hadamard_transform"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_rows, hadamard_size",
     )
     bench.set_gems_from_module(flaggems_sglang)

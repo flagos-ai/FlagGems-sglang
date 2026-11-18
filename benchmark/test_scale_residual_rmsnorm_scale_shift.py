@@ -15,42 +15,22 @@
 """Benchmark for diffusion/scale_residual_rmsnorm_scale_shift."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import scale_residual_rmsnorm_scale_shift as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(b, s, 2048) for b in (1, 2) for s in (77, 1024, 4096)]
-MORE_SHAPES = [(8, s, 2048) for s in (77, 1024, 4096)]
 
-_EPS = 1e-6
-
-
-def _input_fn(shape, cur_dtype, device):
-    batch, seq, hidden = shape
-    g = torch.Generator(device=device).manual_seed(9)
-
-    def _t(*s):
-        return torch.randn(
-            *s, dtype=torch.float32, device=device, generator=g
-        ).to(cur_dtype)
-
-    yield (
-        _t(batch, seq, hidden),
-        _t(batch, seq, hidden),
-        _t(batch, 1, hidden),
-        _t(hidden),
-        _t(batch, 1, hidden),
-        _t(batch, 1, hidden),
-        _EPS,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, seq, hidden) = shape
+    batch, seq, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (batch, seq, hidden),
@@ -72,10 +52,10 @@ def test_perf_scale_residual_rmsnorm_scale_shift():
         op_name="scale_residual_rmsnorm_scale_shift",
         torch_op=get_reference("scale_residual_rmsnorm_scale_shift"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, seq, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

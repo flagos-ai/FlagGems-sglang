@@ -15,82 +15,40 @@
 """Benchmark for utility/vocab_parallel_embedding."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import vocab_parallel_embedding as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/vocab_parallel_embedding.
-SHAPES = [(t, h) for t in (1, 8, 64, 512) for h in (2048, 7168)]
-MORE_SHAPES = [(t, h) for t in (4096,) for h in (2048, 7168)]
-
-_ORG_START, _ORG_END = 1000, 5000
-_PADDING = 8
-_ADDED_START, _ADDED_END = 20000, 20064
 
 
-def _input_fn(shape, cur_dtype, device):
-    num_tokens, hidden = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    local_vocab = (
-        (_ORG_END - _ORG_START) + _PADDING + (_ADDED_END - _ADDED_START)
-    )
-    weight = torch.randn(local_vocab, hidden, device=device, generator=g).to(
-        cur_dtype
-    )
-    # A mix of in-window, added-window and out-of-window tokens.
-    tokens = torch.randint(
-        0,
-        30000,
-        (num_tokens,),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    tokens[::3] = torch.randint(
-        _ORG_START,
-        _ORG_END,
-        (tokens[::3].numel(),),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    tokens[1::3] = torch.randint(
-        _ADDED_START,
-        _ADDED_END,
-        (tokens[1::3].numel(),),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    yield (
-        tokens.contiguous(),
-        weight,
-        _ORG_START,
-        _ORG_END,
-        _PADDING,
-        _ADDED_START,
-        _ADDED_END,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (num_tokens, hidden) = shape
+    num_tokens, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "tokens": (num_tokens,),
             "weight": (
-                _ORG_END - _ORG_START + _PADDING + _ADDED_END - _ADDED_START,
+                workload._ORG_END
+                - workload._ORG_START
+                + workload._PADDING
+                + workload._ADDED_END
+                - workload._ADDED_START,
                 hidden,
             ),
         },
         params={
             "configuration": shape,
             "seed": 9,
-            "_PADDING": _PADDING,
+            "_PADDING": workload._PADDING,
             "num_tokens": num_tokens,
             "hidden": hidden,
         },
@@ -104,10 +62,10 @@ def test_perf_vocab_parallel_embedding():
         op_name="vocab_parallel_embedding",
         torch_op=get_reference("vocab_parallel_embedding"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="num_tokens, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

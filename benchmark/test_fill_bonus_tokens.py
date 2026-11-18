@@ -15,44 +15,24 @@
 """Benchmark for speculative/fill_bonus_tokens."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fill_bonus_tokens as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/fill_bonus_tokens.
-SHAPES = [(batch, 8) for batch in (1, 8, 64, 512)]
-MORE_SHAPES = [(batch, 8) for batch in (4096,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, width = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    tokens = torch.randint(
-        0,
-        128000,
-        (batch, width),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    lens = torch.randint(
-        1,
-        width + 1,
-        (batch,),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    bonus = torch.zeros(batch, dtype=torch.int64, device=device)
-    yield tokens, lens, bonus, width
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, width) = shape
+    batch, width = shape
     yield BenchmarkCasePlan(
         shape={"tokens": (batch, width), "lens": (batch,), "bonus": (batch,)},
         params={
@@ -71,10 +51,11 @@ def test_perf_fill_bonus_tokens():
         op_name="fill_bonus_tokens",
         torch_op=get_reference("fill_bonus_tokens"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, accept_stride",
     )
     bench.set_gems_from_module(flaggems_sglang)

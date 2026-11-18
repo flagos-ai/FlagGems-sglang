@@ -52,6 +52,7 @@ class BenchmarkCasePlan:
     shape: Dict[str, Any]
     params: Dict[str, Any] = field(default_factory=dict)
     builder_args: Tuple[Any, ...] = field(default_factory=tuple, repr=False)
+    baseline_key: Any = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class BenchmarkCaseSpec:
     shape: Dict[str, Any]
     params: Dict[str, Any] = field(default_factory=dict)
     builder_args: Tuple[Any, ...] = field(default_factory=tuple, repr=False)
+    baseline_key: Any = field(default=None, repr=False)
 
     def to_dict(self) -> dict:
         return {

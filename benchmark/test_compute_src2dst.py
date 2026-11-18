@@ -15,26 +15,18 @@
 """Benchmark for attention/compute_src2dst."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import compute_src2dst as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(n,) for n in (8, 512, 8192, 131072)]
-MORE_SHAPES = [(n,) for n in (1048576,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    (n,) = shape
-    # torch_gcu randperm hangs on-device; generate on CPU then move.
-    g = torch.Generator(device="cpu").manual_seed(0)
-    reorder_ids = torch.randperm(n, generator=g).to(
-        dtype=torch.int32, device=device
-    )
-    yield (reorder_ids, n)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -52,10 +44,11 @@ def test_perf_compute_src2dst():
         op_name="compute_src2dst",
         torch_op=get_reference("compute_src2dst"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n",
     )
     bench.set_gems_from_module(flaggems_sglang)

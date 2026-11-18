@@ -15,38 +15,25 @@
 """Benchmark for sampling_grammar/apply_token_bitmask."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import apply_token_bitmask as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match
 # kernel-comp-baseline/problems/sampling_grammar/apply_token_bitmask.
-SHAPES = [(b, 152064) for b in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(3, 100), (7, 1000), (1, 32000)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    B, V = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    logits = torch.randn(B, V, generator=g, device=device, dtype=cur_dtype)
-    words = (V + 31) // 32
-    bitmask = torch.randint(
-        torch.iinfo(torch.int32).min,
-        torch.iinfo(torch.int32).max,
-        (B, words),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    yield logits, bitmask
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (B, V) = shape
+    B, V = shape
     yield BenchmarkCasePlan(
         shape={"logits": (B, V), "bitmask": (B, (V + 31) // 32)},
         params={"configuration": shape, "seed": 0, "B": B, "V": V},
@@ -60,11 +47,12 @@ def test_perf_apply_token_bitmask():
         op_name="apply_token_bitmask",
         torch_op=get_reference("apply_token_bitmask"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
+        build_inputs_fn=_build_inputs,
         # The op masks logits in place of a softmax, so it runs in fp32.
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="B, V",
     )
     bench.set_gems_from_module(flaggems_sglang)

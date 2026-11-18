@@ -15,56 +15,24 @@
 """Benchmark for speculative/get_target_cache_loc."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import get_target_cache_loc as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/speculative/get_target_cache_loc.
-SHAPES = [(bs, 8) for bs in (1, 8, 64, 256)]
-MORE_SHAPES = [(bs, 8) for bs in (1024,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    bs, num_verify_tokens = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    num_correct_drafts = torch.randint(
-        0,
-        num_verify_tokens,
-        (bs,),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    to_free_num_slots = torch.randint(
-        0,
-        num_verify_tokens // 2 + 1,
-        (bs,),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    out_cache_loc = torch.randint(
-        1,
-        1 << 20,
-        (bs * num_verify_tokens,),
-        dtype=torch.int64,
-        device=device,
-        generator=g,
-    )
-    yield (
-        num_correct_drafts,
-        to_free_num_slots,
-        out_cache_loc,
-        num_verify_tokens,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (bs, num_verify_tokens) = shape
+    bs, num_verify_tokens = shape
     yield BenchmarkCasePlan(
         shape={
             "num_correct_drafts": (bs,),
@@ -87,10 +55,10 @@ def test_perf_get_target_cache_loc():
         op_name="get_target_cache_loc",
         torch_op=get_reference("get_target_cache_loc"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="bs, num_verify_tokens",
     )
     bench.set_gems_from_module(flaggems_sglang)

@@ -15,37 +15,26 @@
 """Benchmark for quantization/per_token_quant_int8."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import per_token_quant_int8 as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark, is_case_listing
 
 # Shapes match kernel-comp-baseline/problems/quantization/
 # per_token_quant_int8.
-SHAPES = [(m, k) for m in (1, 8, 64, 512, 4096) for k in (2048, 4096, 8192)]
-MORE_SHAPES = [(7, 128), (83, 512), (256, 4096), (3, 4736)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    m, k = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = (
-        (
-            torch.rand(m, k, generator=g, device=device, dtype=torch.float32)
-            * 2
-            - 1
-        )
-        .to(cur_dtype)
-        .contiguous()
-    )
-    yield (x,)
+def _build_inputs(plan, cur_dtype, device):
+    m, k = plan.builder_args[0]
+    args, kwargs = workload.build_inputs({"m": m, "k": k}, cur_dtype, device)
+    return (*args, kwargs) if kwargs else args
 
 
 def _case_fn(shape, cur_dtype):
-    (m, k) = shape
+    m, k = shape
     yield BenchmarkCasePlan(
         shape={"x": (m, k)},
         params={"configuration": shape, "seed": 0, "m": m, "k": k},
@@ -67,10 +56,10 @@ def test_perf_per_token_quant_int8():
         op_name="per_token_quant_int8",
         torch_op=get_reference("per_token_quant_int8"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="m, k",
     )
     bench.set_gems(gems_op)

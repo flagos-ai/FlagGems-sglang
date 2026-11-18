@@ -15,57 +15,26 @@
 """Benchmark for lora/sgemm_lora_a."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import sgemm_lora_a as workload
 from flaggems_sglang.reference import get_reference
-from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/lora/sgemm_lora_a. The first
 # entry is the per-segment token count; the last selects the row permutation
 # (the kernel has a distinct gather path when one is present).
-SHAPES = [
-    ((64,) * 8, 4, 32, 4096, 1, "none"),
-    ((256,) * 4, 2, 64, 4096, 1, "none"),
-]
-MORE_SHAPES = [
-    ((5,), 1, 16, 64, 1, "none"),
-    ((3, 7, 0, 12), 2, 16, 128, 1, "none"),
-    ((9, 4), 2, 32, 256, 3, "shuffled"),
-]
 
 
-def _input_fn(shape, cur_dtype, device):
-    seg_lens, num_lora, r, k, stack_num, permutation = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    s = sum(seg_lens)
-    x = torch.randn(s, k, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    weights = torch.randn(
-        num_lora,
-        stack_num * r,
-        k,
-        generator=g,
-        device=device,
-        dtype=torch.float32,
-    ).to(cur_dtype)
-    batch_info = make_batch_info(
-        list(seg_lens),
-        [i % num_lora for i in range(len(seg_lens))],
-        lora_ranks=[r] * num_lora,
-        permutation=permutation,
-    )
-    # ``batch_info`` is a dataclass, which unpack_to_args_kwargs would drop
-    # from the positional args, so route it (and the tail) through kwargs.
-    yield x, weights, dict(batch_info=batch_info, stack_num=stack_num)
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (seg_lens, num_lora, r, k, stack_num, permutation) = shape
+    seg_lens, num_lora, r, k, stack_num, permutation = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (sum(seg_lens), k),
@@ -93,6 +62,7 @@ def _case_fn(shape, cur_dtype):
             "permutation": permutation,
         },
         builder_args=(shape,),
+        baseline_key=workload.key_shape(workload.binding_for_case(shape)),
     )
 
 
@@ -102,10 +72,10 @@ def test_perf_sgemm_lora_a():
         op_name="sgemm_lora_a",
         torch_op=get_reference("sgemm_lora_a"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="seg_lens, num_lora, r, k, stack_num, permutation",
     )
     bench.set_gems_from_module(flaggems_sglang)

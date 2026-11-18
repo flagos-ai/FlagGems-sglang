@@ -15,48 +15,24 @@
 """Benchmark for attention/linear_decode_forward."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import linear_decode_forward as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/attention/linear_decode_forward.
-SHAPES = [(b, 8, 128) for b in (1, 8, 64)]
-MORE_SHAPES = [(b, 8, 128) for b in (256,)]
-
-_BLOCK_SIZE = 32
 
 
-def _input_fn(shape, cur_dtype, device):
-    b, h, d = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    # randperm is generated on CPU and moved: some vendor backends have
-    # no on-device kernel for it.
-    perm_g = torch.Generator(device="cpu").manual_seed(9)
-    num_slots = b + 2
-
-    def _t(*size):
-        return torch.randn(*size, device=device, generator=g).to(cur_dtype)
-
-    slot_idx = torch.randperm(num_slots, device="cpu", generator=perm_g)[
-        :b
-    ].to(device=device, dtype=torch.int32)
-    yield (
-        _t(b, h, 1, d).contiguous(),
-        _t(b, h, 1, d).contiguous(),
-        _t(b, h, 1, d).contiguous(),
-        _t(num_slots, h, d, d).contiguous(),
-        torch.rand(h, dtype=torch.float32, device=device, generator=g),
-        slot_idx,
-        _BLOCK_SIZE,
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (b, h, d) = shape
+    b, h, d = shape
     yield BenchmarkCasePlan(
         shape={
             "q": (b, h, 1, d),
@@ -69,7 +45,7 @@ def _case_fn(shape, cur_dtype):
         params={
             "configuration": shape,
             "seed": 9,
-            "_BLOCK_SIZE": _BLOCK_SIZE,
+            "_BLOCK_SIZE": workload._BLOCK_SIZE,
             "b": b,
             "h": h,
             "d": d,
@@ -84,10 +60,11 @@ def test_perf_linear_decode_forward():
         op_name="linear_decode_forward",
         torch_op=get_reference("linear_decode_forward"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.float32],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="b, h, d",
     )
     bench.set_gems_from_module(flaggems_sglang)

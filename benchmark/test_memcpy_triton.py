@@ -15,32 +15,24 @@
 """Benchmark for utility/memcpy_triton."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import memcpy_triton as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/memcpy_triton.
-SHAPES = [(rows, 4096) for rows in (8, 64, 512, 4096)]
-MORE_SHAPES = [(rows, 4096) for rows in (16384,)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    rows, hidden = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    src = torch.randn(rows, hidden, device=device, generator=g).to(cur_dtype)
-    dst = torch.zeros(rows, hidden, dtype=cur_dtype, device=device)
-    # offset and size live in device memory so the copy stays capturable.
-    offset = torch.tensor([0], dtype=torch.int32, device=device)
-    sz = torch.tensor([rows // 2], dtype=torch.int32, device=device)
-    yield dst, src, 0, offset, sz, True
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (rows, hidden) = shape
+    rows, hidden = shape
     yield BenchmarkCasePlan(
         shape={
             "dst": (rows, hidden),
@@ -54,6 +46,13 @@ def _case_fn(shape, cur_dtype):
             "rows": rows,
             "hidden": hidden,
         },
+        baseline_key=workload.key_shape(
+            {
+                "rows": rows,
+                "hidden": hidden,
+                **{"offset": 0, "sz": rows // 2, "offset_src": True},
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -64,10 +63,11 @@ def test_perf_memcpy_triton():
         op_name="memcpy_triton",
         torch_op=get_reference("memcpy_triton"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="rows, hidden",
     )
     bench.set_gems_from_module(flaggems_sglang)

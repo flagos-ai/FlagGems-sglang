@@ -15,40 +15,24 @@
 """Benchmark for utility/set_token_filter."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import set_token_filter as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/utility/set_token_filter.
-SHAPES = [(16, vocab, n) for vocab in (32768,) for n in (16, 1024)]
-MORE_SHAPES = [(16, vocab, n) for vocab in (152064,) for n in (16, 1024)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    batch, vocab, num_tokens = shape
-    g = torch.Generator(device=device).manual_seed(9)
-    words = (vocab + 31) // 32
-    vocab_mask = torch.randint(
-        -(2**31),
-        2**31 - 1,
-        (batch, words),
-        dtype=torch.int32,
-        device=device,
-        generator=g,
-    )
-    # token_ids is a Python list, so the permutation stays on the CPU.
-    token_ids = torch.randperm(
-        vocab, generator=torch.Generator().manual_seed(9)
-    )[:num_tokens].tolist()
-    yield vocab_mask, token_ids, batch // 2, True, True
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (batch, vocab, num_tokens) = shape
+    batch, vocab, num_tokens = shape
     yield BenchmarkCasePlan(
         shape={"vocab_mask": (batch, (vocab + 31) // 32)},
         params={
@@ -58,6 +42,14 @@ def _case_fn(shape, cur_dtype):
             "vocab": vocab,
             "num_tokens": num_tokens,
         },
+        baseline_key=workload.key_shape(
+            {
+                "batch": batch,
+                "vocab": vocab,
+                "num_tokens": num_tokens,
+                **{"is_allowed": True, "reset": True},
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -68,10 +60,11 @@ def test_perf_set_token_filter():
         op_name="set_token_filter",
         torch_op=get_reference("set_token_filter"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=workload.MUTATED_INPUTS,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="batch, vocab, num_tokens",
     )
     bench.set_gems_from_module(flaggems_sglang)

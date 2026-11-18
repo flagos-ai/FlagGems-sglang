@@ -15,53 +15,24 @@
 """Benchmark for fla/layernorm_gated."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fla_layernorm_gated as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/fla/layernorm_gated.
-SHAPES = [(t, 2048, "swish", 1, 1) for t in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [
-    (1, 64, "swish", 1, 1),
-    (37, 256, "sigmoid", 1, 1),
-    (83, 512, "swish", 0, 0),
-]
-
-_EPS = 1e-5
 
 
-def _input_fn(shape, cur_dtype, device):
-    t, d, activation, is_rms_norm, has_bias = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(t, d, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    gate = torch.randn(
-        t, d, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    weight = torch.randn(
-        d, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    bias = None
-    if has_bias:
-        bias = torch.randn(
-            d, generator=g, device=device, dtype=torch.float32
-        ).to(cur_dtype)
-    # ``activation`` is a str, so it rides in a trailing dict along with the
-    # remaining keyword-only style options.
-    yield x, gate, weight, bias, {
-        "activation": activation,
-        "eps": _EPS,
-        "is_rms_norm": bool(is_rms_norm),
-    }
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (t, d, activation, is_rms_norm, has_bias) = shape
+    t, d, activation, is_rms_norm, has_bias = shape
     yield BenchmarkCasePlan(
         shape={
             "x": (t, d),
@@ -72,13 +43,22 @@ def _case_fn(shape, cur_dtype):
         params={
             "configuration": shape,
             "seed": 0,
-            "_EPS": _EPS,
+            "_EPS": workload._EPS,
             "t": t,
             "d": d,
             "activation": activation,
             "is_rms_norm": is_rms_norm,
             "has_bias": has_bias,
         },
+        baseline_key=workload.key_shape(
+            {
+                "t": t,
+                "d": d,
+                "activation": activation,
+                "is_rms_norm": is_rms_norm,
+                "has_bias": has_bias,
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -89,10 +69,10 @@ def test_perf_fla_layernorm_gated():
         op_name="fla_layernorm_gated",
         torch_op=get_reference("fla_layernorm_gated"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="t, d, activation, is_rms_norm, has_bias",
     )
     bench.set_gems_from_module(flaggems_sglang)

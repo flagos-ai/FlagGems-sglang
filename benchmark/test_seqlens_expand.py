@@ -15,34 +15,18 @@
 """Benchmark for attention/seqlens_expand."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import seqlens_expand as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
-SHAPES = [(n,) for n in (1, 8, 64, 512)]
-MORE_SHAPES = [(n,) for n in (4096,)]
 
-
-def _input_fn(shape, cur_dtype, device):
-    (n,) = shape
-    max_q = 8
-    g = torch.Generator(device=device).manual_seed(0)
-    extend_seq_lens = torch.randint(
-        1, max_q + 1, (n,), dtype=torch.int32, device=device, generator=g
-    )
-    seq_lens = torch.randint(
-        1, 8192, (n,), dtype=torch.int32, device=device, generator=g
-    )
-    yield (
-        extend_seq_lens,
-        seq_lens,
-        int(extend_seq_lens.sum()),
-        int(extend_seq_lens.max()),
-    )
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
@@ -60,10 +44,10 @@ def test_perf_seqlens_expand():
         op_name="seqlens_expand",
         torch_op=get_reference("seqlens_expand"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="n",
     )
     bench.set_gems_from_module(flaggems_sglang)

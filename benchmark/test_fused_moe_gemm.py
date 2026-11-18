@@ -15,39 +15,24 @@
 """Benchmark for moe/fused_moe_gemm."""
 
 import pytest
-import torch
 
 import flaggems_sglang
+from baseline import fused_moe_gemm as workload
 from flaggems_sglang.reference import get_reference
 
-from .cases import BenchmarkCasePlan, single_input_builder
+from .cases import BenchmarkCasePlan
 from .op_benchmark import OpBenchmark
 
 # Shapes match kernel-comp-baseline/problems/moe/fused_moe_gemm.
-SHAPES = [(t, 8, 4096, 4096, 2) for t in (1, 8, 64, 512, 4096)]
-MORE_SHAPES = [(8, 4, 64, 128, 2), (17, 8, 128, 256, 2), (5, 4, 64, 128, 1)]
 
 
-def _input_fn(shape, cur_dtype, device):
-    T, E, N, K, top_k = shape
-    g = torch.Generator(device=device).manual_seed(0)
-    A = torch.randn(T, K, generator=g, device=device, dtype=torch.float32).to(
-        cur_dtype
-    )
-    B = torch.randn(
-        E, N, K, generator=g, device=device, dtype=torch.float32
-    ).to(cur_dtype)
-    topk_ids = torch.randint(
-        0, E, (T, top_k), dtype=torch.int32, device=device, generator=g
-    )
-    topk_weights = torch.rand(
-        T, top_k, device=device, generator=g, dtype=torch.float32
-    )
-    yield A, B, topk_weights, topk_ids, top_k
+def _build_inputs(plan, cur_dtype, device):
+    (shape,) = plan.builder_args
+    return workload.build_case(shape, cur_dtype, device)
 
 
 def _case_fn(shape, cur_dtype):
-    (T, E, N, K, top_k) = shape
+    T, E, N, K, top_k = shape
     yield BenchmarkCasePlan(
         shape={
             "A": (T, K),
@@ -64,6 +49,15 @@ def _case_fn(shape, cur_dtype):
             "K": K,
             "top_k": top_k,
         },
+        baseline_key=workload.key_shape(
+            {
+                "T": shape[0],
+                "E": shape[1],
+                "N": shape[2],
+                "K": shape[3],
+                "top_k": shape[4],
+            }
+        ),
         builder_args=(shape,),
     )
 
@@ -74,10 +68,11 @@ def test_perf_fused_moe_gemm():
         op_name="fused_moe_gemm",
         torch_op=get_reference("fused_moe_gemm"),
         case_fn=_case_fn,
-        build_inputs_fn=single_input_builder(_input_fn),
-        dtypes=[torch.bfloat16],
-        shapes=SHAPES,
-        more_shapes=MORE_SHAPES,
+        build_inputs_fn=_build_inputs,
+        dtypes=workload.DTYPES,
+        timing_reset_args=(),
+        shapes=workload.SHAPES,
+        more_shapes=workload.MORE_SHAPES,
         shape_desc="T, E, N, K, top_k",
     )
     bench.set_gems_from_module(flaggems_sglang)
