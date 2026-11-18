@@ -284,6 +284,13 @@ _PACKED_BLOCK_N = 32
 _PACKED_WARPS = 4
 _PACKED_WARPS_FP32 = 8
 _PACKED_MAX_GROUP = 8
+# 16-bit inputs with head_dim up to 256: (block_m, block_n, num_warps) of a
+# 16-row tile, which keeps more programs running when the work is small, and
+# of a 128-row tile, which reads each K/V tile for more queries. The 128-row
+# tile takes over once the 16-row tiles would read about 2**20 K/V tokens.
+_PACKED_WIDE_SMALL = (16, 32, 4)
+_PACKED_WIDE_LARGE = (128, 64, 8)
+_PACKED_WIDE_WORK = 1 << 20
 
 
 @triton.jit
@@ -464,10 +471,36 @@ def _packed_supported(tensors, head_dim, group_size, batch_size):
         and k_extend.stride() == v_extend.stride()
         and k_buffer.stride() == v_buffer.stride()
         and v_extend.shape[-1] == head_dim
-        and head_dim <= 128
+        and (
+            head_dim <= 128
+            or (head_dim <= 256 and q_extend.dtype != torch.float32)
+        )
         and group_size <= _PACKED_MAX_GROUP
         and batch_size <= 65535
     )
+
+
+def _packed_config(
+    ieee, head_dim, group_size, num_kv_heads, batch_size, extend, prefix
+):
+    if ieee:
+        return _PACKED_BLOCK_M_FP32, _PACKED_BLOCK_N, _PACKED_WARPS_FP32
+    if head_dim <= 128:
+        return _PACKED_BLOCK_M, _PACKED_BLOCK_N, _PACKED_WARPS
+    # extend and prefix are token totals; the estimate takes every sequence
+    # to have the mean lengths.
+    mean_extend = extend / batch_size
+    mean_prefix = prefix / batch_size
+    tokens = _PACKED_WIDE_SMALL[0] // group_size
+    work = (
+        batch_size
+        * num_kv_heads
+        * math.ceil(mean_extend / tokens)
+        * (mean_prefix + mean_extend / 2)
+    )
+    if work < _PACKED_WIDE_WORK:
+        return _PACKED_WIDE_SMALL
+    return _PACKED_WIDE_LARGE
 
 
 def _prepare_index(tensor, device):
@@ -505,7 +538,15 @@ def extend_attention(
         # the float32 output first costs as much as a pass over the KV cache
         output = torch.empty_like(q_extend, dtype=torch.float32)
         ieee = q_extend.dtype == torch.float32
-        block_m = _PACKED_BLOCK_M_FP32 if ieee else _PACKED_BLOCK_M
+        block_m, block_n, num_warps = _packed_config(
+            ieee,
+            head_dim,
+            group_size,
+            num_kv_heads,
+            batch_size,
+            total_extend,
+            kvi.numel(),
+        )
         tokens = block_m // group_size
         grid_m = max(1, triton.cdiv(int(max_len_extend), tokens))
         _extend_attention_packed_kernel[(grid_m, num_kv_heads, batch_size)](
@@ -532,10 +573,10 @@ def extend_attention(
             group_size=group_size,
             head_dim=head_dim,
             block_m=block_m,
-            block_n=_PACKED_BLOCK_N,
+            block_n=block_n,
             block_d=block_d,
             IEEE=ieee,
-            num_warps=_PACKED_WARPS_FP32 if ieee else _PACKED_WARPS,
+            num_warps=num_warps,
             num_stages=1,
         )
         return output

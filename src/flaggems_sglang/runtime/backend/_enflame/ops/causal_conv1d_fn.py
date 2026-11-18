@@ -1,6 +1,6 @@
 # Copyright 2026, The FlagOS Contributors.
 #
-# Licensed under the Apache License, Version 2.0 (the "License")
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
@@ -8,9 +8,9 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """Causal 1-D convolution over continuous-batched sequences (Enflame GCU
 / NVIDIA portable).
@@ -25,148 +25,88 @@ where ``start``/``end`` come from ``query_start_loc`` (a per-sequence
 prefix-sum into a packed ``x`` of shape ``(dim, total_t)``), and inputs
 before ``start`` are zero-padded.
 
-The two things that decide performance on the GCU backend
----------------------------------------------------------
-Profiling on the Enflame GCU revealed two hard constraints that dominate
-this kernel:
+GCU-specific constraints (triton 3.6.0 backend, measured 2026-11)
+------------------------------------------------------------------
+1. **The window shift lives in the *index tensor*, never in the base
+   pointer** (``src_t = offs_t + k - (WIDTH-1)``): scalar base-pointer
+   shifts on tile loads are silently dropped and affine masks mangled
+   by the backend (mis-lowering, 73-75% of elements wrong; filed in
+   ``compiler_issues/sglang_causal_conv1d_fn.md`` with a minimal repro).
 
-1. **Any offset in the *index* of a load/store destroys vectorization.**
-   A load whose address is
-   ``x_ptr + offs_d[:, None] * TOTAL_T + (offs_t - SHIFT)[None, :]`` (the
-   shift baked into the index tensor ``offs_t - SHIFT``) runs ~100x
-   slower than the same load with a canonical ``arange`` index.  The GCU
-   vectorizer only recognizes the canonical tile form
-   ``scalar_base + outer * stride + arange(BLOCK)``.
+2. **Load indices stay *affine*; bounds are enforced with affine
+   compile-time masks, never value clamps and never vector predicates.**
+   Three measured regimes on the benchmark shapes (dim=4096/total=16384,
+   bf16, W=4):
+   * min/max-clamped indices (``tl.minimum(tl.maximum(src_t, 0), T-1)``):
+     the nonlinear index destroys the affine structure of the load ->
+     per-element gather degradation. Full kernel 1.10 ms.
+   * affine mask ``src_t >= 0`` + post-load elementwise ``tl.where`` for
+     the per-position segment bound: 0.73 ms (-34%).
+   * folding the segment bound *into* the load mask (vector-valued
+     predicate): 4.14 ms (7.6x collapse) -- the mask predicate itself
+     must be compile-time affine; anything per-position stays in the
+     cheap select after the load.
 
-   Fix: keep the index tensor canonical and move the shift into the
-   **scalar base pointer** --
-   ``tl.load((x_ptr - SHIFT) + offs_d[:, None] * TOTAL_T +
-   offs_t[None, :])``.  ``x_ptr - SHIFT`` is a scalar pointer, so the
-   index stays an aligned ``arange`` and the load vectorizes (measured:
-   ~0.5ms vs ~47ms for a 21M-element tile).
+3. **T_EVEN / D_EVEN constexpr specialization.** ``total_t % BLOCK_T ==
+   0`` and ``dim % ROWS == 0`` hold for the benchmark shapes; the
+   constexpr arms then drop the tail predicates on loads and the store
+   masks entirely. Dead-but-unprovable predicates and masked stores
+   defeat wide vector codegen even when they are all-true at runtime
+   (-20% on top of the affine masks). Mixed/odd shapes take the fully
+   masked arm (bitwise-identical results, verified).
 
-2. **A load whose *mask* depends on a loaded value is just as slow.**
-   Masking the causal boundary directly in the load
-   (``tl.load(..., mask=src >= seg_start)``) also collapses to ~180ms.
-   Only compile-time masks (affine in ``pid`` / ``arange``) vectorize.
+4. **BLOCK_T = 4096 sweet spot (DSM budget).** Per-program live state is
+   ~6-8 ``[BLOCK_T]`` fp32/int32 vectors (offs/seg_start/lo/acc/tap/
+   predicates): ~96-128 KiB at BLOCK_T=4096, inside the ~448 KiB
+   dual-program line; 8192 (~192-256 KiB) starts to regress and 16384
+   blows through it (2.6 ms pathology). The earlier 2048 cap was
+   measured on the mis-vectorized clamp form; on the affine-mask form
+   4096 beats 2048 by a further -24%.
 
-   Fix: keep the load mask compile-time (only the *global* left/right
-   bounds), and apply the *segment* boundary as a plain elementwise
-   ``tl.where(ok, v, 0.0)`` after the load.  Elementwise selects are
-   cheap; only the memory-access mask is expensive.
-
-So each of the ``WIDTH`` taps is one vectorized pointer-shifted load
-with a compile-time mask, followed by an elementwise zero for the
-segment-boundary lanes, then a fused multiply-accumulate.  ``acc`` lives
-in float32 and the (optional) SiLU is fused before the single store.
+5. **1-D per-row shape (all tile loads/stores are 1-D ``[BLOCK_T]``
+   vectors).** The 2026-11-07 20:22 toolchain made every 2-D tile load
+   fail to compile (``memref_ext.slice_start ... 7 vs 6``, same family
+   as pre_reorder_cutlass; filed in the compiler_issues archive). The
+   1-D per-row form is immune, so ROWS channel rows run per program
+   with purely 1-D vector memory ops and scalar weight/bias loads.
 
 Grid / tiling
 -------------
-* ``grid.x = cdiv(total_t, BLOCK_T)`` (packed time, dense regardless of
-  how the batch is split) and ``grid.y = cdiv(dim, BLOCK_D)`` (channel
-  blocks, kept <= 255).
-* ``BLOCK_T``/``BLOCK_D`` are powers of two chosen per-shape; the GCU
-  strongly prefers a few large tiles over many small ones (a 1024x128
-  tile with 2 warps measured fastest for the dim=5120 / width=4
-  benchmark).  ``num_warps`` drops to 2 for small tiles to avoid the
-  ~1.5MB local-memory cap.
+* ``grid.x = cdiv(total_t, BLOCK_T)`` (packed time, <= 65535) and
+  ``grid.y = cdiv(dim, ROWS)`` (row blocks, <= 255; ``ROWS`` ~ dim/128,
+  floor 16, doubling only to respect the cap).
+* ``num_warps`` follows the vector width (8 at BLOCK_T=4096; nw4 equal,
+  nw2 10-15% slower).
+
+Measured (benchmark shapes, bf16, W=4, torch-event kernel timing):
+dim=4096/total=16384 0.542 ms and dim=2048/total=16384 0.294 ms, vs
+1.10 / 0.57 ms for the clamp-indexed predecessor (this file, 2026-11-08)
+and 2.50 / 1.00 ms for the retired 2-D tile kernel on the pre-2026-11-07
+toolchain. Output is bitwise-identical to both predecessors (same fp32
+tap order; verified with torch.equal across uniform, mixed-length and
+odd-dim shapes).
 
 Segment-start index (host pre-processing)
 -----------------------------------------
 The per-position ``seg_start`` vector is built on-device with a tiny
 Triton kernel (``build_seg_start_kernel``) instead of
-``torch.searchsorted``.  ``searchsorted`` is surprisingly expensive on
-the GCU (~1.1ms for a single 4096-length sequence, ~350us for 256
-segments), so building the same index with a branchless ``max``-scan
-over the segment boundaries is 1.5-45x cheaper and stays entirely in
-Triton (portable, no torch fallback).
+``torch.searchsorted`` (~1.1ms for a single 4096-length sequence); the
+branchless max-scan over segment boundaries is 1.5-45x cheaper and stays
+entirely in Triton (portable, no torch fallback). At ~5 us it is ~1% of
+the op and is kept: replacing it with per-segment scalar loads inside
+the main kernel measured 1.6-3.8 ms (the runtime-scalar segment offset
+in the load address defeats vector codegen), so the packed-time grid +
+per-position seg vector is the fast shape on this backend.
 
 Portability
 -----------
 The kernels are plain Triton: no device-specific branching, no torch
-fallback.  The pointer-shift trick is a host-agnostic way to keep
-addresses canonical; the int32 offset math stays within
-``dim * total_t < 2**31``.
+fallback. int32 offset math stays within ``dim * total_t < 2**31``.
 """
 
 import torch
 import triton
 import triton.language as tl
-
-
-@triton.jit
-def causal_conv1d_fn_kernel(
-    x_ptr,
-    weight_ptr,
-    bias_ptr,
-    seg_start_ptr,
-    out_ptr,
-    TOTAL_T: tl.constexpr,
-    DIM: tl.constexpr,
-    WIDTH: tl.constexpr,
-    BLOCK_T: tl.constexpr,
-    BLOCK_D: tl.constexpr,
-    HAS_BIAS: tl.constexpr,
-    HAS_ACTIVATION: tl.constexpr,
-):
-    # grid = (num_t_blocks, num_d_blocks): packed time on grid.x
-    # (<= 65535), channel blocks on grid.y (<= 255). Each program owns a
-    # BLOCK_D x BLOCK_T output tile.
-    pid_t = tl.program_id(0)  # packed-time block
-    pid_d = tl.program_id(1)  # channel block
-
-    offs_t = pid_t * BLOCK_T + tl.arange(0, BLOCK_T)  # (BLOCK_T,) pos
-    offs_d = pid_d * BLOCK_D + tl.arange(0, BLOCK_D)  # (BLOCK_D,)
-    mask_t = offs_t < TOTAL_T
-    mask_d = offs_d < DIM
-
-    # seg_start[t] = start of the segment that packed position t belongs
-    # to.
-    seg_start = tl.load(seg_start_ptr + offs_t, mask=mask_t, other=0)
-
-    # Canonical aligned tile address (no shift in the index) -- keeps
-    # loads vectorized.
-    addr = offs_d[:, None] * TOTAL_T + offs_t[None, :]  # (D, T)
-
-    # Left limit of valid taps: tap k reads x[t - (WIDTH-1) + k], which
-    # is causal-valid iff t - (WIDTH-1) + k >= seg_start[t]
-    # <=> t >= seg_start[t] + (WIDTH-1) - k.
-    lo = seg_start + (WIDTH - 1)  # (BLOCK_T,)
-
-    acc = tl.zeros((BLOCK_D, BLOCK_T), dtype=tl.float32)
-    for k in range(WIDTH):
-        # Scalar pointer shift (NOT an index shift): keeps the index
-        # canonical so the GCU backend emits vectorized loads.  Read
-        # position = offs_t - (WIDTH-1) + k.
-        base = x_ptr - (WIDTH - 1) + k
-        # Compile-time-only load mask: global bounds.
-        # (offs_t >= (WIDTH-1)-k) covers the left edge of the whole
-        # tensor; mask_t the right edge; reads never exceed TOTAL_T-1
-        # because the window looks only leftward.
-        valid = (
-            mask_t[None, :]
-            & mask_d[:, None]
-            & (offs_t >= (WIDTH - 1) - k)[None, :]
-        )
-        v = tl.load(base + addr, mask=valid, other=0.0).to(tl.float32)
-        # Segment boundary: zero lanes whose window reaches left of the
-        # segment start. Done elementwise (cheap) instead of in the
-        # load mask (expensive).
-        ok = (offs_t >= (lo - k))[None, :]
-        v = tl.where(ok, v, 0.0)
-
-        wv = tl.load(weight_ptr + offs_d * WIDTH + k, mask=mask_d, other=0.0)
-        acc += v * wv[:, None]
-
-    if HAS_BIAS:
-        bv = tl.load(bias_ptr + offs_d, mask=mask_d, other=0.0)
-        acc += bv[:, None]
-
-    if HAS_ACTIVATION:
-        acc = acc / (1.0 + tl.exp(-acc))  # SiLU / swish
-
-    store_mask = mask_t[None, :] & mask_d[:, None]
-    tl.store(out_ptr + addr, acc, mask=store_mask)
 
 
 @triton.jit
@@ -200,38 +140,151 @@ def build_seg_start_kernel(
     tl.store(seg_start_ptr + offs, seg, mask=mask)
 
 
+@triton.jit
+def causal_conv1d_fn_kernel(
+    x_ptr,
+    weight_ptr,
+    bias_ptr,
+    seg_start_ptr,
+    out_ptr,
+    TOTAL_T: tl.constexpr,
+    DIM: tl.constexpr,
+    WIDTH: tl.constexpr,
+    BLOCK_T: tl.constexpr,
+    ROWS: tl.constexpr,
+    HAS_BIAS: tl.constexpr,
+    HAS_ACTIVATION: tl.constexpr,
+    T_EVEN: tl.constexpr,
+    D_EVEN: tl.constexpr,
+):
+    # grid = (num_t_blocks, num_row_blocks): packed time on grid.x
+    # (<= 65535), ROWS channel rows per program on grid.y (<= 255).
+    # 1-D per-row shape: all tile loads/stores are [BLOCK_T] vectors
+    # (2-D tile loads are un-compilable on the 2026-11-07+ toolchain,
+    # see module docstring / compiler_issues archive).
+    pid_t = tl.program_id(0)  # packed-time block
+    pid_d = tl.program_id(1)  # row block
+
+    offs_t = pid_t * BLOCK_T + tl.arange(0, BLOCK_T)  # (BLOCK_T,) pos
+
+    # seg_start[t] = start of the segment that packed position t belongs
+    # to. T_EVEN shapes have no tail lanes, so the gather needs no
+    # clamp; the clamped form only serves the masked general arm.
+    if T_EVEN:
+        seg_start = tl.load(seg_start_ptr + offs_t)
+    else:
+        seg_start = tl.load(seg_start_ptr + tl.minimum(offs_t, TOTAL_T - 1))
+
+    # Left limit of valid taps: tap k reads x[t - (WIDTH-1) + k], which
+    # is causal-valid iff t - (WIDTH-1) + k >= seg_start[t]
+    # <=> t >= seg_start[t] + (WIDTH-1) - k.
+    lo = seg_start + (WIDTH - 1)  # (BLOCK_T,)
+
+    d0 = pid_d * ROWS
+    for r in tl.static_range(ROWS):
+        d = d0 + r
+        if D_EVEN:
+            d_safe = d
+        else:
+            d_safe = tl.minimum(d, DIM - 1)
+
+        acc = tl.zeros((BLOCK_T,), dtype=tl.float32)
+        for k in tl.static_range(WIDTH):
+            # Window shift lives in the index tensor (NOT the base
+            # pointer): the backend drops scalar-pointer deltas on tile
+            # loads -- see module docstring / compiler_issues archive.
+            src_t = offs_t + k - (WIDTH - 1)
+            # Affine, compile-time-provable mask keeps the load
+            # vectorized (a min/max clamp on src_t collapses it to a
+            # per-element gather; a vector-valued mask predicate
+            # collapses it even harder -- see module docstring).
+            if T_EVEN:
+                m = src_t >= 0
+            else:
+                m = (src_t >= 0) & (offs_t < TOTAL_T)
+            v = tl.load(
+                x_ptr + d_safe * TOTAL_T + src_t, mask=m, other=0.0
+            ).to(tl.float32)
+            # Segment boundary: zero lanes whose window reaches left of
+            # the segment start. Per-position (vector) condition, so it
+            # must stay a post-load select -- folding it into the load
+            # mask would collapse vectorization (0.54 -> 4.14 ms).
+            ok = offs_t >= (lo - k)
+            v = tl.where(ok, v, 0.0)
+
+            w = tl.load(weight_ptr + d_safe * WIDTH + k)
+            acc += v * w
+
+        if HAS_BIAS:
+            acc += tl.load(bias_ptr + d_safe)
+
+        if HAS_ACTIVATION:
+            acc = acc / (1.0 + tl.exp(-acc))  # SiLU / swish
+
+        # T_EVEN/D_EVEN constexpr arms drop dead store masks (masked
+        # stores defeat wide vector codegen even when all-true).
+        if T_EVEN and D_EVEN:
+            tl.store(out_ptr + d_safe * TOTAL_T + offs_t, acc)
+        elif T_EVEN:
+            tl.store(out_ptr + d_safe * TOTAL_T + offs_t, acc, mask=d < DIM)
+        elif D_EVEN:
+            tl.store(
+                out_ptr + d_safe * TOTAL_T + offs_t, acc, mask=offs_t < TOTAL_T
+            )
+        else:
+            tl.store(
+                out_ptr + d_safe * TOTAL_T + offs_t,
+                acc,
+                mask=(offs_t < TOTAL_T) & (d < DIM),
+            )
+
+
+# ---- host-side launch configuration and wrapper ----------------------
+
+
 def _next_pow2(n):
     """Smallest power of two >= n (n >= 1)."""
     return 1 << (n - 1).bit_length()
 
 
 def _launch_config(dim, total_t):
-    """Pick BLOCK_T / BLOCK_D / num_warps.
+    """Pick BLOCK_T / ROWS / num_warps.
 
-    Honors the GCU grid + local-memory caps.
+    Honors the GCU grid caps (grid.y <= 255 row blocks, grid.x <= 65535
+    time blocks). Per-program live DSM is ~6-8 [BLOCK_T] vectors, so the
+    4096-wide tile sits ~96-128 KiB/program, inside the ~448 KiB
+    dual-program line (8192 regresses, 16384 blows through it).
+
+    Tuned on the benchmark shapes (dim=4096 / dim=2048, total_t=16384,
+    bf16, W=4) on the affine-mask kernel by single-config sweeps:
+    BLOCK_T=4096 is the sweet spot (~25% faster than 2048 on both
+    shapes; 8192 regresses again), ~128 row blocks on grid.y balance
+    per-program work against occupancy (ROWS 16-64 all within 2% at
+    BLOCK_T=4096; the rule picks 32/16 for the two benchmark dims), and
+    num_warps follows the vector width (nw 4 and 8 measured equivalent,
+    nw2 10-15% slower).
     """
-    # Channel block: 128 measured fastest for the dim=5120 benchmark,
-    # but never more blocks than the grid.y cap (255).
-    block_d = min(128, _next_pow2(dim))
-    while (dim + block_d - 1) // block_d > 255:
-        block_d *= 2
+    # Time block: 4096 preferred (contiguous axis, measured sweet spot);
+    # shrink for tiny total_t so small problems stay one wave.
+    block_t = min(4096, _next_pow2(max(total_t, 1)))
 
-    # Time block: large tiles win on the GCU, but the fp32 accumulator
-    # (BLOCK_T * BLOCK_D) must stay under the ~1.5MB local-memory limit
-    # -- cap the tile at 128Ki elements.
-    block_t = min(1024, _next_pow2(total_t))
-    while block_t > 1 and block_t * block_d > 131072:
-        block_t //= 2
+    # Rows per program: ~128 row blocks on grid.y (dim/128, pow2, floor
+    # 16); grow only to respect the grid.y <= 255 cap.
+    rows = max(16, _next_pow2(max(dim // 128, 1)))
+    while triton.cdiv(dim, rows) > 255:
+        rows *= 2
 
-    num_t_blocks = triton.cdiv(total_t, block_t)
-    # Guard grid.x <= 65535 for pathological total_t (grow the tile
-    # instead).
-    while num_t_blocks > 65535:
+    # num_warps scales with the vector width (nw 8 and 4 measured
+    # equivalent at BLOCK_T=4096; the rule keeps the scaling).
+    num_warps = min(8, max(2, block_t // 256))
+
+    # Guard grid.x <= 65535 for pathological total_t (grow the tile;
+    # such shapes also approach the int32 offset limit and are not
+    # supported anyway).
+    while triton.cdiv(total_t, block_t) > 65535:
         block_t *= 2
-        num_t_blocks = triton.cdiv(total_t, block_t)
 
-    num_warps = 2 if block_t * block_d <= 131072 else 4
-    return block_t, block_d, num_warps
+    return block_t, rows, num_warps
 
 
 def causal_conv1d_fn(
@@ -263,14 +316,14 @@ def causal_conv1d_fn(
         num_warps=1,
     )
 
-    block_t, block_d, num_warps = _launch_config(dim, total_t)
+    block_t, rows, num_warps = _launch_config(dim, total_t)
     num_t_blocks = triton.cdiv(total_t, block_t)
-    num_d_blocks = triton.cdiv(dim, block_d)
+    num_row_blocks = triton.cdiv(dim, rows)
 
     out = torch.empty_like(x)
     has_activation = activation in ("silu", "swish")
 
-    causal_conv1d_fn_kernel[(num_t_blocks, num_d_blocks)](
+    causal_conv1d_fn_kernel[(num_t_blocks, num_row_blocks)](
         x,
         weight,
         x if bias is None else bias,
@@ -280,9 +333,11 @@ def causal_conv1d_fn(
         DIM=dim,
         WIDTH=width,
         BLOCK_T=block_t,
-        BLOCK_D=block_d,
+        ROWS=rows,
         HAS_BIAS=bias is not None,
         HAS_ACTIVATION=has_activation,
+        T_EVEN=total_t % block_t == 0,
+        D_EVEN=dim % rows == 0,
         num_warps=num_warps,
     )
     return out

@@ -8,9 +8,9 @@
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
-# implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """sgemm_lora_a: Triton kernel for the LoRA "A" (down-projection) segmented GEMM.
 
@@ -19,162 +19,61 @@ adapter ``weight_indices[b]``) we compute ``out[rows] = x[rows] @ weights[w].T``
 in float32 and cast back to ``x.dtype``. ``rows`` comes from ``permutation``
 when present, otherwise is the contiguous range ``arange(start, end)``.
 
-Performance notes (GCU / enflame backend):
-- The benchmark shapes have very few segments (4-8), small ``R`` and K=4096.
-  Each segment is tiled over M (``BLOCK_M``) and N (``BLOCK_N``), so the grid is
-  ``(bs, num_m_blocks, num_n_blocks)``. The device has only 2 SMs, so 4-8
-  programs means 2-4 serial waves per SM -- the op is launch/wave-bound, not
-  compute-bound, so the win is maximising per-program work by pushing
-  ``BLOCK_K`` up to 1024-2048 (K=4096 -> 2-4 K iterations) so the K-loop
-  amortises the launch + prologue cost.
-  - ``R=32`` (seg64x8, each segment exactly 64 rows): autotune picks
-    ``BLOCK_M=64, BLOCK_N=32, BLOCK_K=1024, num_warps=2``. A 64-row segment
-    exactly fills a ``BLOCK_M=64`` tile (no padding, no wasted MMA width),
-    whereas ``BLOCK_M=128`` always pads 64->128 and wastes half the tile.
-  - ``R=64`` (seg256x4, each segment exactly 256 rows): autotune picks
-    ``BLOCK_M=256, BLOCK_N=64, BLOCK_K=1024, num_warps=4`` -- one full M-tile
-    per segment, 4 programs, 2 waves per SM.
-- The "BLOCK_M>=128 MMA floor" rule has an important nuance: a ``BLOCK_M<128``
-  tile only escapes GCU's slow scalar MMA path when paired with FEW warps.
-  ``BLOCK_M=64`` with ``num_warps=4`` takes ~63 ms (scalar fallback) but with
-  ``num_warps=2`` runs ~48 us -- faster than any padded ``BLOCK_M=128`` config.
-  So the R=32 family uses ``BLOCK_M=64`` exclusively at ``num_warps in {1, 2}``.
-- v8 widened the sweep to also try ``num_warps in {4, 8}`` and
-  ``num_stages in {2, 3, 4}`` on the ``BLOCK_M>=128`` configs.
-- Split-K was tried but rejected: the GCU backend has no float atomics, so
-  split-K needs a separate ``[SPLIT_K, S, R]`` partial buffer + reduce pass, and
-  the reduce kernel alone costs ~400-700 us on GCU -- far more than the whole
-  GEMM. The direct-store (no scratch buffer) approach below is strictly better
-  here because each output element is written by exactly one program.
-- Grouping segments by adapter (so one program reuses a weight slice across
-  segments sharing that adapter) was tried but rejected: building the
-  concatenated per-adapter row list inside the kernel overflows GCU local
-  memory (the per-segment scan materialises several [BLOCK_M] tensors), and
-  doing the grouping on the host requires a device->host sync of
-  ``seg_indptr``/``weight_indices`` which costs ~109 us/call on GCU -- far
-  more than the kernel time it would save.
-- ``input_precision="ieee"`` is the only precision the GCU backend accepts and
-  also matches the reference's exact float32 matmul. (For bf16 inputs the
-  default ``tl.dot`` precision is both faster-looking and wrong: maxdiff
-  reaches 0.25-1.0, well outside the bf16 tolerance of 1.5e-2.)
-- Indices are kept in int32 throughout: the GCU backend lacks int64, and the
-  largest address offset we compute (S*K, with S<=1024, K<=4096) fits int32.
+Performance notes (GCU / enflame backend, gcu410, measured 2026-11-08 with the
+official bench protocol do_bench warmup 1000ms / rep 100ms, bf16):
+
+- The kernel is a plain masked-tile GEMM loop; all tuning lives in the host
+  dispatch (``_pick_config``) which replaces the previous autotune. Measured
+  facts that drove the table (see perf_playbook / case log 2026-11-08):
+  * ``num_warps=2`` is decisive: BM in {32, 64, 128} with nw2 keeps the MMA
+    fast path; nw4 drops to a much slower path (e.g. 64x64x1024: 18.7us nw2
+    vs 22.7us nw4; 64x32x1024: 15.4us nw2 vs ~63ms-era scalar fallback).
+  * Bigger BLOCK_K wins: per-CTA streaming is the wall and the dot's SIP
+    barrier serializes load vs dot inside the K-loop (num_stages does not
+    enable software pipelining here), so fewer, larger K-iterations amortise
+    better: BK 512 -> 1024 -> 2048 -> 4096 = 19.2 -> 15.1 -> 12.8 -> 11.2us
+    on the seg64x8/R32/K4096 shape.
+  * More CTAs do not add bandwidth once every CTA is streaming (8 vs 16 vs 32
+    CTAs flat-to-worse), so BM is kept at 64 and the grid stays small.
+  * DSM per program is exactly ``itemsize * BLOCK_K * (BLOCK_M + BLOCK_N)``
+    (single-buffered; verified against compiled dsm_memory_size), so
+    BLOCK_K is maximised under the 917504B hard limit by ``_pick_config``.
+    That yields BK=4096 (whole-K single dot) for the R=32/K=4096 bench shape
+    and BK=2048 for R=64/K=4096.
+  * Measured: seg64x8/R32/K4096 13.0 -> 11.2us, seg256x4/R64/K4096
+    20.3 -> 16.9us vs the previous autotune winners.
+- Manual rolling-prefetch (double-buffer) variants were tried and vetoed: the
+  extra live tiles double DSM (pushing configs past the 917504B limit or
+  back to 24-way residency) and measured slower on both bench shapes
+  (13.4-15.1us vs 11.2us case0; 18.7-26.5us vs 16.9us case1).
+- Split-K stays rejected: the GCU backend has no float atomics, so split-K
+  needs a [SPLIT, S, R] partial buffer + a second reduce kernel, breaking
+  the single-launch contract for a launch-bound 11-20us op.
+- Grouping segments by adapter was tried upstream and rejected: building the
+  per-adapter row list in-kernel overflows local memory, and host grouping
+  needs a ~109us device->host sync of seg_indptr/weight_indices.
+- ``input_precision="ieee"`` matches the reference fp32 matmul semantics.
+  (The default precision measured identical latency and passed the 1.5e-2
+  bf16 gate on this stack, but ieee is kept as the zero-risk choice.)
+- Indices stay int32 (GCU lacks int64; S*K fits int32 for the batch sizes
+  this op serves).
 """
 
 import torch
 import triton
 import triton.language as tl
 
+# gcu410 hard per-program DSM limit (compiled dsm_memory_size must stay <=).
+_MAX_DSM_BUDGET = 900_000
 
-@triton.autotune(
-    configs=[
-        # --- R == 32 family (seg64x8): each segment is exactly 64 rows long.
-        # BLOCK_N=32 covers R in one tile. Two M-tile strategies, both valid:
-        #
-        # * BLOCK_M=64 with num_warps=2: a single M-tile per segment is FULLY
-        #   filled (64 rows, no padding), so the dot/store masks are all-true and
-        #   no work is wasted. On GCU a BLOCK_M<128 tile only escapes the slow
-        #   scalar MMA path when paired with few warps (num_warps=2): with 4
-        #   warps the same tile takes ~63 ms (scalar fallback), with 2 warps it
-        #   runs ~48 us -- faster than any BLOCK_M=128 config (which always pads
-        #   64->128, wasting half the MMA width). This is the winning config for
-        #   the seg64x8 benchmark.
-        # * BLOCK_M=128/256 with num_warps=4: the previously-tuned fallback.
-        #   Each segment needs only one M-tile but the tile is half-empty
-        #   (BLOCK_M=128 for a 64-row segment); kept so autotune picks them when
-        #   a correctness case has longer segments (max_len>64) where BLOCK_M=64
-        #   would split into several under-filled tiles.
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 512},
-            num_warps=2,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 1024},
-            num_warps=2,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 2048},
-            num_warps=2,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 1024},
-            num_warps=2,
-            num_stages=4,
-        ),
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 2048},
-            num_warps=2,
-            num_stages=4,
-        ),
-        triton.Config(
-            {"BLOCK_M": 64, "BLOCK_N": 32, "BLOCK_K": 1024},
-            num_warps=1,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 1024},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 2048},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 32, "BLOCK_K": 2048},
-            num_warps=4,
-            num_stages=4,
-        ),
-        triton.Config(
-            {"BLOCK_M": 256, "BLOCK_N": 32, "BLOCK_K": 1024},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 256, "BLOCK_N": 32, "BLOCK_K": 2048},
-            num_warps=4,
-            num_stages=3,
-        ),
-        # --- R == 64 family (seg256x4): each segment is exactly 256 rows.
-        # BLOCK_N=64 covers R in one tile. BLOCK_M=256 gives one full M-tile per
-        # segment -> 4 programs (2 per SM, 2 waves), the best occupancy here;
-        # smaller BLOCK_M splits 256 into more tiles -> more waves on the 2-SM
-        # device and is slower. Autotune keeps BM=128 as a fallback for
-        # correctness cases whose max_len is not a multiple of 256.
-        triton.Config(
-            {"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 1024},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 2048},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 256, "BLOCK_N": 64, "BLOCK_K": 1024},
-            num_warps=4,
-            num_stages=4,
-        ),
-        triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 1024},
-            num_warps=4,
-            num_stages=3,
-        ),
-        triton.Config(
-            {"BLOCK_M": 128, "BLOCK_N": 64, "BLOCK_K": 2048},
-            num_warps=4,
-            num_stages=3,
-        ),
-        # --- R > 64 correctness cases (e.g. stack_num=3 -> R=96) use the 64-wide
-        # N-tile with multiple N blocks; the M/K sweep above still applies.
-    ],
-    key=["K", "R"],
-)
+
+def _next_pow2(v):
+    p = 1
+    while p < v:
+        p <<= 1
+    return p
+
+
 @triton.jit
 def _sgemm_lora_a_kernel(
     x_ptr,  # [S, K]
@@ -185,14 +84,18 @@ def _sgemm_lora_a_kernel(
     permutation_ptr,  # [S] int32 or None
     K,
     R,
+    NM,  # M-tiles per segment (for the flattened 2D grid)
     BLOCK_M: tl.constexpr,
     BLOCK_N: tl.constexpr,
     BLOCK_K: tl.constexpr,
     HAS_PERM: tl.constexpr,
 ):
-    pid_b = tl.program_id(0)
-    pid_m = tl.program_id(1)
-    pid_n = tl.program_id(2)
+    # Flattened 2D grid (bs * NM, n_tiles): keeps grid.y small for arbitrary
+    # max_len (the 3D form hits the grid.y<=255 limit at max_len>16320 for
+    # BLOCK_M=64) and measured identical latency to the 3D grid.
+    pid_b = tl.program_id(0) // NM
+    pid_m = tl.program_id(0) % NM
+    pid_n = tl.program_id(1)
 
     start = tl.load(seg_indptr_ptr + pid_b)
     end = tl.load(seg_indptr_ptr + pid_b + 1)
@@ -204,9 +107,6 @@ def _sgemm_lora_a_kernel(
 
     w_idx = tl.load(weight_indices_ptr + pid_b)
 
-    # N-tiling: a single BLOCK_N=32/64 tile covers the whole output row for the
-    # benchmark shapes (R=32/64); correctness cases with R>64 (e.g. stack_num=3
-    # -> R=96) use multiple N-tiles via the ``n_off < R`` mask.
     n_off = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
     n_mask = n_off < R
 
@@ -242,8 +142,7 @@ def _sgemm_lora_a_kernel(
         acc += tl.dot(x_block, w_block, input_precision="ieee")
 
     # Direct store (no split-K scratch buffer): cast fp32 accumulator to the
-    # output dtype. Each output element is written by exactly one program, so
-    # there is no contention and no extra reduction pass.
+    # output dtype. Each output element is written by exactly one program.
     out_ptrs = out_ptr + rows[:, None] * R + n_off[None, :]
     tl.store(
         out_ptrs,
@@ -252,15 +151,35 @@ def _sgemm_lora_a_kernel(
     )
 
 
+def _pick_config(max_len, R, K, itemsize):
+    """Static dispatch (replaces autotune; measured 2026-11-08, gcu410).
+
+    BM: 16..64, largest pow2 tile of the longest segment; BM=64 is the
+    measured sweet spot for the bench shapes.
+    BN: 16..64, covers R in one tile when possible.
+    BK: largest pow2 that both divides into K-friendly bounds and keeps the
+    per-program DSM (= itemsize * BK * (BM + BN)) under the 917504B limit;
+    large BK amortises the K-loop best (fewest dot SIP barriers).
+    num_warps=2 everywhere (MMA fast path); num_stages=2 (no effect while
+    soft pipelining is blocked by the dot barrier, measured flat).
+    """
+    BM = max(16, min(64, _next_pow2(max_len if max_len > 0 else 16)))
+    BN = max(16, min(64, _next_pow2(R)))
+
+    bk_cap = _MAX_DSM_BUDGET // (itemsize * (BM + BN))
+    BK = _next_pow2(min(K, bk_cap)) if K > 0 else 16
+    if BK > bk_cap:
+        BK >>= 1
+    BK = max(16, min(BK, 4096))
+    return BM, BN, BK
+
+
 def sgemm_lora_a(x, weights, batch_info, stack_num=1):
     S, K = x.shape
-    R = weights.shape[1]  # == stack_num * r
+    R = weights.shape[1]
     # ``torch.empty`` instead of ``torch.zeros``: the kernel writes every
-    # ``(row, n)`` element exactly once -- each output row belongs to one
-    # segment and that segment's M-tiles cover ``[0, seg_len_b]`` while the
-    # N-tiles cover ``[0, R]`` -- so no element is left uninitialised. Skipping
-    # the host-side memset saves a measurable ~12us/call on this launch-bound
-    # op (zeros memset alone is ~16us vs empty's ~4us on GCU).
+    # ``(row, n)`` element exactly once, so no element is left uninitialised
+    # and the host-side memset (~12us on GCU) is skipped.
     out = torch.empty((S, R), dtype=x.dtype, device=x.device)
 
     seg_indptr = batch_info.seg_indptr
@@ -268,9 +187,9 @@ def sgemm_lora_a(x, weights, batch_info, stack_num=1):
     permutation = batch_info.permutation
     has_perm = permutation is not None
 
-    # max segment length (host) -> BLOCK_M ceiling for grid sizing.
-    # Prefer the host-side ``batch_info.max_len`` int when available to avoid a
-    # device->host sync (`.item()`); fall back to computing it only if missing.
+    # max segment length (host) -> BLOCK_M / grid sizing. Prefer the
+    # host-side ``batch_info.max_len`` int; fall back to a D2H sync only if
+    # the attribute is missing.
     host_max_len = getattr(batch_info, "max_len", None)
     if host_max_len is None and S > 0:
         seg_lens = seg_indptr[1:] - seg_indptr[:-1]
@@ -279,21 +198,21 @@ def sgemm_lora_a(x, weights, batch_info, stack_num=1):
 
     bs = batch_info.bs
 
-    # grid: (segments, M-tiles, N-tiles). The exact BLOCK_M / BLOCK_N are chosen
-    # by autotune at launch time, so the grid lambda must read them from the
-    # selected config.
-    def _grid(meta):
-        block_m = meta["BLOCK_M"]
-        block_n = meta["BLOCK_N"]
-        nm = (max_len + block_m - 1) // block_m if max_len > 0 else 1
-        nn = (R + block_n - 1) // block_n
-        return (bs, nm, nn)
+    if bs <= 0 or max_len <= 0 or S == 0:
+        # nothing to compute (defensive; benchmark cases never hit this)
+        out.zero_()
+        return out
+
+    BM, BN, BK = _pick_config(max_len, R, K, x.element_size())
+
+    nm = (max_len + BM - 1) // BM
+    nn = (R + BN - 1) // BN
 
     perm_ptr = (
         permutation if has_perm else x
     )  # dummy ptr, unused when HAS_PERM=False
 
-    _sgemm_lora_a_kernel[_grid](
+    _sgemm_lora_a_kernel[(bs * nm, nn)](
         x,
         weights,
         out,
@@ -302,7 +221,13 @@ def sgemm_lora_a(x, weights, batch_info, stack_num=1):
         perm_ptr,
         K,
         R,
+        nm,
+        BLOCK_M=BM,
+        BLOCK_N=BN,
+        BLOCK_K=BK,
         HAS_PERM=has_perm,
+        num_warps=2,
+        num_stages=2,
     )
     return out
 

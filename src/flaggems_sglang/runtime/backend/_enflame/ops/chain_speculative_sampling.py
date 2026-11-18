@@ -16,6 +16,16 @@ import torch
 import triton
 import triton.language as tl
 
+# Above this batch size the final-sampling threshold switches from a per-row
+# 1-D sum loop (one kernel launch per row) to the batched values.sum(-1)
+# plus a safety-band crossing kernel; see the comment in _isolated_sampling.
+_BAND_MIN_BATCH = 16
+# Above this position count the ordered replay switches from the quadratic
+# shadow-scan kernel to the two-pass atomic owners (claim/publish) pair;
+# measured crossover on GCU400: claim+publish is 18us vs the 73us quadratic
+# scan at count=2048, and only pulls ahead of the 21us scan at count>=1024.
+_REPLAY_CLAIM_MIN = 1024
+
 
 def _as_index(tensor):
     if tensor.dtype != torch.int64:
@@ -52,57 +62,67 @@ def _accept_kernel(
     stride_dp_b,
     stride_dp_s,
     stride_dp_v,
+    BATCH,
     S: tl.constexpr,
+    BLOCK_B: tl.constexpr,
 ):
     pid = tl.program_id(0)
-    root = tl.load(retrive_index_ptr + pid * stride_idx_b)
-    tl.store(accept_index_ptr + pid * stride_acc_b, root)
+    b = pid * BLOCK_B + tl.arange(0, BLOCK_B)
+    live = b < BATCH
+    root = tl.load(retrive_index_ptr + b * stride_idx_b, live, 0)
+    tl.store(accept_index_ptr + b * stride_acc_b, root, live)
     last_slot = root
-    cur_row = 0
-    num_accept = 0
-    still = 1
-    for step in range(1, S):
-        if still:
-            draft_token = tl.load(
-                candidates_ptr + pid * stride_cand_b + step * stride_cand_s
-            )
-            p = tl.load(
-                target_ptr
-                + pid * stride_tp_b
-                + cur_row * stride_tp_s
-                + draft_token * stride_tp_v
-            )
-            q = tl.load(
-                draft_ptr
-                + pid * stride_dp_b
-                + cur_row * stride_dp_s
-                + draft_token * stride_dp_v
-            )
-            coin = tl.load(
-                uniform_ptr + pid * stride_uni_b + (step - 1) * stride_uni_s
-            )
-            if coin * q < p:
-                num_accept += 1
-                tl.store(predicts_ptr + last_slot, draft_token)
-                cur_row = step
-                curr_slot = tl.load(
-                    retrive_index_ptr
-                    + pid * stride_idx_b
-                    + step * stride_idx_s
-                )
-                tl.store(
-                    accept_index_ptr
-                    + pid * stride_acc_b
-                    + num_accept * stride_acc_s,
-                    curr_slot,
-                )
-                last_slot = curr_slot
-            else:
-                still = 0
-    tl.store(accept_num_ptr + pid, num_accept)
-    tl.store(last_slot_ptr + pid, last_slot)
-    tl.store(cur_row_ptr + pid, cur_row)
-    tl.store(all_accepted_ptr + pid, still)
+    cur_row = tl.zeros([BLOCK_B], dtype=tl.int32)
+    num_accept = tl.zeros([BLOCK_B], dtype=tl.int32)
+    still = live.to(tl.int32)
+    for step in tl.static_range(1, S):
+        active = still != 0
+        draft_token = tl.load(
+            candidates_ptr + b * stride_cand_b + step * stride_cand_s,
+            active,
+            0,
+        )
+        p = tl.load(
+            target_ptr
+            + b * stride_tp_b
+            + cur_row * stride_tp_s
+            + draft_token * stride_tp_v,
+            active,
+            0,
+        )
+        q = tl.load(
+            draft_ptr
+            + b * stride_dp_b
+            + cur_row * stride_dp_s
+            + draft_token * stride_dp_v,
+            active,
+            0,
+        )
+        coin = tl.load(
+            uniform_ptr + b * stride_uni_b + (step - 1) * stride_uni_s,
+            active,
+            0,
+        )
+        ok = (active & (coin * q < p)).to(tl.int32)
+        num_accept = num_accept + ok
+        tl.store(predicts_ptr + last_slot, draft_token, ok != 0)
+        cur_row = tl.where(ok != 0, step, cur_row)
+        curr_slot = tl.load(
+            retrive_index_ptr + b * stride_idx_b + step * stride_idx_s,
+            ok != 0,
+            0,
+        )
+        tl.store(
+            accept_index_ptr + b * stride_acc_b + num_accept * stride_acc_s,
+            curr_slot,
+            ok != 0,
+        )
+        last_slot = tl.where(ok != 0, curr_slot, last_slot)
+        still = ok
+    tl.store(accept_num_ptr + b, num_accept, live)
+    tl.store(last_slot_ptr + b, last_slot, live)
+    tl.store(cur_row_ptr + b, cur_row, live)
+    tl.store(all_accepted_ptr + b, still, live)
 
 
 @triton.jit
@@ -112,27 +132,34 @@ def _values_kernel(
     Draft,
     Rows,
     Accepted,
+    BATCH,
     S: tl.constexpr,
     V: tl.constexpr,
     FMAX: tl.constexpr,
+    TILES: tl.constexpr,
+    BLOCK: tl.constexpr,
+    NUM_SPC: tl.constexpr,
 ):
-    b = tl.program_id(0)
-    idx = tl.program_id(1) * 128 + tl.arange(0, 128)
-    row = tl.load(Rows + b)
-    accepted = tl.load(Accepted + b)
-    p = tl.load(Target + (b * S + row) * V + idx, idx < V, 0)
-    q = tl.load(
-        Draft + (b * (S - 1) + row) * V + idx, (idx < V) & (accepted == 0), 0
-    ).to(tl.float32)
-    limit = tl.full((), FMAX, tl.float32)
-    q = tl.where(q != q, 0.0, q)
-    q = tl.where(q == float("inf"), limit, q)
-    q = tl.where(q == -float("inf"), -limit, q)
-    corrected = tl.maximum(
-        (p.to(tl.float32) - q).to(p.dtype).to(tl.float32), 0.0
-    )
-    val = tl.where(accepted != 0, p.to(tl.float32), corrected)
-    tl.store(Values + b * V + idx, val, idx < V)
+    pid = tl.program_id(0)
+    for b in range(pid, BATCH, NUM_SPC):
+        row = tl.load(Rows + b)
+        accepted = tl.load(Accepted + b)
+        tb = Target + (b * S + row) * V
+        db = Draft + (b * (S - 1) + row) * V
+        for tile in tl.static_range(0, TILES):
+            idx = tile * BLOCK + tl.arange(0, BLOCK)
+            m = idx < V
+            p = tl.load(tb + idx, m, 0)
+            q = tl.load(db + idx, m & (accepted == 0), 0).to(tl.float32)
+            limit = tl.full((), FMAX, tl.float32)
+            q = tl.where(q != q, 0.0, q)
+            q = tl.where(q == float("inf"), limit, q)
+            q = tl.where(q == -float("inf"), -limit, q)
+            corrected = tl.maximum(
+                (p.to(tl.float32) - q).to(p.dtype).to(tl.float32), 0.0
+            )
+            val = tl.where(accepted != 0, p.to(tl.float32), corrected)
+            tl.store(Values + b * V + idx, val, m)
 
 
 def _isolated_sampling(
@@ -177,7 +204,7 @@ def _isolated_sampling(
     last_slot = torch.empty(batch, dtype=torch.int32, device=source.device)
     cur_row = torch.empty(batch, dtype=torch.int32, device=source.device)
     all_accepted = torch.empty(batch, dtype=torch.int32, device=source.device)
-    _accept_kernel[batch,](
+    _accept_kernel[triton.cdiv(batch, 128),](
         predicts_i,
         accept_i,
         accept_num,
@@ -203,8 +230,10 @@ def _isolated_sampling(
         draft.stride(0) if draft.ndim == 3 else 0,
         draft.stride(1) if draft.ndim == 3 else 0,
         draft.stride(2) if draft.ndim == 3 else 1,
+        batch,
         S=steps,
-        num_warps=4,
+        BLOCK_B=128,
+        num_warps=2,
     )
     max_value = (
         65504.0
@@ -218,99 +247,109 @@ def _isolated_sampling(
     values = torch.empty(
         (batch, vocab), dtype=target.dtype, device=target.device
     )
-    sums = torch.empty((batch,), dtype=target.dtype, device=target.device)
-    sum_parts = triton.cdiv(vocab, 16384)
-    partials = torch.empty(
-        (batch, sum_parts, 128), dtype=torch.float32, device=target.device
-    )
-    chunk = (
-        triton.cdiv(vocab, 24 * 32) * 32
-        if vocab >= 24 * 320
-        else triton.cdiv(vocab, 16) * 16
-    )
-    parts = triton.cdiv(vocab, chunk)
-    cdf = torch.empty_like(values)
-    totals = torch.empty(
-        (batch, parts), dtype=torch.float32, device=target.device
-    )
-    tokens = torch.empty(
-        (batch, parts), dtype=torch.int32, device=target.device
-    )
-    _values_kernel[batch, triton.cdiv(vocab, 128)](
+    rows_grid = min(48, batch)
+    # BLOCK=8192 halves the per-row tile chain vs 4096 (measured -10% on
+    # GCU400 at V=32000); small vocab falls back to one pow2 tile.
+    value_block = 8192 if vocab > 4096 else triton.next_power_of_2(vocab)
+    _values_kernel[rows_grid,](
         values,
         target,
         draft,
         cur_row,
         all_accepted,
+        batch,
         S=steps,
         V=vocab,
         FMAX=max_value,
-        enable_fp_fusion=False,
-    )
-    _recovered_sum_partials[batch, sum_parts](
-        values, partials, vocab, sum_parts, enable_fp_fusion=False, num_warps=4
-    )
-    _recovered_sum_finish[batch,](
-        partials, sums, sum_parts, enable_fp_fusion=False, num_warps=4
-    )
-    _compensated_cdf_blocks[batch, parts](
-        values,
-        cdf,
-        totals,
-        batch,
-        vocab,
-        chunk,
-        parts,
+        TILES=triton.cdiv(vocab, value_block),
+        BLOCK=value_block,
+        NUM_SPC=rows_grid,
         enable_fp_fusion=False,
         num_warps=4,
     )
-    if parts > 1:
-        _matrix_cdf_carry[batch, parts, triton.cdiv(chunk, 128)](
+    # The final sample must reproduce the eager reference bit-for-bit: the
+    # reference derives the threshold from a per-row 1-D fp32 sum
+    # (val.sum()) and compares it against torch.cumsum of the same row.
+    # torch.cumsum(dim=-1) is bitwise row-identical to the 1-D cumsum, and
+    # a (1, V) row sum dispatches to the exact 1-D reduction kernel.
+    #
+    # The per-row 1-D sum costs one kernel launch per row, which dominates
+    # latency for large batches. For float32 batches the batched row sum
+    # values.sum(-1) (whose reduction order differs from the 1-D kernel by
+    # at most a couple of ulps on realistic distributions) drives a fast
+    # crossing kernel that also flags rows where the token could depend on
+    # that rounding difference: a "tight" row has some cdf value within
+    # 6 ulps (plus a subnormal floor) of the threshold. Any threshold
+    # perturbation below the band cannot move the first-crossing token
+    # unless the row is tight, so tight rows alone are re-judged with the
+    # exact 1-D sum and the shipped tokens match the reference exactly.
+    cdf = torch.cumsum(values, dim=-1)
+    if batch >= _BAND_MIN_BATCH and values.dtype == torch.float32:
+        sums = values.sum(-1)
+        tight = torch.empty(batch, dtype=torch.int32, device=source.device)
+        _crossing_kernel[rows_grid,](
             cdf,
-            totals,
+            sums,
+            coins_final,
+            predicts_i,
+            last_slot,
+            tight,
             batch,
-            vocab,
-            chunk,
-            parts,
+            V=vocab,
+            TILES=triton.cdiv(vocab, 4096),
+            NT=triton.next_power_of_2(triton.cdiv(vocab, 4096)),
+            BLOCK=4096,
+            NUM_SPC=rows_grid,
             enable_fp_fusion=False,
             num_warps=4,
         )
-    _recovered_sample_parts[batch, parts](
-        cdf,
-        sums,
-        coins_final,
-        tokens,
-        vocab,
-        chunk,
-        parts,
-        triton.next_power_of_2(chunk),
-        enable_fp_fusion=False,
-        num_warps=4,
-    )
-    _recovered_sample_finish[batch,](
-        tokens,
-        predicts_i,
-        last_slot,
-        parts,
-        triton.next_power_of_2(parts),
-        enable_fp_fusion=False,
-        num_warps=4,
-    )
+        rows = tight.nonzero(as_tuple=False).flatten()
+        rows_list = rows.tolist()
+        if rows_list:
+            # Exact 1-D sums for tight rows only (same (1, V) .sum()
+            # dispatch as the reference); the fix kernel re-judges only
+            # the indexed tight rows.
+            sums_fix = torch.stack(
+                [values[r : r + 1].sum() for r in rows_list]
+            )
+            _token_fix_kernel[min(48, len(rows_list)),](
+                cdf,
+                sums_fix,
+                coins_final,
+                rows.to(torch.int32),
+                predicts_i,
+                last_slot,
+                len(rows_list),
+                V=vocab,
+                TILES=triton.cdiv(vocab, 4096),
+                BLOCK=4096,
+                NUM_SPC=48,
+                enable_fp_fusion=False,
+                num_warps=4,
+            )
+    else:
+        sums = torch.stack(
+            [values[row : row + 1].sum() for row in range(batch)]
+        )
+        _sample_kernel[rows_grid,](
+            cdf,
+            sums,
+            coins_final,
+            predicts_i,
+            last_slot,
+            batch,
+            V=vocab,
+            TILES=triton.cdiv(vocab, 4096),
+            BLOCK=4096,
+            NUM_SPC=rows_grid,
+            enable_fp_fusion=False,
+            num_warps=4,
+        )
     if predicts_i is not predicts:
         predicts.copy_(predicts_i.to(predicts.dtype))
     if accept_i is not accept_index:
         accept_index.copy_(accept_i.to(accept_index.dtype))
     return (predicts, accept_index, accept_num)
-
-
-@triton.jit
-def _ordered_positions(Positions, COUNT: tl.constexpr, BLOCK: tl.constexpr):
-    wide: tl.constexpr = (COUNT + BLOCK - 1) // BLOCK * BLOCK - 1 > 2147483647
-    position_type: tl.constexpr = tl.int64 if wide else tl.int32
-    pos = tl.program_id(0).to(position_type) * BLOCK + tl.arange(0, BLOCK).to(
-        position_type
-    )
-    tl.store(Positions + pos, pos, pos < COUNT)
 
 
 @triton.jit
@@ -326,6 +365,8 @@ def _ordered_replay(
     IS: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
+    NTILES: tl.constexpr = (COUNT + BLOCK - 1) // BLOCK
+    tile_id = tl.program_id(0)
     wide: tl.constexpr = (
         COUNT > 2147483647
         or (COUNT + BLOCK - 1) // BLOCK * BLOCK - 1 > 2147483647
@@ -336,38 +377,48 @@ def _ordered_replay(
         if (COUNT // S - 1) * IB + (S - 1) * IS > 2147483647
         else position_type
     )
-    pos = tl.program_id(0).to(position_type)
-    b, step = (pos // S, pos % S)
-    count = tl.load(Counts + b)
-    valid = step <= count
+    pos = tile_id.to(position_type) * BLOCK + tl.arange(0, BLOCK).to(
+        position_type
+    )
+    in_range = pos < COUNT
+    b, step = (tl.where(in_range, pos // S, 0), pos % S)
+    count = tl.load(Counts + b, in_range, -1)
+    valid = in_range & (step <= count)
     address = b.to(address_type) * IB + step.to(address_type) * IS
     slot = tl.load(Index + address, valid, 0)
-    tl.store(Accept + pos, tl.where(valid, slot, -1))
-    if valid:
-        shadowed = tl.full((), 0, tl.int32)
-        lane = tl.arange(0, BLOCK).to(position_type)
-        for tile in range((pos + 1) // BLOCK, (COUNT + BLOCK - 1) // BLOCK):
-            if shadowed == 0:
-                other = tile * BLOCK + lane
-                other_b = tl.where(other < COUNT, other // S, 0)
-                other_step = other % S
-                other_count = tl.load(Counts + other_b, other < COUNT, -1)
-                relevant = (
-                    (other > pos)
-                    & (other < COUNT)
-                    & (other_step <= other_count)
-                )
-                other_address = (
-                    other_b.to(address_type) * IB
-                    + other_step.to(address_type) * IS
-                )
-                other_slot = tl.load(Index + other_address, relevant, 0)
-                shadowed = tl.max(
-                    (relevant & (other_slot == slot)).to(tl.int32), 0
-                )
-        if shadowed == 0:
-            token = tl.load(Local + pos)
-            tl.store(Predicts + slot, token)
+    tl.store(Accept + pos, tl.where(valid, slot, -1), in_range)
+    lane = tl.arange(0, BLOCK)
+    shadowed = tl.max(
+        (
+            (slot[:, None] == slot[None, :])
+            & valid[:, None]
+            & valid[None, :]
+            & (lane[None, :] > lane[:, None])
+        ).to(tl.int32),
+        1,
+    )
+    for t in range(tile_id + 1, NTILES):
+        opos = t.to(position_type) * BLOCK + lane.to(position_type)
+        oin = opos < COUNT
+        ob = tl.where(oin, opos // S, 0)
+        ostep = opos % S
+        ocount = tl.load(Counts + ob, oin, -1)
+        ovalid = oin & (ostep <= ocount)
+        oaddress = ob.to(address_type) * IB + ostep.to(address_type) * IS
+        oslot = tl.load(Index + oaddress, ovalid, 0)
+        shadowed = tl.maximum(
+            shadowed,
+            tl.max(
+                (
+                    (slot[:, None] == oslot[None, :])
+                    & valid[:, None]
+                    & ovalid[None, :]
+                ).to(tl.int32),
+                1,
+            ),
+        )
+    token = tl.load(Local + pos, valid, 0)
+    tl.store(Predicts + slot, token, valid & (shadowed == 0))
 
 
 def chain_speculative_sampling(
@@ -392,10 +443,11 @@ def chain_speculative_sampling(
         )
     count = batch * steps
     position_dtype = torch.int32 if count <= 2147483647 else torch.int64
-    positions = torch.empty(
-        (batch, steps), dtype=position_dtype, device=candidates.device
-    )
-    _ordered_positions[triton.cdiv(count, 128),](positions, count, 128)
+    # arange is an allowed factory call; it replaces the hand-written
+    # positions kernel launch (one less Triton dispatch on the hot path).
+    positions = torch.arange(
+        count, dtype=position_dtype, device=candidates.device
+    ).reshape(batch, steps)
     local, local_accept, accepted = _isolated_sampling(
         candidates,
         positions,
@@ -416,18 +468,49 @@ def chain_speculative_sampling(
     accept_index = torch.empty(
         (batch, steps), dtype=index.dtype, device=candidates.device
     )
-    _ordered_replay[count,](
-        local,
-        index,
-        accepted,
-        predicts,
-        accept_index,
-        count,
-        steps,
-        index.stride(0),
-        index.stride(1),
-        128,
-    )
+    if count > _REPLAY_CLAIM_MIN:
+        # Two-pass atomic owners: O(count) instead of the quadratic
+        # shadow scan of _ordered_replay, which pays off once the
+        # position count is large enough to span many tiles.
+        owners = torch.full(
+            (num_slots,), -1, dtype=position_dtype, device=candidates.device
+        )
+        _ordered_claim[triton.cdiv(count, 128),](
+            index,
+            accepted,
+            owners,
+            count,
+            steps,
+            index.stride(0),
+            index.stride(1),
+            128,
+        )
+        _ordered_publish[triton.cdiv(count, 128),](
+            local,
+            index,
+            accepted,
+            owners,
+            predicts,
+            accept_index,
+            count,
+            steps,
+            index.stride(0),
+            index.stride(1),
+            128,
+        )
+    else:
+        _ordered_replay[triton.cdiv(count, 128),](
+            local,
+            index,
+            accepted,
+            predicts,
+            accept_index,
+            count,
+            steps,
+            index.stride(0),
+            index.stride(1),
+            128,
+        )
     return (
         predicts.to(candidates.dtype),
         accept_index.to(retrive_index.dtype),
@@ -436,165 +519,207 @@ def chain_speculative_sampling(
 
 
 @triton.jit
-def _recovered_sum_partials(
-    Values, Partials, V: tl.constexpr, PARTS: tl.constexpr
-):
-    row = tl.program_id(0)
-    part = tl.program_id(1)
-    lane = tl.arange(0, 128)
-    total = tl.full((128,), 0, tl.float32)
-    for block in range(tl.cdiv(tl.minimum(16384, V - part * 16384), 128)):
-        offset = part * 16384 + block * 128 + lane
-        total += tl.load(Values + row * V + offset, offset < V, 0).to(
-            tl.float32
-        )
-    tl.store(Partials + (row * PARTS + part) * 128 + lane, total)
-
-
-@triton.jit
-def _recovered_sum_finish(Partials, Sums, PARTS: tl.constexpr):
-    row = tl.program_id(0)
-    lane = tl.arange(0, 16)
-    t0 = tl.full((16,), 0, tl.float32)
-    t1 = tl.full((16,), 0, tl.float32)
-    t2 = tl.full((16,), 0, tl.float32)
-    t3 = tl.full((16,), 0, tl.float32)
-    t4 = tl.full((16,), 0, tl.float32)
-    t5 = tl.full((16,), 0, tl.float32)
-    t6 = tl.full((16,), 0, tl.float32)
-    t7 = tl.full((16,), 0, tl.float32)
-    for part in range(PARTS):
-        base = Partials + (row * PARTS + part) * 128 + lane
-        t0 += tl.load(base)
-        t1 += tl.load(base + 16)
-        t2 += tl.load(base + 32)
-        t3 += tl.load(base + 48)
-        t4 += tl.load(base + 64)
-        t5 += tl.load(base + 80)
-        t6 += tl.load(base + 96)
-        t7 += tl.load(base + 112)
-    left = t0 + t2 + (t1 + t3)
-    right = t4 + t6 + (t5 + t7)
-    high_left = tl.full((), 0, tl.float32)
-    low_left = tl.full((), 0, tl.float32)
-    high_right = tl.full((), 0, tl.float32)
-    low_right = tl.full((), 0, tl.float32)
-    for index in range(16):
-        a = tl.sum(tl.where(lane == index, left, 0), 0)
-        added_left = high_left + a
-        back_left = added_left - high_left
-        low_left += high_left - (added_left - back_left) + (a - back_left)
-        high_left = added_left
-        b = tl.sum(tl.where(lane == index, right, 0), 0)
-        added_right = high_right + b
-        back_right = added_right - high_right
-        low_right += high_right - (added_right - back_right) + (b - back_right)
-        high_right = added_right
-    tl.store(Sums + row, high_left + low_left + (high_right + low_right))
-
-
-@triton.jit
-def _recovered_sample_parts(
+def _sample_kernel(
     Cdf,
     Sums,
     Coins,
-    Tokens,
+    Predicts,
+    Slots,
+    BATCH,
     V: tl.constexpr,
-    CHUNK: tl.constexpr,
-    PARTS: tl.constexpr,
+    TILES: tl.constexpr,
+    BLOCK: tl.constexpr,
+    NUM_SPC: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    for b in range(pid, BATCH, NUM_SPC):
+        threshold = tl.load(Sums + b).to(tl.float32) * tl.load(Coins + b).to(
+            tl.float32
+        )
+        best = V - 1
+        for tile in tl.static_range(0, TILES):
+            idx = tile * BLOCK + tl.arange(0, BLOCK)
+            m = idx < V
+            value = tl.load(Cdf + b * V + idx, m, 0).to(tl.float32)
+            match = m & (value > threshold)
+            tok = tl.min(tl.where(match, idx, V - 1), 0)
+            best = tl.minimum(best, tok)
+        slot = tl.load(Slots + b)
+        tl.store(Predicts + slot, best)
+
+
+@triton.jit
+def _crossing_kernel(
+    Cdf,
+    Sums,
+    Coins,
+    Predicts,
+    Slots,
+    Tight,
+    BATCH,
+    V: tl.constexpr,
+    TILES: tl.constexpr,
+    NT: tl.constexpr,
+    BLOCK: tl.constexpr,
+    NUM_SPC: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    for b in range(pid, BATCH, NUM_SPC):
+        threshold = tl.load(Sums + b).to(tl.float32) * tl.load(Coins + b).to(
+            tl.float32
+        )
+        # 6 ulps of the threshold plus the smallest subnormal: any
+        # threshold perturbation from the 2-D vs 1-D sum rounding stays
+        # inside this band, so the first-crossing token can only move on
+        # rows where some cdf value lies inside the band.
+        band = threshold * 7.152557373046875e-07 + 1.401298464324817e-45
+        mvec = tl.arange(0, NT)
+        mok = mvec < TILES
+        end_idx = tl.minimum((mvec + 1) * BLOCK - 1, V - 1)
+        ends = tl.load(Cdf + b * V + end_idx, mok, 0.0)
+        qual = mok & (ends > threshold)
+        mhat = tl.min(tl.where(qual, mvec, TILES), 0)
+        if mhat == TILES:
+            best = V - 1
+            last = tl.load(Cdf + b * V + (V - 1)).to(tl.float32)
+            tight = tl.where(tl.abs(last - threshold) <= band, 1, 0)
+        else:
+            # ends[mhat] > threshold and (mhat == 0 or ends[mhat-1] <=
+            # threshold), so the first crossing always lives in block
+            # mhat: only that block is needed for the token.
+            base = mhat * BLOCK
+            idx = base + tl.arange(0, BLOCK)
+            m = idx < V
+            value = tl.load(Cdf + b * V + idx, m, 0.0).to(tl.float32)
+            match = m & (value > threshold)
+            tok = tl.min(tl.where(match, idx, V - 1), 0)
+            best = tok
+            near = m & (tl.abs(value - threshold) <= band)
+            tight = tl.max(near.to(tl.int32), 0)
+            # cdf is non-decreasing, so a neighbor block can only hold a
+            # band value when its boundary end lies inside the band; read
+            # neighbors only in that (rare) case.
+            left_end = tl.max(
+                tl.where((mvec == mhat - 1) & mok, ends, float("-inf")), 0
+            )
+            right_end = tl.max(
+                tl.where((mvec == mhat) & mok, ends, float("-inf")), 0
+            )
+            if left_end >= threshold - band:
+                lidx = (mhat - 1) * BLOCK + tl.arange(0, BLOCK)
+                lm = (lidx >= 0) & (lidx < V)
+                lvalue = tl.load(Cdf + b * V + lidx, lm, 0.0).to(tl.float32)
+                lnear = lm & (tl.abs(lvalue - threshold) <= band)
+                tight = tl.maximum(tight, tl.max(lnear.to(tl.int32), 0))
+            if right_end <= threshold + band:
+                ridx = (mhat + 1) * BLOCK + tl.arange(0, BLOCK)
+                rm = ridx < V
+                rvalue = tl.load(Cdf + b * V + ridx, rm, 0.0).to(tl.float32)
+                rnear = rm & (tl.abs(rvalue - threshold) <= band)
+                tight = tl.maximum(tight, tl.max(rnear.to(tl.int32), 0))
+        slot = tl.load(Slots + b)
+        tl.store(Predicts + slot, best)
+        tl.store(Tight + b, tight)
+
+
+@triton.jit
+def _token_fix_kernel(
+    Cdf,
+    SumsFix,
+    Coins,
+    RowsIdx,
+    Predicts,
+    Slots,
+    BATCH,
+    V: tl.constexpr,
+    TILES: tl.constexpr,
+    BLOCK: tl.constexpr,
+    NUM_SPC: tl.constexpr,
+):
+    pid = tl.program_id(0)
+    for t in range(pid, BATCH, NUM_SPC):
+        # RowsIdx is an int32 tensor: index tensors must never be int64 on
+        # this backend (scalar i64 loads misread and fault the device).
+        row = tl.load(RowsIdx + t)
+        threshold = tl.load(SumsFix + t).to(tl.float32) * tl.load(
+            Coins + row
+        ).to(tl.float32)
+        best = V - 1
+        for tile in tl.static_range(0, TILES):
+            idx = tile * BLOCK + tl.arange(0, BLOCK)
+            m = idx < V
+            value = tl.load(Cdf + row * V + idx, m, 0).to(tl.float32)
+            match = m & (value > threshold)
+            tok = tl.min(tl.where(match, idx, V - 1), 0)
+            best = tl.minimum(best, tok)
+        slot = tl.load(Slots + row)
+        tl.store(Predicts + slot, best)
+
+
+@triton.jit
+def _ordered_claim(
+    Index,
+    Counts,
+    Owners,
+    COUNT: tl.constexpr,
+    S: tl.constexpr,
+    IB: tl.constexpr,
+    IS: tl.constexpr,
     BLOCK: tl.constexpr,
 ):
-    row = tl.program_id(0)
-    part = tl.program_id(1)
-    lane = tl.arange(0, BLOCK)
-    column = part * CHUNK + lane
-    value = tl.load(
-        Cdf + row * V + column, (lane < CHUNK) & (column < V), 0
-    ).to(tl.float32)
-    threshold = tl.load(Sums + row).to(tl.float32) * tl.load(Coins + row).to(
-        tl.float32
+    wide: tl.constexpr = (COUNT + BLOCK - 1) // BLOCK * BLOCK - 1 > 2147483647
+    position_type: tl.constexpr = tl.int64 if wide else tl.int32
+    address_type: tl.constexpr = (
+        tl.int64
+        if (COUNT // S - 1) * IB + (S - 1) * IS > 2147483647
+        else position_type
     )
-    match = (lane < CHUNK) & (column < V) & (value > threshold)
-    token = tl.min(tl.where(match, column, V - 1), 0)
-    tl.store(Tokens + row * PARTS + part, token)
+    pos = tl.program_id(0).to(position_type) * BLOCK + tl.arange(0, BLOCK).to(
+        position_type
+    )
+    b, step = (tl.where(pos < COUNT, pos // S, 0), pos % S)
+    count = tl.load(Counts + b, pos < COUNT, -1)
+    valid = (pos < COUNT) & (step <= count)
+    address = b.to(address_type) * IB + step.to(address_type) * IS
+    slot = tl.load(Index + address, valid, 0)
+    tl.atomic_max(
+        Owners + slot, pos.to(Owners.dtype.element_ty), valid, sem="relaxed"
+    )
 
 
 @triton.jit
-def _recovered_sample_finish(
-    Tokens, Predicts, Slots, PARTS: tl.constexpr, BLOCK: tl.constexpr
+def _ordered_publish(
+    Local,
+    Index,
+    Counts,
+    Owners,
+    Predicts,
+    Accept,
+    COUNT: tl.constexpr,
+    S: tl.constexpr,
+    IB: tl.constexpr,
+    IS: tl.constexpr,
+    BLOCK: tl.constexpr,
 ):
-    row = tl.program_id(0)
-    part = tl.arange(0, BLOCK)
-    token = tl.load(Tokens + row * PARTS + part, part < PARTS, 2147483647)
-    best = tl.min(token, 0)
-    slot = tl.load(Slots + row)
-    tl.store(Predicts + slot, best)
-
-
-@triton.jit
-def _compensated_cdf_blocks(
-    Values,
-    Cdf,
-    Totals,
-    B: tl.constexpr,
-    V: tl.constexpr,
-    CHUNK: tl.constexpr,
-    PARTS: tl.constexpr,
-):
-    row = tl.program_id(0)
-    part = tl.program_id(1)
-    lanes = tl.arange(0, 16)
-    prefix = tl.full((16,), 0, tl.float32)
-    suffix = tl.full((16,), 0, tl.float32)
-    for block in range(tl.cdiv(CHUNK, 16)):
-        high_p = prefix
-        high_s = suffix
-        low_p = tl.full((16,), 0, tl.float32)
-        low_s = tl.full((16,), 0, tl.float32)
-        for k in range(16):
-            column = part * CHUNK + block * 16 + k
-            x = tl.load(Values + row * V + column, (row < B) & (column < V), 0)
-            x_p = tl.where(k <= lanes, x, 0.0)
-            x_s = tl.where(k > lanes, x, 0.0)
-            sum_p = high_p + x_p
-            sum_s = high_s + x_s
-            back_p = sum_p - high_p
-            back_s = sum_s - high_s
-            error_p = high_p - (sum_p - back_p) + (x_p - back_p)
-            error_s = high_s - (sum_s - back_s) + (x_s - back_s)
-            low_p += error_p
-            low_s += error_s
-            high_p = sum_p
-            high_s = sum_s
-        prefix = high_p + low_p
-        columns = part * CHUNK + block * 16 + lanes
-        tl.store(
-            Cdf + row * V + columns, prefix + suffix, (row < B) & (columns < V)
-        )
-        suffix = high_s + low_s
-    total = tl.sum(tl.where(lanes == 15, prefix, 0), 0)
-    tl.store(Totals + row * PARTS + part, total, row < B)
-
-
-@triton.jit
-def _matrix_cdf_carry(
-    Cdf,
-    Totals,
-    B: tl.constexpr,
-    V: tl.constexpr,
-    CHUNK: tl.constexpr,
-    PARTS: tl.constexpr,
-):
-    row = tl.program_id(0)
-    part = tl.program_id(1)
-    offset = tl.program_id(2) * 128 + tl.arange(0, 128)
-    carry = tl.full((), 0, tl.float32)
-    for previous in range(part):
-        carry += tl.load(Totals + row * PARTS + previous)
-    columns = part * CHUNK + offset
-    mask = (row < B) & (offset < CHUNK) & (columns < V)
-    values = tl.load(Cdf + row * V + columns, mask, 0)
-    tl.store(Cdf + row * V + columns, values + carry, mask)
+    wide: tl.constexpr = (COUNT + BLOCK - 1) // BLOCK * BLOCK - 1 > 2147483647
+    position_type: tl.constexpr = tl.int64 if wide else tl.int32
+    address_type: tl.constexpr = (
+        tl.int64
+        if (COUNT // S - 1) * IB + (S - 1) * IS > 2147483647
+        else position_type
+    )
+    pos = tl.program_id(0).to(position_type) * BLOCK + tl.arange(0, BLOCK).to(
+        position_type
+    )
+    b, step = (tl.where(pos < COUNT, pos // S, 0), pos % S)
+    count = tl.load(Counts + b, pos < COUNT, -1)
+    valid = (pos < COUNT) & (step <= count)
+    address = b.to(address_type) * IB + step.to(address_type) * IS
+    slot = tl.load(Index + address, valid, 0)
+    tl.store(Accept + pos, tl.where(valid, slot, -1), pos < COUNT)
+    owner = tl.load(Owners + slot, valid, -1)
+    token = tl.load(Local + pos, valid, 0)
+    tl.store(Predicts + slot, token, valid & (owner == pos))
 
 
 __all__ = ["chain_speculative_sampling"]

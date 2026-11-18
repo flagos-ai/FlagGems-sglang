@@ -12,10 +12,14 @@
 # implied. See the License for the specific language governing
 # permissions and limitations under the License.
 
-"""Task 53: Enflame large contiguous vector tiles with grid-strided persistence.
+"""Task 53: Enflame flat-streaming grid-strided launch, GCU400 48-SP tuned.
 
 Published float32 gating formula with stable softplus.
-Scheduling informed by FlagGems GCU400 softplus/sigmoid at
+Scheduling (probe-tuned 2026-11-08, GCU400/Libra): BLOCK sized so at most 48
+single-iteration programs cover n (256..1024 lanes), capped at 4096 lanes with
+grid=48 strided blocks beyond that. BLOCK>4096 overruns the ~448KB per-program
+DSM budget and grid>48 exceeds the dual-program/SP scheduler cap; both measured
+slower. Scheduling baseline: FlagGems GCU400 softplus/sigmoid at
 34bd6d68928c8b0039c42987840929da52aa6a62 (Apache-2.0).
 No FlagGems runtime dependency or fallback.
 SPDX-License-Identifier: Apache-2.0
@@ -84,11 +88,7 @@ def fused_gdn_gating(A_log, a, b, dt_bias, beta=1.0, threshold=20.0):
     n = batch * heads
     if n == 0:
         return g, output_gate
-    block = (
-        1024
-        if n <= 1024
-        else triton.next_power_of_2(n) if n <= 32768 else 65536
-    )
+    block = min(4096, max(256, triton.next_power_of_2(triton.cdiv(n, 48))))
     grid = min(triton.cdiv(n, block), 48)
     i64 = n >= 2147483648 or any(
         1 + sum((d - 1) * abs(st) for d, st in zip(t.shape, t.stride()))
