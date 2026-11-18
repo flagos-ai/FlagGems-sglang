@@ -299,3 +299,37 @@ def test_ple_fusions_capture_and_replay() -> None:
     torch.testing.assert_close(
         conv_state, expected_state, atol=4.0e-2, rtol=4.0e-2
     )
+
+
+def test_ple_gate_norm_preserves_bfloat16_sum_rounding() -> None:
+    hidden_size, hc_count = 2560, 4
+    device = torch.device(cfg.device)
+    counts = torch.tensor([505, 543, 688], device=device)
+    positions = torch.arange(hidden_size, device=device)
+    key = torch.ones(
+        (counts.numel(), hc_count, hidden_size),
+        device=device,
+        dtype=torch.bfloat16,
+    )
+    # Partial cancellation places the reduced dot product at BF16 rounding
+    # boundaries before the separate hidden-size scaling operation.
+    query = torch.where(
+        positions[None, :] < counts[:, None],
+        1.0,
+        torch.where(positions[None, :] < 1279, -1.0, 0.0),
+    ).to(key.dtype)
+    query = query[:, None, :].expand_as(key).contiguous()
+    value = torch.ones(
+        (counts.numel(), hidden_size), device=device, dtype=key.dtype
+    )
+    weight = torch.zeros(
+        hc_count * hidden_size, device=device, dtype=key.dtype
+    )
+    expected = _gate_norm_reference(
+        key, query, value, weight, weight, weight, 1.0e-6
+    )
+    actual = ple_gate_norm(
+        key, query, value, weight, weight, weight, hc_count, 1.0e-6
+    )
+    torch.testing.assert_close(actual[0], expected[0], atol=0, rtol=0)
+    torch.testing.assert_close(actual[1], expected[1], atol=0, rtol=0)

@@ -74,9 +74,8 @@ def _ple_gate_norm_kernel(
         source_dtype
     )
     products = (norm_key * norm_query).to(source_dtype)
-    gate_linear = (
-        tl.sum(products.to(tl.float32), axis=0) * inv_sqrt_hidden
-    ).to(source_dtype)
+    gate_sum = tl.sum(products.to(tl.float32), axis=0).to(source_dtype)
+    gate_linear = (gate_sum.to(tl.float32) * inv_sqrt_hidden).to(source_dtype)
     gate_linear_fp32 = gate_linear.to(tl.float32)
     gate_sign = tl.where(
         gate_linear_fp32 > 0.0,
