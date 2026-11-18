@@ -69,6 +69,12 @@ def _decode_split_kernel(
     mid_o_ptr,
     mid_lse_ptr,
     qk_scale,
+    stride_qb: tl.constexpr,
+    stride_qh: tl.constexpr,
+    stride_kt: tl.constexpr,
+    stride_kh: tl.constexpr,
+    stride_vt: tl.constexpr,
+    stride_vh: tl.constexpr,
     H_Q: tl.constexpr,
     H_KV: tl.constexpr,
     D: tl.constexpr,
@@ -80,6 +86,7 @@ def _decode_split_kernel(
     BLOCK_DV: tl.constexpr,
     NUM_SPLITS: tl.constexpr,
     IEEE: tl.constexpr,
+    INDEX64: tl.constexpr,
 ):
     hb = tl.program_id(0)
     split = tl.program_id(1)
@@ -103,7 +110,7 @@ def _decode_split_kernel(
     d_mask = offs_d < D
     dv_mask = offs_dv < D_V
     q = tl.load(
-        q_ptr + (b * H_Q + heads[:, None]) * D + offs_d[None, :],
+        q_ptr + b * stride_qb + heads[:, None] * stride_qh + offs_d[None, :],
         mask=h_mask[:, None] & d_mask[None, :],
         other=0.0,
     )
@@ -114,8 +121,13 @@ def _decode_split_kernel(
         offs_n = n0 + tl.arange(0, BLOCK_N)
         n_mask = offs_n < s_end
         tok = tl.load(kv_indices_ptr + start + offs_n, mask=n_mask, other=0)
+        if INDEX64:
+            tok = tok.to(tl.int64)
         k = tl.load(
-            k_ptr + (tok[:, None] * H_KV + kv_head) * D + offs_d[None, :],
+            k_ptr
+            + tok[:, None] * stride_kt
+            + kv_head * stride_kh
+            + offs_d[None, :],
             mask=n_mask[:, None] & d_mask[None, :],
             other=0.0,
         )
@@ -129,7 +141,10 @@ def _decode_split_kernel(
         alpha = tl.math.exp2(m_i - m_new)
         l_i = l_i * alpha + tl.sum(p, axis=1)
         v = tl.load(
-            v_ptr + (tok[:, None] * H_KV + kv_head) * D_V + offs_dv[None, :],
+            v_ptr
+            + tok[:, None] * stride_vt
+            + kv_head * stride_vh
+            + offs_dv[None, :],
             mask=n_mask[:, None] & dv_mask[None, :],
             other=0.0,
         )
@@ -190,9 +205,11 @@ def _decode_merge_kernel(
 
 
 def supported(q, k_buffer, v_buffer, group):
-    """Head sizes up to 256 (512-wide tiles do not fit in LDS) and contiguous
-    buffers, in 16-bit; float32 products run on the FMA units, where this only
-    beats a kernel without tiles once a block of query heads fills the tile."""
+    """Head sizes up to 256 (512-wide tiles do not fit in LDS) and rows that
+    are contiguous along the head dimension (q is usually a view into the
+    fused qkv projection), in 16-bit; float32 products run on the FMA units,
+    where this only beats a kernel without tiles once a block of query heads
+    fills the tile."""
     return (
         q.dtype in (torch.bfloat16, torch.float16, torch.float32)
         and k_buffer.dtype == q.dtype
@@ -200,10 +217,23 @@ def supported(q, k_buffer, v_buffer, group):
         and (group >= 16 or q.dtype != torch.float32)
         and q.shape[-1] <= 256
         and v_buffer.shape[-1] <= 256
-        and q.is_contiguous()
-        and k_buffer.is_contiguous()
-        and v_buffer.is_contiguous()
+        and q.stride(-1) == 1
+        and k_buffer.stride(-1) == 1
+        and v_buffer.stride(-1) == 1
     )
+
+
+def unit_head_stride(*tensors):
+    """The kernels read each head as one contiguous run."""
+    return tuple(t if t.stride(-1) == 1 else t.contiguous() for t in tensors)
+
+
+def needs_int64(k_buffer, v_buffer, k_strides, v_strides):
+    """Whether a KV-pool element offset can pass 2^31."""
+    kn, vn = k_buffer.shape, v_buffer.shape
+    k_end = (kn[0] - 1) * k_strides[0] + (kn[1] - 1) * k_strides[1] + kn[2]
+    v_end = (vn[0] - 1) * v_strides[0] + (vn[1] - 1) * v_strides[1] + vn[2]
+    return max(k_end, v_end) >= 1 << 31
 
 
 def _splits(programs, avg_len):
@@ -259,6 +289,11 @@ def decode_splitkv(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
     else:
         mid_o = mid_lse = out
     block_dv = triton.next_power_of_2(d_v)
+    q_strides, k_strides, v_strides = (
+        q.stride(),
+        k_buffer.stride(),
+        v_buffer.stride(),
+    )
     _decode_split_kernel[(h_kv * num_hblocks, splits, batch)](
         q,
         k_buffer,
@@ -269,6 +304,12 @@ def decode_splitkv(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
         mid_o,
         mid_lse,
         sm_scale * _LOG2E,
+        q_strides[0],
+        q_strides[1],
+        k_strides[0],
+        k_strides[1],
+        v_strides[0],
+        v_strides[1],
         H_Q=h_q,
         H_KV=h_kv,
         D=d,
@@ -280,6 +321,7 @@ def decode_splitkv(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
         BLOCK_DV=block_dv,
         NUM_SPLITS=splits,
         IEEE=ieee,
+        INDEX64=needs_int64(k_buffer, v_buffer, k_strides, v_strides),
         num_warps=4,
         num_stages=stages,
     )
