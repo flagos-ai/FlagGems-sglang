@@ -198,13 +198,12 @@ def _qsa_sparse_paged_gqa_kernel(
             & (dim_offsets[None, :] < HEAD_DIM),
             other=0.0,
         )
-        # Preserve the unfused BF16 rounding points: attention is stored as
-        # BF16, sigmoid returns BF16 for a BF16 gate, then the product rounds
-        # to BF16 before the original output buffer is consumed by o_proj.
+        # Preserve the unfused input-dtype rounding points for attention,
+        # sigmoid and the product before o_proj consumes the output.
         output = (
-            output.to(tl.bfloat16)
-            * tl.sigmoid(gate.to(tl.float32)).to(tl.bfloat16)
-        ).to(tl.bfloat16)
+            output.to(gate_ptr.dtype.element_ty)
+            * tl.sigmoid(gate.to(tl.float32)).to(gate_ptr.dtype.element_ty)
+        ).to(gate_ptr.dtype.element_ty)
     tl.store(
         output_ptr
         + row * stride_output_row
@@ -474,11 +473,11 @@ def _qsa_sparse_paged_gqa_split_reduce_kernel(
             & (dim_offsets < HEAD_DIM),
             other=0.0,
         )
-        # Match the existing single-kernel observable BF16 rounding points.
+        # Match the single-kernel input-dtype rounding points.
         output = (
-            output.to(tl.bfloat16)
-            * tl.sigmoid(gate.to(tl.float32)).to(tl.bfloat16)
-        ).to(tl.bfloat16)
+            output.to(gate_ptr.dtype.element_ty)
+            * tl.sigmoid(gate.to(tl.float32)).to(gate_ptr.dtype.element_ty)
+        ).to(gate_ptr.dtype.element_ty)
     tl.store(
         output_ptr
         + row * stride_output_row
@@ -507,6 +506,7 @@ def _qsa_sparse_paged_attention_split(
     out: torch.Tensor,
     gate: torch.Tensor | None,
     min_block_m: int = 8,
+    launch_config: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Run graph-safe split-TopK sparse attention with caller-owned partials."""
 
@@ -548,7 +548,9 @@ def _qsa_sparse_paged_attention_split(
     group_size = q.shape[1] // k_cache.shape[2]
     block_m = max(min_block_m, triton.next_power_of_2(group_size))
     block_d = max(16, triton.next_power_of_2(q.shape[2]))
-    block_n, num_warps, num_stages = qsa_sparse_triton_launch_config(q.device)
+    block_n, num_warps, num_stages = (
+        launch_config or qsa_sparse_triton_launch_config(q.device)
+    )
     split_topk = triton.cdiv(logical_indices.shape[1], num_splits)
     _qsa_sparse_paged_gqa_split_kernel[
         (q.shape[0], k_cache.shape[2], num_splits)
@@ -656,6 +658,7 @@ def _qsa_sparse_paged_attention(
     ) = None,
     *,
     min_block_m: int = 8,
+    launch_config: tuple[int, int, int] | None = None,
 ) -> torch.Tensor:
     """Run sparse GQA directly over paged BF16 K/V caches.
 
@@ -705,7 +708,9 @@ def _qsa_sparse_paged_attention(
     # Vendor wrappers may raise the dot-tile floor without duplicating kernels.
     block_m = max(min_block_m, triton.next_power_of_2(group_size))
     block_d = max(16, triton.next_power_of_2(q.shape[2]))
-    block_n, num_warps, num_stages = qsa_sparse_triton_launch_config(q.device)
+    block_n, num_warps, num_stages = (
+        launch_config or qsa_sparse_triton_launch_config(q.device)
+    )
     num_splits = (
         split_workspace[0].shape[2] if split_workspace is not None else 1
     )
@@ -723,6 +728,7 @@ def _qsa_sparse_paged_attention(
             out=out,
             gate=gate,
             min_block_m=min_block_m,
+            launch_config=launch_config,
         )
     _qsa_sparse_paged_gqa_kernel[(q.shape[0], k_cache.shape[2])](
         q,
