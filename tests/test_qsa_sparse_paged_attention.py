@@ -212,10 +212,11 @@ def test_sparse_attention_matches_independent_reference(dtype, head_dim):
 
 
 @pytest.mark.parametrize("rows", [1, 7, 64])
-def test_sparse_graph_replay_changes_inputs(rows):
+@pytest.mark.parametrize("topk", [513, 2051])
+def test_sparse_graph_replay_changes_inputs(rows, topk):
     from flaggems_sglang.reference import get_reference
 
-    case = _case(torch.device(cfg.device), rows=rows, topk=513)
+    case = _case(torch.device(cfg.device), rows=rows, topk=topk)
     out = torch.empty_like(case["q"])
     _run(ops, case, out)
     device = torch.get_device_module(cfg.device)
