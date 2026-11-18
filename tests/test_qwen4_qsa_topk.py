@@ -14,7 +14,10 @@ def make_inputs(rows, device):
         rows * 640, device=device, dtype=torch.float32
     ).reshape(rows, 640)
     starts = torch.arange(rows, device=device, dtype=torch.int32) % 4
-    ends = starts + torch.arange(rows, device=device, dtype=torch.int32) % 600
+    lengths = torch.tensor(
+        [513, 0, 1, 511, 512, 600, 636], device=device, dtype=torch.int32
+    )
+    ends = starts + lengths[torch.arange(rows, device=device) % 7]
     return logits, starts, ends, 512
 
 
@@ -38,7 +41,7 @@ def test_reference_and_graph(rows):
     )
     with device.graph(graph):
         output = gems.qwen4_qsa_topk(*args)
-    args[0].add_(1)
+    args[0].neg_()
     output.fill_(-99)
     graph.replay()
     device.synchronize()

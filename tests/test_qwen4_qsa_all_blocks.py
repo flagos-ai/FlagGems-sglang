@@ -10,7 +10,10 @@ from . import conftest as cfg
 
 
 def make_inputs(rows, device):
-    return torch.arange(rows, device=device, dtype=torch.int32) % 512, 512
+    lengths = torch.tensor(
+        [511, 0, 1, 512, 510], device=device, dtype=torch.int32
+    )
+    return lengths[torch.arange(rows, device=device) % 5], 512
 
 
 @pytest.mark.qwen4_qsa_all_blocks
