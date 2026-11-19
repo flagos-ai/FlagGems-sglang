@@ -29,7 +29,11 @@ FUSED_SIGMOID_MUL_SHAPES = [
 ]
 
 # Captured decode batch capacities for QSA metadata.
-QSA_DECODE_METADATA_SHAPES = [(1,), (7,), (64,)]
+QSA_DECODE_METADATA_SHAPES = [
+    (1, 65, 262148),
+    (7, 65, 262148),
+    (64, 65, 262148),
+]
 
 INT_DTYPES = [torch.int16, torch.int32]
 BOOL_DTYPES = [torch.bool]

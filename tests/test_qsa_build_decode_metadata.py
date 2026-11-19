@@ -23,22 +23,22 @@ from . import conftest as cfg
 pytestmark = pytest.mark.qsa_build_decode_metadata
 
 
-def make_inputs(rows, ratio=4, full_page=64, stride=1, dtype=torch.int64):
+def make_inputs(
+    rows, ratio=4, full_page=64, stride=1, dtype=torch.int64, width=8192
+):
     lengths = torch.tensor(
         ([1, 7, 8, 1024, 2048, 2049, 8192] * rows)[:rows],
         dtype=dtype,
         device=cfg.device,
     )
     request = torch.arange(1, rows + 1, device=cfg.device, dtype=dtype)
-    lens_storage = torch.zeros(
-        rows * stride, device=cfg.device, dtype=torch.int64
-    )
+    lens_storage = torch.zeros(rows * stride, device=cfg.device, dtype=dtype)
     req_storage = torch.zeros_like(lens_storage)
     lens_storage[::stride] = lengths
     req_storage[::stride] = request
     table = torch.arange(
-        (rows + 2) * 8192 * stride, device=cfg.device, dtype=torch.int64
-    ).reshape(rows + 2, -1)[:, ::stride]
+        (rows + 1) * width * stride, device=cfg.device, dtype=dtype
+    ).reshape(rows + 1, -1)[:, ::stride]
     table[0].zero_()
     one = lambda: torch.full(
         (rows,), -99, device=cfg.device, dtype=torch.int32
@@ -49,7 +49,12 @@ def make_inputs(rows, ratio=4, full_page=64, stride=1, dtype=torch.int64):
         one(),
         one(),
         one(),
-        torch.full((rows, 65), -99, device=cfg.device, dtype=torch.int32),
+        torch.full(
+            (rows, width // full_page + 1),
+            -99,
+            device=cfg.device,
+            dtype=torch.int32,
+        ),
         one(),
         torch.full((rows,), -99, device=cfg.device, dtype=torch.int64),
         torch.full((rows, ratio), -99, device=cfg.device, dtype=torch.int32),
@@ -64,23 +69,20 @@ def make_inputs(rows, ratio=4, full_page=64, stride=1, dtype=torch.int64):
     ]
 
 
-@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
-@pytest.mark.parametrize("ratio,full_page", [(4, 64), (8, 128)])
-@pytest.mark.parametrize("rows", [1, 7, 64])
-@pytest.mark.parametrize("padding", [False, True])
-@pytest.mark.parametrize("stride", [1, 2])
-def test_qsa_build_decode_metadata_exact_and_graph(
-    rows, padding, stride, ratio, full_page, dtype
+def check_metadata_graph(
+    rows, padding, stride, ratio, full_page, dtype, width
 ):
-    args = make_inputs(rows, ratio, full_page, stride, dtype) + [int(padding)]
+    args = make_inputs(rows, ratio, full_page, stride, dtype, width) + [
+        int(padding)
+    ]
     device = torch.get_device_module(cfg.device)
     qsa_build_decode_metadata(*args)
     device.synchronize()
     for recapture in range(2):
         if recapture:
-            args = make_inputs(rows, ratio, full_page, stride, dtype) + [
-                int(padding)
-            ]
+            args = make_inputs(
+                rows, ratio, full_page, stride, dtype, width
+            ) + [int(padding)]
         graph = (
             device.MUSAGraph() if cfg.device == "musa" else device.CUDAGraph()
         )
@@ -108,3 +110,19 @@ def test_qsa_build_decode_metadata_exact_and_graph(
             device.synchronize()
             for actual, ref in zip(args[3:12], expected[3:12]):
                 torch.testing.assert_close(actual.cpu(), ref, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("ratio,full_page", [(4, 64), (8, 128)])
+@pytest.mark.parametrize("rows", [1, 7, 64])
+@pytest.mark.parametrize("padding", [False, True])
+@pytest.mark.parametrize("stride", [1, 2])
+def test_qsa_build_decode_metadata_exact_and_graph(
+    rows, padding, stride, ratio, full_page, dtype
+):
+    check_metadata_graph(rows, padding, stride, ratio, full_page, dtype, 8192)
+
+
+@pytest.mark.parametrize("rows", [1, 7, 64])
+def test_qsa_build_decode_metadata_production_capacity(rows):
+    check_metadata_graph(rows, False, 1, 4, 64, torch.int32, 262148)

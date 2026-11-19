@@ -23,16 +23,17 @@ from .op_benchmark import OpBenchmark
 
 
 def _inputs(shape, dtype, device):
-    rows = shape[0]
+    rows, pool_rows, capacity = shape
     lengths = torch.full((rows,), 1024, dtype=torch.int32, device=device)
-    requests = torch.arange(rows, dtype=torch.int32, device=device)
+    requests = torch.arange(1, rows + 1, dtype=torch.int32, device=device)
     table = torch.arange(
-        (rows + 1) * 8192, dtype=torch.int32, device=device
-    ).reshape(rows + 1, 8192)
+        pool_rows * capacity, dtype=torch.int32, device=device
+    ).reshape(pool_rows, capacity)
     one = lambda: torch.empty_like(lengths)
+    state_slots = torch.empty(rows, dtype=torch.int64, device=device)
     yield lengths, requests, table, one(), one(), one(), one(), one(), torch.empty(
-        rows, 128, dtype=torch.int32, device=device
-    ), one(), one(), torch.empty(
+        rows, capacity // 64, dtype=torch.int32, device=device
+    ), one(), state_slots, torch.empty(
         rows, 4, dtype=torch.int32, device=device
     ), 4, 64
 
@@ -45,7 +46,7 @@ def test_perf_qsa_build_decode_metadata():
         input_fn=_inputs,
         dtypes=[torch.int32],
         shapes=QSA_DECODE_METADATA_SHAPES,
-        shape_desc="decode rows",
+        shape_desc="decode rows, pool rows, table width",
     )
     bench.set_gems(flaggems_sglang.qsa_build_decode_metadata)
     bench.run()

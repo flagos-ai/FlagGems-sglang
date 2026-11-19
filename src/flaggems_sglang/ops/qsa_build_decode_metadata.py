@@ -15,6 +15,7 @@
 # Adapted from SGLang qsa/graph_metadata.py at 1b6e7d09a751bc53dec30e839e944e8662ca0bc5.
 """Build non-speculative QSA decode metadata in caller-owned buffers."""
 
+import torch
 import triton
 import triton.language as tl
 
@@ -83,22 +84,22 @@ def _qsa_build_decode_metadata(
 
 
 def qsa_build_decode_metadata(
-    seq_lens,
-    req_pool_indices,
-    req_to_token,
-    sequence_lengths,
-    row_req_pool_indices,
-    prefix_lengths,
-    compressed_lengths,
-    write_locs,
-    page_table,
-    logical_positions,
-    state_slots,
-    ring_locs,
-    compress_ratio,
-    full_page_size,
-    num_padding=0,
-):
+    seq_lens: torch.Tensor,
+    req_pool_indices: torch.Tensor,
+    req_to_token: torch.Tensor,
+    sequence_lengths: torch.Tensor,
+    row_req_pool_indices: torch.Tensor,
+    prefix_lengths: torch.Tensor,
+    compressed_lengths: torch.Tensor,
+    write_locs: torch.Tensor,
+    page_table: torch.Tensor,
+    logical_positions: torch.Tensor,
+    state_slots: torch.Tensor,
+    ring_locs: torch.Tensor,
+    compress_ratio: int,
+    full_page_size: int,
+    num_padding: int = 0,
+) -> None:
     """Mutate the nine contiguous output buffers; return None.
 
     Inputs are integer tensors. The request table may have arbitrary strides.
