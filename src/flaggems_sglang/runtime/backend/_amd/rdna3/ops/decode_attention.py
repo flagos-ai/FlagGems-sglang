@@ -33,7 +33,12 @@ import torch
 import triton
 import triton.language as tl
 
-from ._decode_splitkv import decode_splitkv, supported
+from ._decode_splitkv import (
+    decode_splitkv,
+    needs_int64,
+    supported,
+    unit_head_stride,
+)
 
 
 @triton.jit
@@ -46,12 +51,18 @@ def _decode_attention_kernel(
     output,
     sm_scale,
     total_work,
+    stride_qb: tl.constexpr,
+    stride_qh: tl.constexpr,
+    stride_kt: tl.constexpr,
+    stride_kh: tl.constexpr,
+    stride_vt: tl.constexpr,
+    stride_vh: tl.constexpr,
     H_Q: tl.constexpr,
     H_KV: tl.constexpr,
     D: tl.constexpr,
-    MAX_SEQ_LEN: tl.constexpr,
     BLOCK_D: tl.constexpr,
     BLOCK_N: tl.constexpr,
+    INDEX64: tl.constexpr,
 ):
     program_id = tl.program_id(0)
     program_count = tl.num_programs(0)
@@ -66,14 +77,14 @@ def _decode_attention_kernel(
         end = tl.load(kv_indptr + batch + 1)
         sequence_length = end - start
         query = tl.load(
-            q + batch_head * D + dim_offsets,
+            q + batch * stride_qb + query_head * stride_qh + dim_offsets,
             mask=dim_mask,
             other=0.0,
         ).to(tl.float32)
         running_max = -float("inf")
         running_sum = 0.0
         accumulator = tl.zeros((BLOCK_D,), dtype=tl.float32)
-        for block_start in tl.range(0, MAX_SEQ_LEN, BLOCK_N):
+        for block_start in tl.range(0, sequence_length, BLOCK_N):
             token_offsets = block_start + token_lanes
             token_mask = token_offsets < sequence_length
             token_indices = tl.load(
@@ -81,11 +92,13 @@ def _decode_attention_kernel(
                 mask=token_mask,
                 other=0,
             )
-            kv_offsets = (
-                token_indices[:, None] * H_KV + kv_head
-            ) * D + dim_offsets[None, :]
+            if INDEX64:
+                token_indices = token_indices.to(tl.int64)
             keys = tl.load(
-                k_buffer + kv_offsets,
+                k_buffer
+                + token_indices[:, None] * stride_kt
+                + kv_head * stride_kh
+                + dim_offsets[None, :],
                 mask=token_mask[:, None] & dim_mask[None, :],
                 other=0.0,
             ).to(tl.float32)
@@ -99,7 +112,10 @@ def _decode_attention_kernel(
                 probabilities, axis=0
             )
             values = tl.load(
-                v_buffer + kv_offsets,
+                v_buffer
+                + token_indices[:, None] * stride_vt
+                + kv_head * stride_vh
+                + dim_offsets[None, :],
                 mask=token_mask[:, None] & dim_mask[None, :],
                 other=0.0,
             ).to(tl.float32)
@@ -116,9 +132,9 @@ def _decode_attention_kernel(
 
 
 def _launch_direct(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
+    q, k_buffer, v_buffer = unit_head_stride(q, k_buffer, v_buffer)
     batch_size, query_heads, head_dim = q.shape
     kv_heads = k_buffer.shape[1]
-    max_sequence_length = k_buffer.shape[0] // batch_size
     block_dim = triton.next_power_of_2(head_dim)
     block_tokens = 16 if block_dim >= 512 else 32 if block_dim >= 128 else 64
     # a 512-wide head leaves little for a warp to do beyond its own row, unless
@@ -130,6 +146,11 @@ def _launch_direct(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
         dtype=torch.float32,
         device=q.device,
     )
+    q_strides, k_strides, v_strides = (
+        q.stride(),
+        k_buffer.stride(),
+        v_buffer.stride(),
+    )
     _decode_attention_kernel[(total_work,)](
         q,
         k_buffer,
@@ -139,12 +160,18 @@ def _launch_direct(q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale):
         output,
         sm_scale,
         total_work,
+        q_strides[0],
+        q_strides[1],
+        k_strides[0],
+        k_strides[1],
+        v_strides[0],
+        v_strides[1],
         query_heads,
         kv_heads,
         head_dim,
-        max_sequence_length,
         block_dim,
         block_tokens,
+        needs_int64(k_buffer, v_buffer, k_strides, v_strides),
         num_warps=2 if wide else 4,
         num_stages=2,
     )

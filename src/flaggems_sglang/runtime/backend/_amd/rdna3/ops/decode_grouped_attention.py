@@ -33,7 +33,12 @@ import torch
 import triton
 import triton.language as tl
 
-from ._decode_splitkv import decode_splitkv, supported
+from ._decode_splitkv import (
+    decode_splitkv,
+    needs_int64,
+    supported,
+    unit_head_stride,
+)
 
 
 @triton.jit
@@ -45,13 +50,19 @@ def _row_kernel(
     kv_indices,
     output,
     sm_scale,
+    stride_qb: tl.constexpr,
+    stride_qh: tl.constexpr,
+    stride_kt: tl.constexpr,
+    stride_kh: tl.constexpr,
+    stride_vt: tl.constexpr,
+    stride_vh: tl.constexpr,
     H_Q: tl.constexpr,
-    H_KV: tl.constexpr,
     D: tl.constexpr,
     D_V: tl.constexpr,
     GROUP_SIZE: tl.constexpr,
     BLOCK_D: tl.constexpr,
     BLOCK_DV: tl.constexpr,
+    INDEX64: tl.constexpr,
 ):
     batch_id = tl.program_id(0)
     query_head = tl.program_id(1)
@@ -59,7 +70,7 @@ def _row_kernel(
     d_offsets = tl.arange(0, BLOCK_D)
     dv_offsets = tl.arange(0, BLOCK_DV)
     q_values = tl.load(
-        q + (batch_id * H_Q + query_head) * D + d_offsets,
+        q + batch_id * stride_qb + query_head * stride_qh + d_offsets,
         mask=d_offsets < D,
         other=0.0,
     ).to(tl.float32)
@@ -70,8 +81,10 @@ def _row_kernel(
     accumulator = tl.zeros((BLOCK_DV,), dtype=tl.float32)
     for position in tl.range(start, end):
         page = tl.load(kv_indices + position)
+        if INDEX64:
+            page = page.to(tl.int64)
         k_values = tl.load(
-            k_buffer + (page * H_KV + kv_head) * D + d_offsets,
+            k_buffer + page * stride_kt + kv_head * stride_kh + d_offsets,
             mask=d_offsets < D,
             other=0.0,
         ).to(tl.float32)
@@ -80,7 +93,7 @@ def _row_kernel(
         old_scale = tl.exp(running_max - next_max)
         probability = tl.exp(score - next_max)
         v_values = tl.load(
-            v_buffer + (page * H_KV + kv_head) * D_V + dv_offsets,
+            v_buffer + page * stride_vt + kv_head * stride_vh + dv_offsets,
             mask=dv_offsets < D_V,
             other=0.0,
         ).to(tl.float32)
@@ -106,10 +119,16 @@ def decode_grouped_attention(
         return decode_splitkv(
             q, k_buffer, v_buffer, kv_indptr, kv_indices, sm_scale
         )
+    q, k_buffer, v_buffer = unit_head_stride(q, k_buffer, v_buffer)
     output = torch.empty(
         (batch_size, query_heads, value_size),
         dtype=torch.float32,
         device=q.device,
+    )
+    q_strides, k_strides, v_strides = (
+        q.stride(),
+        k_buffer.stride(),
+        v_buffer.stride(),
     )
     _row_kernel[(batch_size, query_heads)](
         q,
@@ -119,13 +138,19 @@ def decode_grouped_attention(
         kv_indices,
         output,
         sm_scale,
+        q_strides[0],
+        q_strides[1],
+        k_strides[0],
+        k_strides[1],
+        v_strides[0],
+        v_strides[1],
         query_heads,
-        kv_heads,
         head_size,
         value_size,
         group_size,
         triton.next_power_of_2(head_size),
         triton.next_power_of_2(value_size),
+        needs_int64(k_buffer, v_buffer, k_strides, v_strides),
         # a program here owns one query head, and a 512-wide head leaves little
         # for more than one warp to do
         num_warps=(
