@@ -3,5 +3,7 @@ registry.mthreads.com/mcconline/inference/sglang:v0.5.16-amd64-ph1-musa4.3.8
 Image digest: sha256:d32979f66bdceeaba738b2961553f37b0b3ca4006b4d9f02063b1358ffa62d6c
 Original path: python/sglang/srt/hardware_backend/musa/jit_kernel/csrc
 License: Apache-2.0 (see repository LICENSE).
-The numerical kernel and JIT loader retain the native implementation.
+The numerical kernel retains the native implementation. The JIT loader is
+restricted to source builds with the active toolkit; no native image binary
+is loaded.
 The Python adapter fixes the validated TP8 configurations before execution.
