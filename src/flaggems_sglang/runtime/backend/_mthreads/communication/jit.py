@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 # Adapted from the native SGLang MUSA JIT loader; see NOTICE for provenance.
 """Build the vendored communication sources with the active MUSA toolkit."""
 from __future__ import annotations
@@ -37,30 +49,12 @@ def _mcc() -> str:
     return str(_musa_home() / "bin" / "mcc")
 
 
-def _normalize_musa_arch(arch: str) -> str:
-    arch = (
-        arch.strip()
-        .lower()
-        .replace("mp", "")
-        .replace("_", "")
-        .replace(".", "")
-    )
-    if not arch.isdigit():
-        raise ValueError(f"Invalid MUSA arch value: {arch!r}")
-    return f"mp_{arch}"
-
-
 @functools.cache
 def _musa_arch_names() -> tuple[str, ...]:
     import torch
 
     props = torch.musa.get_device_properties(torch.musa.current_device())
     return (f"mp_{int(props.major)}{int(props.minor)}",)
-
-
-def musa_arch_names() -> tuple[str, ...]:
-    """Return normalized MUSA architectures used by JIT/AOT compilation."""
-    return _musa_arch_names()
 
 
 def _musa_arch_flags() -> list[str]:

@@ -42,6 +42,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+musa-communication = [
+    "apache-tvm-ffi==0.1.9.post1+musa.1",
+    "ninja>=1.11",
+    "torch_musa>=2.9",
+]
 test = [
     "pytest",
     "scipy",
