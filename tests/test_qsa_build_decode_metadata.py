@@ -1,5 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import pytest
 import torch
 
@@ -11,13 +23,13 @@ from . import conftest as cfg
 pytestmark = pytest.mark.qsa_build_decode_metadata
 
 
-def make_inputs(rows, ratio=8, stride=1):
+def make_inputs(rows, ratio=4, full_page=64, stride=1, dtype=torch.int64):
     lengths = torch.tensor(
         ([1, 7, 8, 1024, 2048, 2049, 8192] * rows)[:rows],
-        dtype=torch.int64,
+        dtype=dtype,
         device=cfg.device,
     )
-    request = torch.arange(1, rows + 1, device=cfg.device, dtype=torch.int64)
+    request = torch.arange(1, rows + 1, device=cfg.device, dtype=dtype)
     lens_storage = torch.zeros(
         rows * stride, device=cfg.device, dtype=torch.int64
     )
@@ -48,21 +60,27 @@ def make_inputs(rows, ratio=8, stride=1):
         table,
         *outputs,
         ratio,
-        128,
+        full_page,
     ]
 
 
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("ratio,full_page", [(4, 64), (8, 128)])
 @pytest.mark.parametrize("rows", [1, 7, 64])
 @pytest.mark.parametrize("padding", [False, True])
 @pytest.mark.parametrize("stride", [1, 2])
-def test_qsa_build_decode_metadata_exact_and_graph(rows, padding, stride):
-    args = make_inputs(rows, stride=stride) + [int(padding)]
+def test_qsa_build_decode_metadata_exact_and_graph(
+    rows, padding, stride, ratio, full_page, dtype
+):
+    args = make_inputs(rows, ratio, full_page, stride, dtype) + [int(padding)]
     device = torch.get_device_module(cfg.device)
     qsa_build_decode_metadata(*args)
     device.synchronize()
     for recapture in range(2):
         if recapture:
-            args = make_inputs(rows, stride=stride) + [int(padding)]
+            args = make_inputs(rows, ratio, full_page, stride, dtype) + [
+                int(padding)
+            ]
         graph = (
             device.MUSAGraph() if cfg.device == "musa" else device.CUDAGraph()
         )
