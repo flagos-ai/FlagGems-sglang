@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 FlagOS Contributors
-import flaggems_sglang
 import pytest
 import torch
+
+import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .attri_util import QSA_DECODE_METADATA_SHAPES

@@ -240,11 +240,19 @@ def load_musa_jit(
         build_dir.mkdir(parents=True, exist_ok=True)
         _write_if_different(
             ninja_path,
-            _ninja_content(module_name, resolved_sources, extra_cflags,
-                           extra_musa_cflags, extra_ldflags),
+            _ninja_content(
+                module_name,
+                resolved_sources,
+                extra_cflags,
+                extra_musa_cflags,
+                extra_ldflags,
+            ),
         )
-        subprocess.run(["ninja", "-C", str(build_dir), "-f", str(ninja_path)],
-                       check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(
+            ["ninja", "-C", str(build_dir), "-f", str(ninja_path)],
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
     return tvm_ffi.load_module(str(so_path))
 
 
