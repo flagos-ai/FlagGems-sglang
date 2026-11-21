@@ -50,9 +50,12 @@
 #                          owning torch when none on PATH has it, 0 to skip
 #                          the search (default: REQUIRE_TORCH, so the search
 #                          only costs time where torch is actually needed)
-#   TORCH_SEARCH_ROOTS     space-separated directories to search
-#                          (default: $HOME /opt /usr/local)
-#   TORCH_SEARCH_DEPTH     find -maxdepth for that search (default: 8)
+#   TORCH_SEARCH_ROOTS     space-separated directories to search, in order
+#                          (default: the common locations, then / as a
+#                          catch-all)
+#   TORCH_SEARCH_DEPTH     find -maxdepth for that search, relative to each
+#                          root (default: 8; the catch-all / gets 4 more,
+#                          since it starts higher up)
 #   TORCH_SEARCH_TIMEOUT   seconds allowed per root (default: 120)
 #   UV_VERSION             uv version to install when uv is absent
 #   VENV_PATH              venv to create and install into (default:
@@ -135,7 +138,14 @@ REQUIRE_TORCH="${REQUIRE_TORCH:-0}"
 # Searching the filesystem is only worth its time where a missing torch is
 # fatal anyway, so this follows REQUIRE_TORCH unless set explicitly.
 TORCH_SEARCH="${TORCH_SEARCH:-${REQUIRE_TORCH}}"
-TORCH_SEARCH_ROOTS="${TORCH_SEARCH_ROOTS:-${HOME} /opt /usr/local}"
+# The usual places a vendor image or a FlagGems checkout keeps its venv come
+# first, so the common case stays cheap. The trailing / is deliberate: a
+# runner is reprovisioned without reference to this repo, and when its runtime
+# lands somewhere this list does not name, failing the job to learn that costs
+# a red run on every branch. -xdev keeps that walk on the root filesystem, so
+# network and container mounts are still skipped.
+TORCH_SEARCH_ROOTS="${TORCH_SEARCH_ROOTS:-\
+${HOME} /opt /usr/local /home /root /data /mnt /workspace /srv /}"
 # A venv's torch sits 7 levels below the root it lives in
 # (<venv>/lib/python3.X/site-packages/torch/version.py), so 8 leaves one level
 # of nesting spare while keeping the walk shallow.
@@ -293,9 +303,14 @@ fi
 # each root is time-boxed, so a slow or huge filesystem costs a bounded wait
 # and a warning rather than a hung job.
 find_torch_python() {
-  local root package prefix python
+  local root package prefix python depth
   for root in ${TORCH_SEARCH_ROOTS}; do
     [ -d "${root}" ] || continue
+    # The depth budget is relative to the root, so the catch-all / would
+    # otherwise cut off exactly the nesting it exists to reach: a venv at
+    # /data/a/b/venv needs three more levels than one directly under $HOME.
+    depth="${TORCH_SEARCH_DEPTH}"
+    [ "${root}" = "/" ] && depth="$((TORCH_SEARCH_DEPTH + 4))"
     while IFS= read -r package; do
       [ -n "${package}" ] || continue
       # .../<prefix>/lib/python3.X/site-packages/torch/version.py
@@ -308,7 +323,7 @@ find_torch_python() {
         return 0
       fi
     done < <(timeout "${TORCH_SEARCH_TIMEOUT}" find "${root}" -xdev \
-      -maxdepth "${TORCH_SEARCH_DEPTH}" -path '*/torch/version.py' -print \
+      -maxdepth "${depth}" -path '*/torch/version.py' -print \
       2>/dev/null || true)
   done
   return 1
