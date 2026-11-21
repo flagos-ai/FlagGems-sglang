@@ -51,11 +51,13 @@ inputs:
     description: >-
       Space-separated directories to search for the interpreter owning the
       vendor torch, used when none on PATH has it. Leave empty for the
-      script's default ($HOME /opt /usr/local), which covers the usual places
-      a vendor image or a FlagGems checkout puts its venv. The search stays on
-      one filesystem and is time-boxed per root, so a miss costs a bounded
-      wait and a warning rather than a hung job. Only runs when require-torch
-      is 1, where a missing torch is fatal anyway.
+      script's default, which tries the usual places a vendor image or a
+      FlagGems checkout puts its venv ($HOME /opt /usr/local /home /root
+      /data /mnt /workspace /srv) and then / as a catch-all, so a runtime
+      reprovisioned into a differently named directory is still found. The
+      search stays on one filesystem and is time-boxed per root, so a miss
+      costs a bounded wait and a warning rather than a hung job. Only runs
+      when require-torch is 1, where a missing torch is fatal anyway.
     required: false
     default: ""
   virtual-env:
