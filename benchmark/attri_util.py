@@ -35,6 +35,15 @@ COMPLEX_DTYPES = [torch.complex64]
 DEFAULT_WARMUP_COUNT = 1000
 DEFAULT_ITER_COUNT = 100
 
+# (requests, queries per request, visible context) for DeepSeek V3.2.
+FLASH_TOPK_BENCH_SHAPES = [
+    (1, 1, 4096),
+    (16, 1, 16384),
+    (1, 32, 8192),
+    (2, 128, 32768),
+]
+FLASH_TOPK_MORE_SHAPES = [(32, 1, 65536), (8, 1, 131072), (1, 128, 131200)]
+
 # LEGACY_SHAPES are maintained for legacy benchmark SIZE
 # settings and may be removed in the future.
 # Do not reference this elsewhere.

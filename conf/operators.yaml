@@ -796,6 +796,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: flash_topk
+    description: |
+      Hopper FP8 paged index scoring and exact FP32 TopK for DeepSeek V3.2.
+      Supports request-local, paged attention slot and ragged KV output IDs.
+    for:
+      - flash_topk
+    labels:
+      - fused
+      - sglang
+      - Attention
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fp8_per_token_to_per_tensor_quant
     description: |
       Requantizes an fp8 tensor from per-token-group scales to a single known per-tensor scale.
