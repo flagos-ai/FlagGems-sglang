@@ -1,190 +1,290 @@
-# Copyright 2026, The FlagOS Contributors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License")
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#       http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-# express or implied. See the License for the specific language
-# governing permissions and limitations under the License.
+"""Chunk-local vector cumulative sum over [B, T, H, S] along the time axis.
 
-"""chunk_local_cumsum_vector -- per-chunk cumulative sum of a vector
-per-token, per-head gate.
+Per (b, h, s) column and per contiguous chunk of ``chunk_size`` time steps, an
+inclusive prefix (forward) or suffix (reverse) cumulative sum is produced in
+fp32 and written into a freshly allocated contiguous fp32 tensor.
 
-FLA-family building block: turns raw log-decay gate values ``g`` into
-within-chunk cumulative decays for gated linear attention.
+Fast path (flat-inner decomposition): when the (H, S) plane is contiguous the two
+axes are treated as one flat inner axis P = H*S.  Each program owns a block of BS
+flat columns and walks the chunk row by row, so every thread carries its own fp32
+accumulator for its own columns and the scan never leaves registers (no shared
+memory, no cross-lane communication).  Reverse is expressed purely as flipped row
+addressing, so both directions run the identical forward scan.
 
-Semantics (matches the PyTorch reference exactly):
-
-    B, T, H, S = g.shape
-    g_c = g.float().view(B, T // chunk_size, chunk_size, H, S)
-    if reverse: g_c = g_c.flip(2)
-    out = g_c.cumsum(dim=2)
-    if scale is not None: out = out * scale
-    if reverse: out = out.flip(2)
-    return out.reshape(B, T, H, S)
-
-Scope:
-    - head_first=False (g is [B, T, H, S], contiguous)
-    - fixed-size batching (no cu_seqlens)
-    - T is always an exact multiple of chunk_size (chunk_size is a power of 2)
-    - output dtype is always float32 (accumulation done in float32)
-
-This kernel is written in portable Triton only. It must NOT call any
-pre-compiled / vendor-specific cached operator (no torch.cumsum, no flag_gems,
-no ``_compiled`` handles) — the whole computation is done inside the Triton
-kernel so it is portable across supported chips.
+Fallback (per-head decomposition): used only when the (H, S) plane is not
+contiguous; identical math with explicit per-axis strides.
 """
 
 import torch
 import triton
 import triton.language as tl
 
+_CONFIGS = [
+    triton.Config({"BS": 128}, num_warps=1),
+    triton.Config({"BS": 256}, num_warps=1),
+    triton.Config({"BS": 256}, num_warps=2),
+    triton.Config({"BS": 512}, num_warps=2),
+    triton.Config({"BS": 512}, num_warps=4),
+    triton.Config({"BS": 1024}, num_warps=8),
+]
 
+
+@triton.autotune(configs=_CONFIGS, key=["T", "P"])
 @triton.jit
-def _reference_fwd_kernel(
+def _chunk_cumsum_flat(
     g_ptr,
-    out_ptr,
-    H: tl.constexpr,
-    S: tl.constexpr,
-    BT: tl.constexpr,
-    BLOCK_S: tl.constexpr,
-):
-    """Forward cumsum (reverse=False, no scale) — the hot path.
-
-    Grid: (B * NT * H, ceil(S / BLOCK_S)).
-    Each program handles one (batch*chunk, head, s-block) tile of shape [BT, BLOCK_S].
-    """
-    pid_bnh = tl.program_id(0)  # linearized (B*NT, H)
-    pid_s = tl.program_id(1)  # s-block index
-
-    # Decompose linear index back to (batch*chunk, head).
-    pid_bn = pid_bnh // H
-    pid_h = pid_bnh % H
-
-    offs_t = tl.arange(0, BT)[:, None]  # [BT, 1]
-    offs_s = pid_s * BLOCK_S + tl.arange(0, BLOCK_S)[None, :]  # [1, BLOCK_S]
-    mask_s = offs_s < S
-
-    # g is [B, T, H, S] contiguous: element (b, t, h, s) is at (b*T+t)*H*S + h*S + s.
-    # In chunk layout bn = b*NT + n covers t in [bn*BT, (bn+1)*BT).
-    # base: pointer to (bn*BT, h, 0) == bn*BT*H*S + h*S.
-    base = pid_bn * (BT * H * S) + pid_h * S
-
-    x = tl.load(
-        g_ptr + base + offs_t * (H * S) + offs_s,
-        mask=mask_s,
-        other=0.0,
-    ).to(tl.float32)
-
-    y = tl.cumsum(x, axis=0)
-
-    tl.store(
-        out_ptr + base + offs_t * (H * S) + offs_s,
-        y,
-        mask=mask_s,
-    )
-
-
-@triton.jit
-def _reference_kernel(
-    g_ptr,
-    out_ptr,
+    o_ptr,
+    T,
+    P,
+    stride_gb,
+    stride_gt,
+    stride_ob,
+    stride_ot,
     scale,
-    H: tl.constexpr,
-    S: tl.constexpr,
+    chunk_size: tl.constexpr,
     BT: tl.constexpr,
-    BLOCK_S: tl.constexpr,
+    BS: tl.constexpr,
     REVERSE: tl.constexpr,
     HAS_SCALE: tl.constexpr,
 ):
-    """General kernel: handles reverse and/or scale."""
-    pid_bnh = tl.program_id(0)
-    pid_s = tl.program_id(1)
+    i_t = tl.program_id(0)
+    i_b = tl.program_id(1)
+    i_f = tl.program_id(2)
 
-    pid_bn = pid_bnh // H
-    pid_h = pid_bnh % H
+    t0 = i_t * chunk_size
+    n_valid = tl.minimum(chunk_size, T - t0)
 
-    offs_t = tl.arange(0, BT)[:, None]
+    cols = i_f * BS + tl.arange(0, BS)
+    cmask = cols < P
+
+    g_base = g_ptr + i_b * stride_gb + cols
+    o_base = o_ptr + i_b * stride_ob + cols
+
+    acc = tl.zeros([BS], tl.float32)
+
+    # Eight independent row loads are issued before any of them is consumed, so a
+    # warp keeps eight global loads in flight instead of draining after each one.
+    # The fp32 accumulation order is still strictly row by row.
+    for i0 in tl.static_range(0, BT, 8):
+        if REVERSE:
+            r0 = t0 + (n_valid - 1 - i0)
+            r1 = t0 + (n_valid - 2 - i0)
+            r2 = t0 + (n_valid - 3 - i0)
+            r3 = t0 + (n_valid - 4 - i0)
+            r4 = t0 + (n_valid - 5 - i0)
+            r5 = t0 + (n_valid - 6 - i0)
+            r6 = t0 + (n_valid - 7 - i0)
+            r7 = t0 + (n_valid - 8 - i0)
+        else:
+            r0 = t0 + i0
+            r1 = t0 + i0 + 1
+            r2 = t0 + i0 + 2
+            r3 = t0 + i0 + 3
+            r4 = t0 + i0 + 4
+            r5 = t0 + i0 + 5
+            r6 = t0 + i0 + 6
+            r7 = t0 + i0 + 7
+        m0 = cmask & (i0 < n_valid)
+        m1 = cmask & (i0 + 1 < n_valid)
+        m2 = cmask & (i0 + 2 < n_valid)
+        m3 = cmask & (i0 + 3 < n_valid)
+        m4 = cmask & (i0 + 4 < n_valid)
+        m5 = cmask & (i0 + 5 < n_valid)
+        m6 = cmask & (i0 + 6 < n_valid)
+        m7 = cmask & (i0 + 7 < n_valid)
+        x0 = tl.load(g_base + r0 * stride_gt, mask=m0, other=0.0)
+        x1 = tl.load(g_base + r1 * stride_gt, mask=m1, other=0.0)
+        x2 = tl.load(g_base + r2 * stride_gt, mask=m2, other=0.0)
+        x3 = tl.load(g_base + r3 * stride_gt, mask=m3, other=0.0)
+        x4 = tl.load(g_base + r4 * stride_gt, mask=m4, other=0.0)
+        x5 = tl.load(g_base + r5 * stride_gt, mask=m5, other=0.0)
+        x6 = tl.load(g_base + r6 * stride_gt, mask=m6, other=0.0)
+        x7 = tl.load(g_base + r7 * stride_gt, mask=m7, other=0.0)
+
+        acc += x0.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r0 * stride_ot, acc * scale, mask=m0)
+        else:
+            tl.store(o_base + r0 * stride_ot, acc, mask=m0)
+        acc += x1.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r1 * stride_ot, acc * scale, mask=m1)
+        else:
+            tl.store(o_base + r1 * stride_ot, acc, mask=m1)
+        acc += x2.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r2 * stride_ot, acc * scale, mask=m2)
+        else:
+            tl.store(o_base + r2 * stride_ot, acc, mask=m2)
+        acc += x3.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r3 * stride_ot, acc * scale, mask=m3)
+        else:
+            tl.store(o_base + r3 * stride_ot, acc, mask=m3)
+        acc += x4.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r4 * stride_ot, acc * scale, mask=m4)
+        else:
+            tl.store(o_base + r4 * stride_ot, acc, mask=m4)
+        acc += x5.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r5 * stride_ot, acc * scale, mask=m5)
+        else:
+            tl.store(o_base + r5 * stride_ot, acc, mask=m5)
+        acc += x6.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r6 * stride_ot, acc * scale, mask=m6)
+        else:
+            tl.store(o_base + r6 * stride_ot, acc, mask=m6)
+        acc += x7.to(tl.float32)
+        if HAS_SCALE:
+            tl.store(o_base + r7 * stride_ot, acc * scale, mask=m7)
+        else:
+            tl.store(o_base + r7 * stride_ot, acc, mask=m7)
+
+
+@triton.jit
+def _chunk_cumsum_head(
+    g_ptr,
+    o_ptr,
+    T,
+    S,
+    NH,
+    stride_gb,
+    stride_gt,
+    stride_gh,
+    stride_ob,
+    stride_ot,
+    stride_oh,
+    scale,
+    chunk_size: tl.constexpr,
+    BT: tl.constexpr,
+    BS: tl.constexpr,
+    REVERSE: tl.constexpr,
+    HAS_SCALE: tl.constexpr,
+):
+    i_t = tl.program_id(0)
+    i_bh = tl.program_id(1)
+    i_s = tl.program_id(2)
+
+    i_b = i_bh // NH
+    i_h = i_bh % NH
+
+    rows = tl.arange(0, BT)
+    cols = i_s * BS + tl.arange(0, BS)
+
+    t0 = i_t * chunk_size
+    n_valid = tl.minimum(chunk_size, T - t0)
     if REVERSE:
-        # Load reversed, cumsum forward, store reversed => cumsum from the end.
-        offs_t = BT - 1 - offs_t
+        row_off = t0 + (n_valid - 1 - rows)
+    else:
+        row_off = t0 + rows
 
-    offs_s = pid_s * BLOCK_S + tl.arange(0, BLOCK_S)[None, :]
-    mask_s = offs_s < S
+    rmask = rows < n_valid
+    cmask = cols < S
+    mask = rmask[:, None] & cmask[None, :]
 
-    base = pid_bn * (BT * H * S) + pid_h * S
+    g_base = g_ptr + i_b * stride_gb + i_h * stride_gh
+    g_ptrs = g_base + row_off[:, None] * stride_gt + cols[None, :]
+    b_x = tl.load(g_ptrs, mask=mask, other=0.0).to(tl.float32)
 
-    x = tl.load(
-        g_ptr + base + offs_t * (H * S) + offs_s,
-        mask=mask_s,
-        other=0.0,
-    ).to(tl.float32)
+    b_o = tl.cumsum(b_x, axis=0)
 
-    y = tl.cumsum(x, axis=0)
     if HAS_SCALE:
-        y = y * scale
+        b_o = b_o * scale
 
-    tl.store(
-        out_ptr + base + offs_t * (H * S) + offs_s,
-        y,
-        mask=mask_s,
-    )
+    o_base = o_ptr + i_b * stride_ob + i_h * stride_oh
+    o_ptrs = o_base + row_off[:, None] * stride_ot + cols[None, :]
+    tl.store(o_ptrs, b_o, mask=mask)
 
 
-def chunk_local_cumsum_vector(g, chunk_size, reverse=False, scale=None):
-    """Per-chunk (within-chunk) cumulative sum of a vector per-token, per-head gate.
-
-    Args:
-        g: [B, T, H, S] input gate tensor (float32 / bfloat16 / float16).
-        chunk_size: within-chunk width (power of 2), T must be a multiple of it.
-        reverse: if True, cumsum runs from the chunk end toward its start.
-        scale: optional scalar multiplier applied to the output (or None).
-
-    Returns:
-        [B, T, H, S] float32 tensor.
-    """
+def run(g, chunk_size, reverse=False, scale=None):
     B, T, H, S = g.shape
-    BT = chunk_size
-    NT = T // BT
 
-    # next_power_of_2(S) capped at 128.
-    block_s = 1 << (S - 1).bit_length()
-    if block_s > 128:
-        block_s = 128
+    if scale is None:
+        has_scale = False
+        scale_f = 1.0
+    else:
+        if isinstance(scale, torch.Tensor):
+            scale_f = float(scale.item())
+        else:
+            scale_f = float(scale)
+        has_scale = True
 
-    out = torch.empty_like(g, dtype=torch.float32)
+    if isinstance(chunk_size, torch.Tensor):
+        cs = int(chunk_size.item())
+    else:
+        cs = int(chunk_size)
 
-    grid = (B * NT * H, (S + block_s - 1) // block_s)
+    rev = bool(reverse)
 
-    if not reverse and scale is None:
-        _reference_fwd_kernel[grid](
+    out = torch.empty((B, T, H, S), dtype=torch.float32, device=g.device)
+
+    if g.numel() == 0 or cs <= 0 or T == 0:
+        return out
+
+    NT = triton.cdiv(T, cs)
+
+    stride_gb = g.stride(0)
+    stride_gt = g.stride(1)
+    stride_gh = g.stride(2)
+    stride_gs = g.stride(3)
+
+    stride_ob = out.stride(0)
+    stride_ot = out.stride(1)
+    stride_oh = out.stride(2)
+
+    flat_ok = (stride_gs == 1) and (stride_gh == S)
+
+    if flat_ok:
+        P = H * S
+        # Rounded up to a multiple of the eight-row load batch; rows past the true
+        # valid length are masked off, so the padding is an exact no-op.
+        BT = ((min(cs, T) + 7) // 8) * 8
+        grid = lambda meta: (NT, B, triton.cdiv(P, meta["BS"]))
+        _chunk_cumsum_flat[grid](
             g,
             out,
-            H=H,
-            S=S,
+            T,
+            P,
+            stride_gb,
+            stride_gt,
+            stride_ob,
+            stride_ot,
+            scale_f,
+            chunk_size=cs,
             BT=BT,
-            BLOCK_S=block_s,
-            num_warps=4,
+            REVERSE=rev,
+            HAS_SCALE=has_scale,
         )
     else:
-        _reference_kernel[grid](
+        BT = triton.next_power_of_2(min(cs, T))
+        BS = min(128, triton.next_power_of_2(S), max(16, 4096 // BT))
+        grid = (NT, B * H, triton.cdiv(S, BS))
+        _chunk_cumsum_head[grid](
             g,
             out,
-            1.0 if scale is None else scale,
-            H=H,
-            S=S,
+            T,
+            S,
+            H,
+            stride_gb,
+            stride_gt,
+            stride_gh,
+            stride_ob,
+            stride_ot,
+            stride_oh,
+            scale_f,
+            chunk_size=cs,
             BT=BT,
-            BLOCK_S=block_s,
-            REVERSE=reverse,
-            HAS_SCALE=scale is not None,
+            BS=BS,
+            REVERSE=rev,
+            HAS_SCALE=has_scale,
             num_warps=4,
         )
+
     return out
 
+
+chunk_local_cumsum_vector = run
 
 __all__ = ["chunk_local_cumsum_vector"]
