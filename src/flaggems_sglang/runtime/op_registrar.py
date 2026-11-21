@@ -32,12 +32,12 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 import pkgutil
 from typing import Callable, Dict, List, Optional
 
 from .backend import BackendArchEvent
 from .backend.device import DeviceDetector
-
 
 class OpRegistrar:
     """Collect and route operators from generic / vendor / arch sources."""
@@ -46,6 +46,12 @@ class OpRegistrar:
         self._generic_pkg = generic_pkg
         self._device = DeviceDetector()
         self._resolved: Dict[str, Callable] = {}
+        # A serving profile can select compatible modules before imports.
+        self._module_allowlist = {
+            name.strip()
+            for name in os.environ.get("FLAGGEMS_SGLANG_OP_MODULES", "").split(",")
+            if name.strip()
+        }
 
     def apply(
         self, target_globals: Optional[Dict] = None
@@ -103,6 +109,8 @@ class OpRegistrar:
             return
         for mod_info in pkgutil.iter_modules(pkg_path):
             if mod_info.ispkg or mod_info.name.startswith("_"):
+                continue
+            if self._module_allowlist and mod_info.name not in self._module_allowlist:
                 continue
             mod = importlib.import_module(f"{pkg_name}.{mod_info.name}")
             self._merge_from_module(mod)
