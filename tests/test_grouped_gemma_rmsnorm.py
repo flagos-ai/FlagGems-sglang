@@ -61,10 +61,11 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 def _case(shape, group_size, dtype, eps, seed=0):
     g = torch.Generator(device=cfg.device).manual_seed(seed)
-    x = torch.randn(*shape, generator=g).to(device=cfg.device, dtype=dtype)
+    # The generator is bound to cfg.device, so every draw must name it too;
+    # a bare torch.randn would default to CPU and reject the generator.
+    x = torch.randn(*shape, generator=g, device=cfg.device).to(dtype)
     weight = (
-        torch.randn(shape[-1], generator=g).to(device=cfg.device, dtype=dtype)
-        * 0.2
+        torch.randn(shape[-1], generator=g, device=cfg.device).to(dtype) * 0.2
     ).to(dtype)
     return dict(
         x=x, weight=weight, group_size=group_size, eps=eps, check=assert_close

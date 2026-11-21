@@ -36,10 +36,10 @@ def _input_fn(shape, cur_dtype, device):
     *dims, group_size = shape
     hidden = dims[-1]
     g = torch.Generator(device=device).manual_seed(0)
-    x = torch.randn(*dims, generator=g).to(device=device, dtype=cur_dtype)
+    # The generator is bound to device, so every draw must name it too.
+    x = torch.randn(*dims, generator=g, device=device).to(cur_dtype)
     weight = (
-        torch.randn(hidden, generator=g).to(device=device, dtype=cur_dtype)
-        * 0.2
+        torch.randn(hidden, generator=g, device=device).to(cur_dtype) * 0.2
     ).to(cur_dtype)
     yield dict(x=x, weight=weight, group_size=group_size, eps=1e-6)
 
