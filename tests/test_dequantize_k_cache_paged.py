@@ -124,7 +124,10 @@ _CASE_FACTORIES = [
     lambda: _case(4, 1),
     lambda: _case(16, 37),
     lambda: _case(64, 256),
-] + [(lambda t: lambda: _case(2048, t))(t) for t in (1, 128, 2048, 8192)]
+] + [
+    (lambda t: lambda: _case(2048, t))(t)
+    for t in (1, 128, 2048, 4095, 4096, 4097, 8192)
+]
 
 
 CORRECTNESS_CASES = list(range(len(_CASE_FACTORIES)))

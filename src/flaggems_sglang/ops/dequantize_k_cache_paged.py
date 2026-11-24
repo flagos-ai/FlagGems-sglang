@@ -25,7 +25,7 @@ def _grouped(
     META: tl.constexpr,
 ):
     Q = Q.to(tl.pointer_type(tl.uint8))
-    N: tl.constexpr = META[5]
+    WIDE_OUTPUT_OFFSETS: tl.constexpr = META[5]
     M: tl.constexpr = META[0]
     S0: tl.constexpr = META[1]
     S1: tl.constexpr = META[2]
@@ -63,7 +63,7 @@ def _grouped(
         )
     tl.store(
         tl.multiple_of(
-            Dest + (row.to(tl.int64) if N * 576 >= 2147483648 else row) * 576,
+            Dest + (row.to(tl.int64) if WIDE_OUTPUT_OFFSETS else row) * 576,
             [16],
         )
         + cols,
@@ -78,7 +78,7 @@ def _grouped(
         rope = (lo | hi << 8).to(tl.uint16)
     tl.store(
         tl.multiple_of(
-            Dest + (row.to(tl.int64) if N * 576 >= 2147483648 else row) * 576,
+        Dest + (row.to(tl.int64) if WIDE_OUTPUT_OFFSETS else row) * 576,
             [16],
         )
         + 512
@@ -255,18 +255,21 @@ def dequantize_k_cache_paged(
             and s0 % 4 == 0
             and (quant_k_cache.storage_offset() % 4 == 0)
         ):
+            rows_per_program = 2
             _vector_rows.run(
                 quant_k_cache,
                 page_table_1_flattened,
                 out,
+                n,
                 (
                     quant_k_cache.shape[0],
                     s0,
                     page_table_1_flattened.stride(0),
-                    n,
-                    2,
+                    rows_per_program,
+                    n % rows_per_program != 0,
+                    n * 576 >= 2147483648,
                 ),
-                grid=(triton.cdiv(n, 2),),
+                grid=(triton.cdiv(n, rows_per_program),),
                 num_warps=1,
                 warmup=False,
             )
@@ -283,7 +286,7 @@ def dequantize_k_cache_paged(
                     s1 == 1
                     and s0 % 4 == 0
                     and (quant_k_cache.storage_offset() % 4 == 0),
-                    n,
+                    n * 576 >= 2147483648,
                 ),
                 grid=(n,),
                 num_warps=1,
@@ -292,21 +295,26 @@ def dequantize_k_cache_paged(
     return out
 
 
-@triton.jit(do_not_specialize=["Q", "Dest"])
+@triton.jit(do_not_specialize=["Q", "Dest", "n"])
 def _vector_rows(
     Q,
     P,
     Dest,
+    n,
     META: tl.constexpr,
 ):
     Q = Q.to(tl.pointer_type(tl.uint8))
     M: tl.constexpr = META[0]
     S0: tl.constexpr = META[1]
     SP: tl.constexpr = META[2]
-    N: tl.constexpr = META[3]
-    ROWS: tl.constexpr = META[4]
+    ROWS: tl.constexpr = META[3]
+    MASK_TAIL: tl.constexpr = META[4]
+    WIDE_OUTPUT_OFFSETS: tl.constexpr = META[5]
     rows = tl.program_id(0) * ROWS + tl.arange(0, ROWS)
-    live = (N % ROWS == 0) | (rows < N)
+    if MASK_TAIL:
+        live = rows < n
+    else:
+        live = tl.full((ROWS,), True, tl.int1)
     src = tl.load(P + rows * SP, live, other=0)
     if M * S0 < 2147483648:
         src = src.to(tl.int32)
@@ -355,7 +363,7 @@ def _vector_rows(
             Dest
             + (
                 rows[:, None, None].to(tl.int64)
-                if N * 576 >= 2147483648
+                if WIDE_OUTPUT_OFFSETS
                 else rows[:, None, None]
             )
             * 576,
@@ -371,7 +379,7 @@ def _vector_rows(
             Dest.to(tl.pointer_type(tl.uint32))
             + (
                 rows[:, None].to(tl.int64)
-                if N * 576 >= 2147483648
+                if WIDE_OUTPUT_OFFSETS
                 else rows[:, None]
             )
             * 288,
