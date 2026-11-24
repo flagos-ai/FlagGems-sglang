@@ -70,6 +70,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: apply_rotary_emb
+    description: |
+      Interleaved-complex RoPE over the last dim, for both 2-D [tokens, rope_dim] and 3-D [tokens, heads, rope_dim] inputs.
+      Also supports the inverse (un-rotate) direction, applying the conjugate frequency with the same fused pass.
+    for:
+      - apply_rotary_emb
+    labels:
+      - fused
+      - sglang
+      - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: apply_token_bitmask
     description: |
       Applies a packed bitmask to logits for grammar-constrained decoding.
@@ -140,6 +154,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: bias_gelu_tanh
+    description: |
+      Broadcasts a bias along the last dim and applies the tanh-approximated GELU.
+      The bias sum is rounded back to the input dtype before the activation, so the intermediate rounding is part of the contract.
+    for:
+      - bias_gelu_tanh
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: bmm_chunk
     description: |
       Chunked batched matrix multiplication for the Mamba2 SSD scan.
@@ -164,6 +193,20 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: cat_pad_channels_last_3d
+    description: |
+      WAN VAE causal-conv input prep: cat the cache frames, zero-pad, and emit channels-last-3d in one pass.
+      Optionally also returns the next chunk's compact feature cache, so the eager chain's separate contiguous() copy disappears.
+    for:
+      - cat_pad_channels_last_3d
+    labels:
+      - fused
+      - sglang
+      - diffusion
     kind:
       - NeuralNetwork
     stages:
@@ -655,6 +698,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: dsv3_router_gemm
+    description: |
+      DeepSeek-V3 MoE router projection specialised for the skinny-M decode case, num_tokens <= 16.
+      At that size a cuBLAS GEMM is entirely launch and wave-quantization overhead, so the kernel streams the weights in a hand-written reduction.
+    for:
+      - dsv3_router_gemm
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: embedding_lora_a
     description: |
       LoRA A-projection over an embedding lookup for segmented multi-adapter batches.
@@ -967,6 +1024,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: fused_norm_rope_inplace
+    description: |
+      DeepSeek-V4 KV prologue: RMSNorm over the whole head dim fused with RoPE on its trailing segment.
+      Equivalent to normalize-then-rotate, but the rope segment never round-trips through memory.
+    for:
+      - fused_norm_rope_inplace
+    labels:
+      - fused
+      - sglang
+      - RoPE
+      - Normalization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: fused_norm_rope_stacked
     description: |
       Fused per-layer K RMS norm and Rotary Positional Embedding over a stacked KV tensor.
@@ -992,6 +1064,20 @@ ops:
       - fused
       - sglang
       - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_qk_complex_rope
+    description: |
+      Vision-attention RoPE as a complex multiply over interleaved (real, imag) pairs, rotating Q and K in one launch.
+      Outputs stay contiguous even when q and k are strided views of an interleaved QKV projection.
+    for:
+      - fused_qk_complex_rope
+    labels:
+      - fused
+      - sglang
+      - RoPE
     kind:
       - NeuralNetwork
     stages:
@@ -1059,6 +1145,20 @@ ops:
       One recurrence step into the paged SSM state, indexed per request with padding-slot handling.
     for:
       - fused_recurrent_gated_delta_rule_packed_decode
+    labels:
+      - fused
+      - sglang
+      - LinearAttention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: fused_recurrent_kda
+    description: |
+      Kimi Delta Attention recurrent forward: one token at a time, with the gated delta-rule state update and query read-out.
+      This is the decode-path kernel, so T is small and the whole [V, K] state stays in registers, accumulating in fp32.
+    for:
+      - fused_recurrent_kda
     labels:
       - fused
       - sglang
@@ -1197,6 +1297,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: gemma4_fused_routing
+    description: |
+      The whole Gemma4 MoE router in one launch: top-k over the logits, softmax over only the kept logits, then the per-expert scale.
+      Ties break toward the lower expert id, and the outputs follow SGLang's TopK contract of fp32 weights and int32 ids.
+    for:
+      - gemma4_fused_routing
+    labels:
+      - fused
+      - sglang
+      - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: gemma_dual_rmsnorm_residual_scalar
     description: |
       Normalizes two inputs with their own weights, normalizes the sum a third time, then adds the residual and applies a scalar.
@@ -1319,6 +1433,20 @@ ops:
       - fused
       - sglang
       - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: grouped_gemma_rmsnorm
+    description: |
+      Gemma RMSNorm with the last dim split into groups, each normalized against its own mean square.
+      The group's weight slice is applied as a plain (1 + weight) multiplier, and nothing is reduced across groups.
+    for:
+      - grouped_gemma_rmsnorm
+    labels:
+      - fused
+      - sglang
+      - Normalization
     kind:
       - NeuralNetwork
     stages:
@@ -1654,6 +1782,19 @@ ops:
       - fused
       - sglang
       - RoPE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: murmur_hash32
+    description: |
+      Applies the MurmurHash3 32-bit finalizer over the outer product of (seed, position) rows and column indices.
+      Used on device to derive n-gram and speculative-decoding bucket ids; pure integer arithmetic, so it is bit-identical everywhere.
+    for:
+      - murmur_hash32
+    labels:
+      - fused
+      - sglang
     kind:
       - NeuralNetwork
     stages:
@@ -2393,6 +2534,40 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: silu_and_mul_masked_post_per_tensor_quant
+    description: |
+      Masked SiLU-and-mul fused with per-tensor fp8 quantization, using a scale the caller already computed.
+      No absmax reduction runs inside the operator; only rows below each expert's masked_m are touched.
+    for:
+      - silu_and_mul_masked_post_per_tensor_quant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: silu_and_mul_masked_post_quant
+    description: |
+      Masked SiLU-and-mul fused with per-token-group fp8 quantization, for the DeepGEMM grouped MoE path.
+      Quantizing inside the op avoids writing the bf16 intermediate the unfused pair would need.
+    for:
+      - silu_and_mul_masked_post_quant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: silu_and_mul_routed
     description: |
       SiLU gate-and-multiply fused with the per-token routing weight for Mixture-of-Experts activations.
@@ -2405,6 +2580,40 @@ ops:
       - sglang
       - Activation
       - MoE
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: silu_mul_dynamic_tensorwise_quant
+    description: |
+      SwiGLU followed by dynamic per-tensor fp8 quantization for the CUTLASS MoE epilogue.
+      Pass one reduces the global absmax of the activation, pass two quantizes with it; the live token count is read from device memory.
+    for:
+      - silu_mul_dynamic_tensorwise_quant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+      - quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: silu_mul_static_tensorwise_quant
+    description: |
+      SwiGLU fused with per-tensor fp8 quantization using a precomputed scale, for the CUTLASS MoE path.
+      The token count is read from a device tensor while the grid is sized from the static maximum, which keeps it CUDA-graph safe.
+    for:
+      - silu_mul_static_tensorwise_quant
+    labels:
+      - fused
+      - pointwise
+      - sglang
+      - Activation
+      - MoE
+      - quantization
     kind:
       - NeuralNetwork
     stages:
@@ -2585,6 +2794,20 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: timestep_embedding
+    description: |
+      Sinusoidal diffusion timestep embedding (diffusers' get_timestep_embedding) in a single pass.
+      Emits [sin, cos] or [cos, sin] half-planes as float32, whatever the input timestep dtype.
+    for:
+      - timestep_embedding
+    labels:
+      - fused
+      - sglang
+      - diffusion
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: tiny_k_gemm
     description: |
       Small-K, large-N GEMM: out = x @ w.T with m <= 16 and k in {128, 256}.
@@ -2638,6 +2861,20 @@ ops:
       - quantization
     kind:
       - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: top_k_renorm
+    description: |
+      Per-row top-k renormalization of a probability vector, with the threshold taken from the k-th largest value.
+      Every value at or above the pivot is kept, so ties can leave more than k non-zeros; unlike top-p, the cut is by rank.
+    for:
+      - top_k_renorm
+    labels:
+      - fused
+      - sglang
+      - Sampling
+    kind:
+      - Reduction
     stages:
       - stable: '1.0'
   - id: top_p_renorm
@@ -2763,6 +3000,22 @@ ops:
       - fused
       - sglang
       - Quantization
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
+  - id: wan_rmsnorm_silu
+    description: |
+      WAN VAE fusion of channel-axis normalization, affine scale and bias, and SiLU on a channels_last_3d tensor.
+      Channels are the contiguous axis in that layout, so each program owns one (b, t, h, w) voxel and the strides are preserved.
+    for:
+      - wan_rmsnorm_silu
+    labels:
+      - fused
+      - sglang
+      - diffusion
+      - Normalization
+      - Activation
     kind:
       - NeuralNetwork
     stages:
