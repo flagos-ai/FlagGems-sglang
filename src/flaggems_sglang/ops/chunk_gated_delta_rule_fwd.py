@@ -116,31 +116,6 @@ def _qk_prep_kernel(
 
 
 @triton.jit
-def _qk_norm_factor_kernel(
-    q_ptr,
-    k_ptr,
-    q_factor,
-    k_factor,
-    ROWS,
-    RPB: tl.constexpr,
-    K: tl.constexpr,
-):
-    """Compute the inverse L2 norm per contiguous Q or K row."""
-    src, dst = q_ptr, q_factor
-    if tl.program_id(1) != 0:
-        src, dst = k_ptr, k_factor
-    row = tl.program_id(0) * RPB + tl.arange(0, RPB)
-    col = tl.arange(0, K)
-    x = tl.load(
-        src + row[:, None] * K + col[None, :],
-        mask=(row < ROWS)[:, None],
-        other=0.0,
-    ).to(tl.float32)
-    norm = tl.rsqrt(tl.sum(x * x, axis=1) + 1e-6)
-    tl.store(dst + row, norm, mask=row < ROWS)
-
-
-@triton.jit
 def _gdn_fwd_kernel(
     q_ptr,
     k_ptr,
@@ -294,7 +269,7 @@ def _pick_block_v(chains, v_dim, nseg, target):
     )
 
 
-def chunk_gated_delta_rule_fwd(
+def _chunk_gated_delta_rule_fwd(
     q,
     k,
     v,
@@ -305,6 +280,8 @@ def chunk_gated_delta_rule_fwd(
     output_final_state=False,
     cu_seqlens=None,
     use_qk_l2norm_in_kernel=False,
+    *,
+    prepare_qk_factors=None,
 ):
     if q.dtype != k.dtype or q.dtype != v.dtype:
         raise AssertionError("q, k and v must share a dtype")
@@ -351,39 +328,19 @@ def chunk_gated_delta_rule_fwd(
 
     BLOCK_K = _pow2(k_dim)
     l2norm = bool(use_qk_l2norm_in_kernel)
-    factor_norm = (
-        l2norm
+    qk_factors = None
+    if (
+        prepare_qk_factors is not None
+        and l2norm
         and not has_cu
         and initial_state is None
-        and torch.version.hip is not None
-        and q.dtype == torch.bfloat16
-        and (heads, k_dim, v_dim) == (16, 128, 128)
-        and (batch, t_len) in ((2, 2048), (1, 4096))
-        and q.is_contiguous()
-        and k.is_contiguous()
-        and torch.cuda.get_device_properties(q.device).gcnArchName.split(
-            ":", 1
-        )[0]
-        == "gfx1201"
-    )
+    ):
+        qk_factors = prepare_qk_factors(q, k, v)
 
     qk_q, qk_k = q, k
     norm_launch = {}
-    if factor_norm:
-        rows = batch * t_len * heads
-        rpb = max(1, 256 // BLOCK_K)
-        nq = torch.empty((rows,), dtype=torch.float32, device=q.device)
-        nk = torch.empty_like(nq)
-        _qk_norm_factor_kernel[(triton.cdiv(rows, rpb), 2)](
-            q,
-            k,
-            nq,
-            nk,
-            rows,
-            RPB=rpb,
-            K=k_dim,
-            num_warps=1,
-        )
+    if qk_factors is not None:
+        nq, nk, block_v = qk_factors
         norm_launch = dict(q_factor=nq, k_factor=nk, FACTOR_NORM=True)
     elif l2norm:
         rows = batch * t_len * heads
@@ -436,10 +393,9 @@ def chunk_gated_delta_rule_fwd(
     # cdiv(t_len, SEG) is a safe upper bound -- programs whose segment starts
     # past their sequence's end run an empty loop and write nothing
     nseg = max(1, (t_len + _SEG - 1) // _SEG)
-    # On gfx1201 the wider tile offsets repeated factor and Q/K reads.
     BLOCK_V = (
-        32
-        if factor_norm
+        block_v
+        if qk_factors is not None
         else _pick_block_v(n_seq * heads, v_dim, nseg, _TARGET_PROGS)
     )
     NV = (v_dim + BLOCK_V - 1) // BLOCK_V
@@ -497,6 +453,33 @@ def chunk_gated_delta_rule_fwd(
     )
 
     return o, final_state
+
+
+def chunk_gated_delta_rule_fwd(
+    q,
+    k,
+    v,
+    g,
+    beta,
+    scale=None,
+    initial_state=None,
+    output_final_state=False,
+    cu_seqlens=None,
+    use_qk_l2norm_in_kernel=False,
+):
+    """Run the generic GDN prefill with materialized Q/K normalization."""
+    return _chunk_gated_delta_rule_fwd(
+        q,
+        k,
+        v,
+        g,
+        beta,
+        scale=scale,
+        initial_state=initial_state,
+        output_final_state=output_final_state,
+        cu_seqlens=cu_seqlens,
+        use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+    )
 
 
 __all__ = ["chunk_gated_delta_rule_fwd"]
