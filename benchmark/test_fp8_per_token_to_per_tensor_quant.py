@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _K_SCALE_BLOCK_SIZE = 128
 _TOKENS_PADDED = 256
@@ -31,7 +32,7 @@ MORE_SHAPES = [(4, 1024), (8, 1024), (16, 2048)]
 
 def _input_fn(shape, cur_dtype, device):
     expert_num, k = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     num_groups = k // _K_SCALE_BLOCK_SIZE
     x = (
         2

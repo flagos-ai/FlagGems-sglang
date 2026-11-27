@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # (num_head, num_seq) — head_size fixed at 512.
 SHAPES = [(nh, ns) for nh in (1, 16, 128) for ns in (1, 32, 512, 4096)]
@@ -30,7 +31,7 @@ MORE_SHAPES = [(1, 7), (8, 83), (2, 3)]
 def _input_fn(shape, cur_dtype, device):
     num_head, num_seq = shape
     head_size = 512
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     x = (
         3
         * torch.randn(

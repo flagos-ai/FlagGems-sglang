@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -60,7 +61,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(shape, group_size, dtype, eps, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # The generator is bound to cfg.device, so every draw must name it too;
     # a bare torch.randn would default to CPU and reject the generator.
     x = torch.randn(*shape, generator=g, device=cfg.device).to(dtype)

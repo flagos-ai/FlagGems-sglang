@@ -20,6 +20,7 @@ import torch
 from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -61,7 +62,7 @@ _EPS = 1e-6
 
 
 def _case(m, n, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     x = torch.randn(
         m, n, dtype=torch.float32, device=cfg.device, generator=g
     ).to(dtype)

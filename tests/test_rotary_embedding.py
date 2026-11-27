@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -58,7 +59,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 def _case(tokens, heads=16, head_size=128, seed=0):
     device = flaggems_sglang.device
-    g = torch.Generator(device=device).manual_seed(seed)
+    g = create_generator(device, seed=seed)
     x = torch.randn(tokens, heads, head_size, device=device, generator=g).to(
         torch.bfloat16
     )

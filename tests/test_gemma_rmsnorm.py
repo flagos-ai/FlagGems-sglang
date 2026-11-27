@@ -20,6 +20,7 @@ import torch
 from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -61,7 +62,7 @@ _EPS = 1e-6
 
 
 def _case(shape, dtype=torch.bfloat16, seed=0, strided=False):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     n = shape[-1]
     if strided:
         # A qkv.split-style view: rows are strided, the last dim contiguous.

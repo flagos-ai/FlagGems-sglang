@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -61,7 +62,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 def _case(
     num_tokens, topk=8, hidden=4096, num_experts=32, scaling=1.0, seed=0
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     n = num_tokens * topk
     down = torch.randn(n, hidden, device=cfg.device, generator=g).to(
         torch.bfloat16
@@ -78,7 +79,7 @@ def _case(
     # torch_gcu randperm hangs on-device; generate on CPU then move.
     dst = (
         torch.randperm(
-            n, generator=torch.Generator(device="cpu").manual_seed(seed)
+            n, generator=create_generator("cpu", seed=seed)
         )
         .to(cfg.device)
         .reshape(num_tokens, topk)

@@ -22,6 +22,7 @@ from flaggems_sglang.reference import get_reference
 
 from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # Shapes match kernel-comp-baseline/problems/moe/act_and_mul.
 SHAPES = [(m, 4096, "silu", None) for m in (1, 8, 64, 512, 4096)]
@@ -35,7 +36,7 @@ MORE_SHAPES = [
 
 def _input_fn(shape, cur_dtype, device):
     m, half_hidden, activation, swiglu_limit = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     # The op reads both halves from a single [m, 2 * half_hidden] tensor.
     gateup_output = torch.randn(
         m,

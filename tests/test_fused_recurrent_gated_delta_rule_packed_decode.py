@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -73,7 +74,7 @@ def _case(
     use_qk_l2norm_in_kernel=False,
     seed=0,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     qk = H * K
     mixed_qkv = (
         torch.randn(B, 2 * qk + HV * V, device=cfg.device, generator=g) * 0.3

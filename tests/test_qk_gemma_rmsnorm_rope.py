@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -64,7 +65,7 @@ _EPS = 1e-6
 def _case(
     m, nq, nkv, head_dim, rotary_dim, neox=True, dtype=torch.bfloat16, seed=0
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     def _t(*shape):
         return torch.randn(

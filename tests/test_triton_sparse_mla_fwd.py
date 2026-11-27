@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -72,7 +73,7 @@ def _check(actual, expected):
 
 
 def _case(seq, h, topk, num_pages, invalid_frac=0.0, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     fp8 = torch.float8_e4m3fn
 
     def _q(width):

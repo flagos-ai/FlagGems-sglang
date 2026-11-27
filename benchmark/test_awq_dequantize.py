@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # (rows, cols) — group_size fixed at 128.
 SHAPES = [(rows, cols) for rows in (3584, 18944) for cols in (448, 4736)]
@@ -30,7 +31,7 @@ MORE_SHAPES = [(3584, 448, -1), (128, 16, 32), (256, 32, 64)]
 def _input_fn(shape, cur_dtype, device):
     rows, cols = shape
     group_size = 128
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     qweight = torch.randint(
         0,
         torch.iinfo(torch.int32).max,

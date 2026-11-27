@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _FP8_MAX = 448.0
 SHAPES = [(m, 4096, n) for m in (128, 1024, 4096) for n in (4096, 7168)]
@@ -42,7 +43,7 @@ def _quantize_mx(x):
 
 def _input_fn(shape, cur_dtype, device):
     m, k, n = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     a_f = torch.randn(m, k, dtype=torch.float32, device=device, generator=g)
     b_f = torch.randn(n, k, dtype=torch.float32, device=device, generator=g)
     a, a_scale = _quantize_mx(a_f)

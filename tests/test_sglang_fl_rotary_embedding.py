@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -74,7 +75,7 @@ def _case(
     seed=0,
 ):
     rotary_dim = head_size if rotary_dim is None else rotary_dim
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     positions = torch.randint(
         0, max_position, (nnz,), device=cfg.device, generator=g
     )

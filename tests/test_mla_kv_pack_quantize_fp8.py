@@ -21,6 +21,14 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
+
+# torch_gcu aborts the whole process when casting to these dtypes
+# on-device (backend CHECK failure); skip every test in this module.
+pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn, torch.float8_e5m2)
+
+
+
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -76,7 +84,7 @@ def _case(
     fp8_dtype=torch.float8_e4m3fn,
     scales=(1.0, 1.0),
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     def _t(*shape):
         return torch.randn(

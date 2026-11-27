@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _HEADS = 16
 # (tokens, rope_dim) — 3-D input, forward rotation, no positions table.
@@ -30,7 +31,7 @@ MORE_SHAPES = [(7, 64), (333, 64), (1024, 128)]
 
 def _input_fn(shape, cur_dtype, device):
     tokens, rope_dim = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     x = torch.randn(
         tokens,
         _HEADS,

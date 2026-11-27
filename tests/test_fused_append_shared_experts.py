@@ -20,6 +20,7 @@ import torch
 from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -59,7 +60,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(m, k, s, n_base=256, scale=0.25, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     topk_ids = torch.randint(
         0,
         n_base,

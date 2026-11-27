@@ -15,10 +15,19 @@
 """Correctness test for quantization/quant_store_kv_mxfp8."""
 
 import pytest
+from . import conftest as cfg
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
+
+# torch_gcu aborts the whole process when casting to these dtypes
+# on-device (backend CHECK failure); skip every test in this module.
+pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn)
+
+
+
 
 _TOLERANCES = {
     torch.float32: dict(atol=1e-4, rtol=1e-4),
@@ -51,7 +60,7 @@ _PAGE = 128
 
 
 def _case(t, nkv, d, num_pages, seed=0, dtype=torch.bfloat16):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
     k = torch.randn(
         t,
         nkv,

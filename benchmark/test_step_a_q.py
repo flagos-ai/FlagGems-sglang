@@ -22,6 +22,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [((64,) * 8, 4, 128, 128, 128, 32)]
 MORE_SHAPES = [((256,) * 4, 2, 128, 64, 128, 16)]
@@ -29,7 +30,7 @@ MORE_SHAPES = [((256,) * 4, 2, 128, 64, 128, 16)]
 
 def _input_fn(shape, cur_dtype, device):
     seg_lens, num_lora, h, qk_nope, v_head_dim, rank = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     s = sum(seg_lens)
     full_k = qk_nope + v_head_dim
     q_nope = torch.randn(

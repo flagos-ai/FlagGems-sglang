@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _TOLERANCES = {
     torch.float32: dict(atol=1e-4, rtol=1e-4),
@@ -48,7 +49,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(rows, cols, group_size, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
     gs = rows if group_size == -1 else group_size
     qweight = torch.randint(
         0,

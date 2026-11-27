@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # (num_tokens, intermediate) — the scale is supplied, not computed.
 SHAPES = [(t, 2048) for t in (1, 8, 64, 512, 4096)]
@@ -29,7 +30,7 @@ MORE_SHAPES = [(31, 2048), (512, 1024), (2048, 4096)]
 
 def _input_fn(shape, cur_dtype, device):
     t, inter = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     x = torch.randn(t, 2 * inter, device=device, generator=g).to(cur_dtype)
     yield dict(
         input=x,

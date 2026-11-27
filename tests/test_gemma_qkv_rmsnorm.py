@@ -20,6 +20,7 @@ import torch
 from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -70,7 +71,7 @@ def _case(
     split_view=False,
     kv=True,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     def _t(cols):
         return torch.randn(

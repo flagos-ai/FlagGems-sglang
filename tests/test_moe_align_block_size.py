@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -102,7 +103,7 @@ def _case(num_tokens, top_k, num_experts, block_size, seed=0):
     ``[0, num_experts)``. The kernel is called with ``num_experts + 1`` -- the
     extra slot is the EP "filtered expert" bucket and gets no blocks, which is
     exactly how ``moe_runner.triton_utils`` calls it."""
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     topk_ids = torch.randint(
         0,
         num_experts,

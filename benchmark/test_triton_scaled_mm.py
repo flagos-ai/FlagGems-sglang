@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [
     (m, k, n)
@@ -32,7 +33,7 @@ MORE_SHAPES = [(32, 32, 32), (17, 64, 96)]
 
 def _input_fn(shape, cur_dtype, device):
     m, k, n = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     a = torch.clamp(
         0.1
         * torch.randn(m, k, dtype=torch.float16, device=device, generator=g),

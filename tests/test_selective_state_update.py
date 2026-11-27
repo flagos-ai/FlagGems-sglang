@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -77,7 +78,7 @@ def _case(
     seed=0,
 ):
     device = flaggems_sglang.device
-    g = torch.Generator(device=device).manual_seed(seed)
+    g = create_generator(device, seed=seed)
     state = torch.randn(
         batch,
         nheads,

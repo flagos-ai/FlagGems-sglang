@@ -20,6 +20,7 @@ import torch
 from flaggems_sglang.reference import get_reference
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -127,7 +128,7 @@ def _grouped_gemm_metadata(sorted_topk_ids, num_experts, block_size_m=128):
 def _case(m, n, k, num_experts, dtype=torch.bfloat16, seed=0):
     """Rows are already expert-sorted, so every row of the output belongs to
     exactly one expert and is written by exactly one block."""
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     a = torch.randn(
         m, k, dtype=torch.float32, device=cfg.device, generator=g
     ).to(dtype)

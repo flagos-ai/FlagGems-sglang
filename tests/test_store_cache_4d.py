@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -64,10 +65,10 @@ def _check(actual, expected):
 
 
 def _case(n, num_pages=4096, page_size=64, head_num=8, head_dim=128, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # randperm is generated on CPU and moved: some vendor backends have
     # no on-device kernel for it.
-    perm_g = torch.Generator(device="cpu").manual_seed(seed)
+    perm_g = create_generator("cpu", seed=seed)
     slots = num_pages * page_size
     k_view = torch.zeros(
         num_pages,

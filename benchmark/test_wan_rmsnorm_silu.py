@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _T = 4
 # (channels, spatial) — 0 < C <= 1024, channels_last_3d input.
@@ -30,7 +31,7 @@ MORE_SHAPES = [(64, 8), (256, 32), (1024, 16)]
 
 def _input_fn(shape, cur_dtype, device):
     c, spatial = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     x = (
         torch.randn(1, c, _T, spatial, spatial, device=device, generator=g)
         .to(cur_dtype)

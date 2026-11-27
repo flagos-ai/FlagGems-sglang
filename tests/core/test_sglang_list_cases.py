@@ -88,6 +88,7 @@ import pytest
 import torch
 from benchmark.cases import BenchmarkCasePlan
 from benchmark.op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 def cases(shape, dtype, scale):
     yield BenchmarkCasePlan(shape={"x": shape}, params={"scale": scale},
@@ -195,7 +196,7 @@ def test_silu_builder_preserves_original_seed_and_values():
     shape = (3, 7)
     dtype = torch.bfloat16
     (plan,) = _case_fn(shape, dtype)
-    generator = torch.Generator(device="cpu").manual_seed(0)
+    generator = create_generator("cpu", seed=0)
     original = torch.randn(
         3, 14, dtype=torch.float32, device="cpu", generator=generator
     ).to(dtype)

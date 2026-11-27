@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _DIM_NOPE, _DIM_ROPE = 512, 64
 # (num_tokens,) — group_size fixed at 128.
@@ -30,7 +31,7 @@ MORE_SHAPES = [(37,), (256,), (4096,)]
 
 def _input_fn(shape, cur_dtype, device):
     (num_tokens,) = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     k_nope = (
         2 * torch.randn(num_tokens, _DIM_NOPE, generator=g, device=device)
     ).to(cur_dtype)

@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [(m, 8, 1) for m in (1, 8, 64, 512, 4096)]
 MORE_SHAPES = [(16384, 8, 1)]
@@ -30,7 +31,7 @@ _N_BASE = 256
 
 def _input_fn(shape, cur_dtype, device):
     m, k, s = shape
-    g = torch.Generator(device=device).manual_seed(9)
+    g = create_generator(device, seed=9)
     topk_ids = torch.randint(
         0, _N_BASE, (m, k), device=device, generator=g, dtype=torch.int32
     )

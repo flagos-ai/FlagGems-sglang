@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -59,7 +60,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 def _x(bs, d, dtype=torch.bfloat16, seed=0):
     device = cfg.device
-    g = torch.Generator(device=device).manual_seed(seed)
+    g = create_generator(device, seed=seed)
     return torch.randn(
         bs, 2 * d, dtype=torch.float32, device=device, generator=g
     ).to(dtype)

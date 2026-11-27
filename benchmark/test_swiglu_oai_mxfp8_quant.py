@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # (m, n_inter) — n_inter must be a multiple of 32, the MXFP8 group width.
 SHAPES = [(m, n) for m in (1, 8, 64, 512, 4096) for n in (1024, 4096, 12288)]
@@ -29,7 +30,7 @@ MORE_SHAPES = [(7, 128), (333, 1024), (256, 512)]
 
 def _input_fn(shape, cur_dtype, device):
     m, n_inter = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     gate_up = (
         2.0
         * torch.randn(

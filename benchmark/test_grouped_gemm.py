@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [(m, 512, 2048, e) for m in (128, 1024) for e in (8, 32)]
 MORE_SHAPES = [(4096, 512, 2048, e) for e in (8, 32)]
@@ -62,7 +63,7 @@ def _metadata(sorted_topk_ids, num_experts, block_size_m=_BLOCK_SIZE_M):
 
 def _input_fn(shape, cur_dtype, device):
     m, n, k, num_experts = shape
-    g = torch.Generator(device=device).manual_seed(9)
+    g = create_generator(device, seed=9)
     a = torch.randn(m, k, dtype=torch.float32, device=device, generator=g).to(
         cur_dtype
     )

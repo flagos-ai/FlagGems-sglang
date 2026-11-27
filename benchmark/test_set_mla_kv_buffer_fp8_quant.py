@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _NOPE, _ROPE = 512, 64
 # (tokens,) — the slot count scales with tokens; loc values are distinct.
@@ -31,7 +32,7 @@ MORE_SHAPES = [(333,), (2048,), (8192,)]
 def _input_fn(shape, cur_dtype, device):
     (tokens,) = shape
     slots = max(tokens * 2, 64)
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
 
     def _t(*dims):
         return torch.randn(

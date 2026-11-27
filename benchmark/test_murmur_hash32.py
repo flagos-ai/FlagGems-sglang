@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # (n, m) — n seed/position rows against m column indices.
 SHAPES = [(n, 1024) for n in (1, 8, 64, 512, 4096)]
@@ -29,7 +30,7 @@ MORE_SHAPES = [(1, 8), (37, 128), (64, 4096)]
 
 def _input_fn(shape, cur_dtype, device):
     n, m = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     s = torch.randint(
         0, 1 << 30, (n,), dtype=torch.int32, device=device, generator=g
     )

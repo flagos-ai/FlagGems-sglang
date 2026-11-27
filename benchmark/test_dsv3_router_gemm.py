@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _HIDDEN = 7168
 # (num_tokens, num_experts) — num_tokens stays in [1, 16], the skinny-M
@@ -31,7 +32,7 @@ MORE_SHAPES = [(1, 128), (16, 512), (8, 64)]
 
 def _input_fn(shape, cur_dtype, device):
     num_tokens, num_experts = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     h = torch.randn(num_tokens, _HIDDEN, device=device, generator=g).to(
         cur_dtype
     )

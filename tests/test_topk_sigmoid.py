@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -63,7 +64,7 @@ def _check(actual, expected):
 
 
 def _case(num_tokens, num_experts, k, renormalize=False, scaling=1.0, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # fp32 logits: in bf16 there are few enough distinct values that equal
     # sigmoid scores are common at 128+ experts, and the kernel's tie-break
     # order is not part of the contract.

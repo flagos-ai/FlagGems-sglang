@@ -21,6 +21,7 @@ import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 
 from .op_benchmark import OpBenchmark
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _MAX_BATCH, _POOL_LEN = 4096, 8192
 # (batch_size, draft_token_num)
@@ -30,7 +31,7 @@ MORE_SHAPES = [(17, 8), (128, 4), (512, 64)]
 
 def _input_fn(shape, cur_dtype, device):
     bs, draft_token_num = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     req_to_token = torch.randint(
         0,
         1 << 20,

@@ -21,6 +21,7 @@ from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
 from . import conftest as cfg
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -66,7 +67,7 @@ def _case(
     max_context=131072,
     seed=0,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     req_to_token = torch.randint(
         0,
         1 << 22,
@@ -79,7 +80,7 @@ def _case(
     req_pool_indices = (
         torch.randperm(
             max_batch,
-            generator=torch.Generator(device="cpu").manual_seed(seed),
+            generator=create_generator("cpu", seed=seed),
         )[:bs]
         .to(torch.int32)
         .to(cfg.device)
