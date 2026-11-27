@@ -92,7 +92,9 @@ def randint(low, high, *shape, generator=None, device=None, **kwargs):
     """Convenience randint that routes through :func:`create_generator`."""
     if generator is None:
         generator = create_generator(device)
-    return torch.randint(low, high, shape, generator=generator, device=device, **kwargs)
+    return torch.randint(
+        low, high, shape, generator=generator, device=device, **kwargs
+    )
 
 
 def randperm(n, generator=None, device=None, **kwargs):
