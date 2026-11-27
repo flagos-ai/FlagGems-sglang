@@ -1547,6 +1547,21 @@ ops:
       - NeuralNetwork
     stages:
       - stable: '1.0'
+  - id: kpool_assemble_softmax_rotate_write_cache
+    description: |
+      Assemble DSA K-pools from ring-buffer tail and prefill chunk tokens.
+      Apply per-channel softmax pooling and normalized Hadamard rotation,
+      then write signed INT8 keys and per-token FP32 scales into the paged index cache.
+    for:
+      - kpool_assemble_softmax_rotate_write_cache
+    labels:
+      - fused
+      - sglang
+      - Attention
+    kind:
+      - NeuralNetwork
+    stages:
+      - stable: '1.0'
   - id: l2norm
     description: |
       Row-wise L2 normalization. Scales each row by the reciprocal of its L2 norm with an epsilon floor.
