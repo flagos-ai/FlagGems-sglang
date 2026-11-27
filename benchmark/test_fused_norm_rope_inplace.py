@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 _HEAD_DIM, _ROPE_DIM = 576, 64
 _EPS = 1e-6

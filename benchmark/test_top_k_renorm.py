@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # (batch, vocab, top_k) — top_k is a Python int here; the per-row tensor form
 # is covered by the correctness cases.

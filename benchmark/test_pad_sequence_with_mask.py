@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 _MAX_LEN = 64
 # (batch_size, hidden) — max_len fixed at 64, which sets the kernel's tile.

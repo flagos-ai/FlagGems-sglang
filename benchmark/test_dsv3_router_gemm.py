@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 _HIDDEN = 7168
 # (num_tokens, num_experts) — num_tokens stays in [1, 16], the skinny-M

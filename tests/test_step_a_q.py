@@ -19,9 +19,9 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper

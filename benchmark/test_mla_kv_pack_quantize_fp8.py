@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 _QK_NOPE, _QK_ROPE, _V_HEAD = 512, 64, 512
 # (s, heads) — the baseline picks its kernel off this pair, and these shapes

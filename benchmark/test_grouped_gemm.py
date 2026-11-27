@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [(m, 512, 2048, e) for m in (128, 1024) for e in (8, 32)]
 MORE_SHAPES = [(4096, 512, 2048, e) for e in (8, 32)]

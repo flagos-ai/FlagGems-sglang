@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # (rows, cols) — group_size fixed at 128.
 SHAPES = [(rows, cols) for rows in (3584, 18944) for cols in (448, 4736)]

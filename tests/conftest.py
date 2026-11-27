@@ -19,7 +19,6 @@ import os
 from datetime import datetime
 
 import pytest
-
 import torch  # noqa: F401  (needed: _UNSUPPORTED_DEVICE_CASTS uses torch dtypes)
 
 # TODO(Qiming): Try remove this line

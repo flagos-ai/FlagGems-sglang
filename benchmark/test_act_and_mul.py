@@ -19,10 +19,10 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .cases import BenchmarkCasePlan, single_input_builder
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # Shapes match kernel-comp-baseline/problems/moe/act_and_mul.
 SHAPES = [(m, 4096, "silu", None) for m in (1, 8, 64, 512, 4096)]

@@ -20,9 +20,9 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 SHAPES = [((64,) * 8, 4, 128, 32, 512)]
 MORE_SHAPES = [((256,) * 4, 2, 128, 16, 512)]

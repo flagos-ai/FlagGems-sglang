@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # (m, n_inter) — n_inter must be a multiple of 32, the MXFP8 group width.
 SHAPES = [(m, n) for m in (1, 8, 64, 512, 4096) for n in (1024, 4096, 12288)]

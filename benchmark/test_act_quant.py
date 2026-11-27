@@ -19,9 +19,9 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
-from flaggems_sglang.utils.rng_utils import create_generator
 
 # (m, n) — block_size fixed at 128, plain (non-round) scales.
 SHAPES = [(m, 4096) for m in (1, 8, 64, 512, 4096)]
