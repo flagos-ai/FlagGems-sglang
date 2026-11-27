@@ -1,0 +1,128 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 FlagOS Contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+import pytest
+import torch
+
+from flaggems_sglang import qsa_build_decode_metadata
+from flaggems_sglang.reference import get_reference
+
+from . import conftest as cfg
+
+pytestmark = pytest.mark.qsa_build_decode_metadata
+
+
+def make_inputs(
+    rows, ratio=4, full_page=64, stride=1, dtype=torch.int64, width=8192
+):
+    lengths = torch.tensor(
+        ([1, 7, 8, 1024, 2048, 2049, 8192] * rows)[:rows],
+        dtype=dtype,
+        device=cfg.device,
+    )
+    request = torch.arange(1, rows + 1, device=cfg.device, dtype=dtype)
+    lens_storage = torch.zeros(rows * stride, device=cfg.device, dtype=dtype)
+    req_storage = torch.zeros_like(lens_storage)
+    lens_storage[::stride] = lengths
+    req_storage[::stride] = request
+    table = torch.arange(
+        (rows + 1) * width * stride, device=cfg.device, dtype=dtype
+    ).reshape(rows + 1, -1)[:, ::stride]
+    table[0].zero_()
+    one = lambda: torch.full(
+        (rows,), -99, device=cfg.device, dtype=torch.int32
+    )
+    outputs = [
+        one(),
+        one(),
+        one(),
+        one(),
+        one(),
+        torch.full(
+            (rows, width // full_page + 1),
+            -99,
+            device=cfg.device,
+            dtype=torch.int32,
+        ),
+        one(),
+        torch.full((rows,), -99, device=cfg.device, dtype=torch.int64),
+        torch.full((rows, ratio), -99, device=cfg.device, dtype=torch.int32),
+    ]
+    return [
+        lens_storage[::stride],
+        req_storage[::stride],
+        table,
+        *outputs,
+        ratio,
+        full_page,
+    ]
+
+
+def check_metadata_graph(
+    rows, padding, stride, ratio, full_page, dtype, width
+):
+    args = make_inputs(rows, ratio, full_page, stride, dtype, width) + [
+        int(padding)
+    ]
+    device = torch.get_device_module(cfg.device)
+    qsa_build_decode_metadata(*args)
+    device.synchronize()
+    for recapture in range(2):
+        if recapture:
+            args = make_inputs(
+                rows, ratio, full_page, stride, dtype, width
+            ) + [int(padding)]
+        graph = (
+            device.MUSAGraph() if cfg.device == "musa" else device.CUDAGraph()
+        )
+        with device.graph(graph):
+            qsa_build_decode_metadata(*args)
+        for phase in range(3):
+            args[0].copy_(
+                torch.tensor(
+                    ([1024, 2048, 2049, 8192, 1, 8, 9][phase:] + [1, 8, 9])
+                    * rows,
+                    device=cfg.device,
+                )[:rows]
+            )
+            args[1].copy_(torch.roll(args[1], 1))
+            args[2].add_(128)
+            args[2][0].zero_()
+            for out in args[3:12]:
+                out.fill_(-123)
+            expected = [
+                x.cpu().clone() if isinstance(x, torch.Tensor) else x
+                for x in args
+            ]
+            get_reference("qsa_build_decode_metadata")(*expected)
+            graph.replay()
+            device.synchronize()
+            for actual, ref in zip(args[3:12], expected[3:12]):
+                torch.testing.assert_close(actual.cpu(), ref, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.int32, torch.int64])
+@pytest.mark.parametrize("ratio,full_page", [(4, 64), (8, 128)])
+@pytest.mark.parametrize("rows", [1, 7, 64])
+@pytest.mark.parametrize("padding", [False, True])
+@pytest.mark.parametrize("stride", [1, 2])
+def test_qsa_build_decode_metadata_exact_and_graph(
+    rows, padding, stride, ratio, full_page, dtype
+):
+    check_metadata_graph(rows, padding, stride, ratio, full_page, dtype, 8192)
+
+
+@pytest.mark.parametrize("rows", [1, 7, 64])
+def test_qsa_build_decode_metadata_production_capacity(rows):
+    check_metadata_graph(rows, False, 1, 4, 64, torch.int32, 262148)

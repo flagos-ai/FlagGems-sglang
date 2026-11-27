@@ -42,6 +42,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+musa-communication = [
+    "apache-tvm-ffi==0.1.9.post1+musa.1",
+    "ninja>=1.11",
+    "torch_musa>=2.9",
+]
 test = [
     "pytest",
     "scipy",
@@ -57,7 +62,7 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-"flaggems_sglang.runtime" = ["*/**/*.yaml"]
+"flaggems_sglang.runtime" = ["*/**/*.yaml", "backend/_mthreads/communication/**/*.mu", "backend/_mthreads/communication/**/*.cpp", "backend/_mthreads/communication/*.h", "backend/_mthreads/communication/NOTICE"]
 
 [tool.scikit-build]
 build.verbose = true
