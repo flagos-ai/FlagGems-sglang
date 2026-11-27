@@ -75,9 +75,7 @@ def _case(num_tokens, topk=8, hidden=4096, num_local_experts=32, seed=0):
     )
     # torch_gcu randperm hangs on-device; generate on CPU then move.
     dst = (
-        torch.randperm(
-            n, generator=create_generator("cpu", seed=seed)
-        )
+        torch.randperm(n, generator=create_generator("cpu", seed=seed))
         .to(cfg.device)
         .reshape(num_tokens, topk)
     )

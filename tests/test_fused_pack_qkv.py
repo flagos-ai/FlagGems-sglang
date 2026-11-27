@@ -76,9 +76,9 @@ def _case(bs, seq, num_heads=16, head_dim=128, keep=0.6, seed=0):
     n_valid = max(1, int(total * keep))
     # torch_gcu randperm hangs on-device; generate on CPU then move.
     indices = (
-        torch.randperm(
-            total, generator=create_generator("cpu", seed=seed)
-        )[:n_valid]
+        torch.randperm(total, generator=create_generator("cpu", seed=seed))[
+            :n_valid
+        ]
         .to(torch.int64)
         .to(cfg.device)
     )

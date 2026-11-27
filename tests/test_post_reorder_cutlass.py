@@ -82,9 +82,7 @@ def _case(
     )
     # torch_gcu randperm hangs on-device; generate on CPU then move.
     dst = (
-        torch.randperm(
-            n, generator=create_generator("cpu", seed=seed)
-        )
+        torch.randperm(n, generator=create_generator("cpu", seed=seed))
         .reshape(num_tokens, topk)
         .to(cfg.device)
     )
