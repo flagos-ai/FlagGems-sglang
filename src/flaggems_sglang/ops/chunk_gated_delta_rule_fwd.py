@@ -157,6 +157,9 @@ def _gdn_fwd_kernel(
     OUT_FINAL: tl.constexpr,
     BLOCK_K: tl.constexpr,
     BLOCK_V: tl.constexpr,
+    q_factor=None,
+    k_factor=None,
+    FACTOR_NORM: tl.constexpr = False,
 ):
     pid = tl.program_id(0)
     pid_v = tl.program_id(1)
@@ -216,6 +219,10 @@ def _gdn_fwd_kernel(
         )
         gt = tl.load(g_base + t * s_gt).to(tl.float32)
         bt = tl.load(b_base + t * s_bt).to(tl.float32)
+        if FACTOR_NORM:
+            row = (b * T + t) * H + h
+            qt = qt * tl.load(q_factor + row)
+            kt = kt * tl.load(k_factor + row)
         qt = qt * scale
 
         # decay, predict k, delta-rule correction, rank-1 update
@@ -262,7 +269,7 @@ def _pick_block_v(chains, v_dim, nseg, target):
     )
 
 
-def chunk_gated_delta_rule_fwd(
+def _chunk_gated_delta_rule_fwd(
     q,
     k,
     v,
@@ -273,6 +280,8 @@ def chunk_gated_delta_rule_fwd(
     output_final_state=False,
     cu_seqlens=None,
     use_qk_l2norm_in_kernel=False,
+    *,
+    prepare_qk_factors=None,
 ):
     if q.dtype != k.dtype or q.dtype != v.dtype:
         raise AssertionError("q, k and v must share a dtype")
@@ -319,9 +328,21 @@ def chunk_gated_delta_rule_fwd(
 
     BLOCK_K = _pow2(k_dim)
     l2norm = bool(use_qk_l2norm_in_kernel)
+    qk_factors = None
+    if (
+        prepare_qk_factors is not None
+        and l2norm
+        and not has_cu
+        and initial_state is None
+    ):
+        qk_factors = prepare_qk_factors(q, k, v)
 
     qk_q, qk_k = q, k
-    if l2norm:
+    norm_launch = {}
+    if qk_factors is not None:
+        nq, nk, block_v = qk_factors
+        norm_launch = dict(q_factor=nq, k_factor=nk, FACTOR_NORM=True)
+    elif l2norm:
         rows = batch * t_len * heads
         rpb = max(1, 256 // BLOCK_K)
         prep_grid = (triton.cdiv(rows, rpb),)
@@ -372,7 +393,11 @@ def chunk_gated_delta_rule_fwd(
     # cdiv(t_len, SEG) is a safe upper bound -- programs whose segment starts
     # past their sequence's end run an empty loop and write nothing
     nseg = max(1, (t_len + _SEG - 1) // _SEG)
-    BLOCK_V = _pick_block_v(n_seq * heads, v_dim, nseg, _TARGET_PROGS)
+    BLOCK_V = (
+        block_v
+        if qk_factors is not None
+        else _pick_block_v(n_seq * heads, v_dim, nseg, _TARGET_PROGS)
+    )
     NV = (v_dim + BLOCK_V - 1) // BLOCK_V
 
     if initial_state is not None:
@@ -424,9 +449,37 @@ def chunk_gated_delta_rule_fwd(
         BLOCK_K=BLOCK_K,
         BLOCK_V=BLOCK_V,
         num_warps=1,
+        **norm_launch,
     )
 
     return o, final_state
+
+
+def chunk_gated_delta_rule_fwd(
+    q,
+    k,
+    v,
+    g,
+    beta,
+    scale=None,
+    initial_state=None,
+    output_final_state=False,
+    cu_seqlens=None,
+    use_qk_l2norm_in_kernel=False,
+):
+    """Run the generic GDN prefill with materialized Q/K normalization."""
+    return _chunk_gated_delta_rule_fwd(
+        q,
+        k,
+        v,
+        g,
+        beta,
+        scale=scale,
+        initial_state=initial_state,
+        output_final_state=output_final_state,
+        cu_seqlens=cu_seqlens,
+        use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+    )
 
 
 __all__ = ["chunk_gated_delta_rule_fwd"]

@@ -38,6 +38,7 @@ separate family. The rdna3 operators are tuned and tested on gfx1100 only.
 
 ARCH_MAP = {
     "gfx1100": "rdna3",
+    "gfx1201": "rdna4",
 }
 
 CUSTOMIZED_UNUSED_OPS = ()
