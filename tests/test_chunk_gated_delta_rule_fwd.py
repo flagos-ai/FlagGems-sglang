@@ -17,6 +17,7 @@
 import pytest
 import torch
 
+import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
 
@@ -174,3 +175,53 @@ def test_chunk_gated_delta_rule_fwd(case_idx):
     # Restore check for reuse
     if check is not None:
         case["check"] = check
+
+
+@pytest.mark.chunk_gated_delta_rule_fwd
+@pytest.mark.parametrize("batch,tokens", [(2, 2048), (1, 4096)])
+def test_gfx1201_long_prefill_reference(batch, tokens, monkeypatch):
+    """Exercise the RDNA4 factor path and compare output and recurrent state."""
+    if flaggems_sglang.vendor_name != "amd":
+        pytest.skip("gfx1201 specialization")
+    props = torch.cuda.get_device_properties(torch.device(cfg.device))
+    if props.gcnArchName.split(":", 1)[0] != "gfx1201":
+        pytest.skip("gfx1201 specialization")
+
+    from flaggems_sglang.runtime.backend._amd.rdna4.ops import (
+        chunk_gated_delta_rule_fwd as rdna4,
+    )
+
+    candidate = flaggems_sglang.chunk_gated_delta_rule_fwd
+    assert candidate is rdna4.chunk_gated_delta_rule_fwd
+    selected_tiles = []
+    prepare = rdna4._prepare_qk_factors
+
+    def observe(q, k, v):
+        """Record which tile the real factor preparation selected."""
+        factors = prepare(q, k, v)
+        assert factors is not None
+        selected_tiles.append(factors[2])
+        return factors
+
+    monkeypatch.setattr(rdna4, "_prepare_qk_factors", observe)
+    kwargs = _case(batch, tokens, 16, 128, 128, output_final_state=True)
+    kwargs.pop("check")
+    out, state = candidate(**kwargs)
+    assert selected_tiles == [32]
+    assert out.shape == (batch, tokens, 16, 128)
+    assert state.shape == (batch, 16, 128, 128)
+    assert state.dtype == torch.float32
+
+    # Heads are independent. Check both boundary heads over the entire
+    # sequence to keep the sequential PyTorch reference affordable.
+    head_ids = [0, 15]
+    ref_kwargs = dict(kwargs)
+    for name in ("q", "k", "v", "g", "beta"):
+        ref_kwargs[name] = kwargs[name][:, :, head_ids].cpu()
+    expected_out, expected_state = get_reference("chunk_gated_delta_rule_fwd")(
+        **ref_kwargs
+    )
+    _check(
+        (out[:, :, head_ids].cpu(), state[:, head_ids].cpu()),
+        (expected_out, expected_state),
+    )
