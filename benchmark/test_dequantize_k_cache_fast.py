@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -32,7 +33,7 @@ MORE_SHAPES = [(37,), (256,), (4096,)]
 
 def _build_quant_k_cache(num_tokens, device, group_size=128, seed=0):
     """Pack [512 nope fp8 | 4 fp32 scales | 64 bf16 rope] into one fp8 row."""
-    g = torch.Generator(device=device).manual_seed(seed)
+    g = create_generator(device, seed=seed)
     k_nope = (
         2 * torch.randn(num_tokens, _DIM_NOPE, generator=g, device=device)
     ).to(torch.bfloat16)

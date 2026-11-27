@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -30,7 +31,7 @@ _CHUNK = 64
 
 def _input_fn(shape, cur_dtype, device):
     b, t, h, s = shape
-    gen = torch.Generator(device=device).manual_seed(9)
+    gen = create_generator(device, seed=9)
     g = torch.randn(
         b, t, h, s, dtype=torch.float32, device=device, generator=gen
     ).to(cur_dtype)

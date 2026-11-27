@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -36,7 +37,7 @@ def _input_fn(shape, cur_dtype, device):
     m, n, k = shape
     block_n, block_k = _BLOCK
     fp8_max = torch.finfo(_FP8_DTYPE).max
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     A = (
         torch.randn(m, k, dtype=torch.float32, device=device, generator=g)
         .clamp(-fp8_max, fp8_max)

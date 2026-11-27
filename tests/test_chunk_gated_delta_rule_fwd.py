@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -81,7 +82,7 @@ def _case(
     output_final_state=False,
     seed=0,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     q = torch.randn(B, T, H, K, device=cfg.device, generator=g).to(
         torch.bfloat16
     )

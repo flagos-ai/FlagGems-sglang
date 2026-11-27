@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -73,7 +74,7 @@ def _check(actual, expected):
 
 
 def _case(num_tokens, num_experts, k, renormalize=False, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # fp32 logits keep the top-k ordering well defined: in bf16 equal softmax
     # scores are common at 128+ experts and the tie-break order is unspecified.
     gating = torch.randn(

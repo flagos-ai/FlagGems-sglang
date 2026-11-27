@@ -20,6 +20,7 @@ import torch
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -58,7 +59,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 # Inlined from per_token_group_quant_int8 (decoupled from problems repo)
 def _x(m, k, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
     return (
         (
             torch.rand(

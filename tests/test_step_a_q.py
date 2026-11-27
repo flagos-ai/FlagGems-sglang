@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference._lora_batch_utils import make_batch_info
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -70,7 +71,7 @@ def _case(
     dtype=torch.bfloat16,
     seed=0,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     s = sum(seg_lens)
     full_k = qk_nope + v_head_dim
 

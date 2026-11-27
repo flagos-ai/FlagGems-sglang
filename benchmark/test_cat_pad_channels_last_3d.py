@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -31,7 +32,7 @@ MORE_SHAPES = [(4, 16), (8, 64), (32, 32)]
 
 def _input_fn(shape, cur_dtype, device):
     t, spatial = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
 
     def _t(*dims):
         # Materialized channels_last_3d from the start: the layout is the

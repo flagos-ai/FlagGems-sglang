@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -72,10 +73,10 @@ def _case(
     seed=0,
     dtype=torch.float32,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # randperm is generated on CPU and moved: some vendor backends have
     # no on-device kernel for it.
-    perm_g = torch.Generator(device="cpu").manual_seed(seed)
+    perm_g = create_generator("cpu", seed=seed)
     dst = torch.randn(
         layers,
         cache,

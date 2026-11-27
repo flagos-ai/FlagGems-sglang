@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -35,7 +36,7 @@ MORE_SHAPES = [(5, 512, 512), (4096, 1024, 512), (16, 4096, 1024)]
 def _input_fn(shape, cur_dtype, device):
     *dims, group_size = shape
     hidden = dims[-1]
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     # The generator is bound to device, so every draw must name it too.
     x = torch.randn(*dims, generator=g, device=device).to(cur_dtype)
     weight = (

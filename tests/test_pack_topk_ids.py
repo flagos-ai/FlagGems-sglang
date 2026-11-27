@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -58,7 +59,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(num_tokens, topk, num_experts=256, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     ids = torch.randint(
         0,
         num_experts,

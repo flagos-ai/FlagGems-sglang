@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -60,7 +61,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 def _case(
     bs, max_len=2048, max_batch=256, max_context=8192, with_start=False, seed=0
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     req_to_token = torch.randint(
         0,
         1 << 20,
@@ -73,7 +74,7 @@ def _case(
     req_pool_indices = (
         torch.randperm(
             max_batch,
-            generator=torch.Generator(device="cpu").manual_seed(seed),
+            generator=create_generator("cpu", seed=seed),
         )[:bs]
         .to(torch.int32)
         .to(cfg.device)

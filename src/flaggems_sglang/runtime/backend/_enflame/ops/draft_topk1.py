@@ -21,7 +21,28 @@ _STREAMING_W_SMALL_BATCH = 4096
 _STREAMING_W_LARGE_BATCH = 2048
 _STREAMING_TREE_K = 8
 _SMALL_BATCH_LIMIT = 48
-_INT64_STORAGE_IS_INT32 = True
+
+# int64 tensors are int32-backed (Long->Int storage) unless true 64-bit
+# support is enabled (TORCH_GCU_ENABLE_INT64_AND_UINT64). Probe the real
+# layout once per device instead of assuming: with true 64-bit storage an
+# int32 view of an int64 tensor interleaves low/high words, which scrambles
+# every value the kernel writes through the view.
+_I64_WORD_STRIDE = None  # 1 = packed int32 words, 2 = true int64 words
+
+
+def _int64_word_stride(device):
+    global _I64_WORD_STRIDE
+    if _I64_WORD_STRIDE is None:
+        probe = torch.zeros(4, dtype=torch.int64, device=device)
+        probe[2] = 7
+        words = probe.view(torch.int32).tolist()
+        if len(words) == 8 and words[4] == 7 and words[5] == 0:
+            _I64_WORD_STRIDE = 2  # true 64-bit storage: low word at 2*i
+        elif len(words) >= 3 and words[2] == 7:
+            _I64_WORD_STRIDE = 1  # packed int32 storage: consecutive words
+        else:
+            _I64_WORD_STRIDE = 2
+    return _I64_WORD_STRIDE
 
 
 @triton.jit
@@ -217,7 +238,7 @@ def chunk_topk1_outputs(
     positions_ptr = positions
     topk_index_ptr = topk_index
     out_positions_ptr = out_positions
-    if _INT64_STORAGE_IS_INT32:
+    if positions.dtype == torch.int64 and _int64_word_stride(device) == 1:
         # int64 tensors are int32-backed (Long->Int storage); one int32 word
         # per logical element, so the kernel addresses them through plain
         # int32 views without flattening (explicit strides drive addressing).
@@ -233,7 +254,10 @@ def chunk_topk1_outputs(
         if normalized_column < 0:
             normalized_column += draft_size
         out_draft_tokens = torch.empty_like(draft_tokens)
-        if _INT64_STORAGE_IS_INT32 and draft_tokens.dtype == torch.int64:
+        if (
+            draft_tokens.dtype == torch.int64
+            and _int64_word_stride(device) == 1
+        ):
             draft_tokens_ptr = draft_tokens.view(torch.int32)
             out_draft_tokens_ptr = out_draft_tokens.view(torch.int32)
             stride_draft_batch = draft_size

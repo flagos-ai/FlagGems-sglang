@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -67,7 +68,7 @@ def _check(actual, expected):
 
 
 def _case(t, e, topk, dtype=torch.float32, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # fp32 logits: the tie-break is part of the contract, but bf16 has few
     # enough distinct values at 128+ experts that exact ties would dominate
     # and the ordering of equal logits is not what this operator is about.

@@ -23,6 +23,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -68,7 +69,7 @@ def test_mrope_fused(case):
     dtype = torch.bfloat16
     seed = 42
 
-    g = torch.Generator(device=device).manual_seed(seed)
+    g = create_generator(device, seed=seed)
     q = torch.randn(
         num_tokens, n_qh * head_size, generator=g, device=device, dtype=dtype
     )

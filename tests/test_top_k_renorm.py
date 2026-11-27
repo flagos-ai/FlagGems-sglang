@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -60,7 +61,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(batch, vocab, k, seed=13):
-    g = torch.Generator(device="cpu").manual_seed(seed)
+    g = create_generator("cpu", seed=seed)
     probs = torch.rand((batch, vocab), generator=g)
     probs = (probs / probs.sum(-1, keepdim=True)).to(cfg.device)
     if k == "per_row":

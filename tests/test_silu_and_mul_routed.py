@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -67,7 +68,7 @@ def _case(
     interleaved=True,
     out_dtype=None,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     gateup = torch.randn(
         m, 2 * n, dtype=torch.float32, device=cfg.device, generator=g
     ).to(dtype)

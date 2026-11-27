@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -70,7 +71,7 @@ def _check(actual, expected):
 def _case(
     b, c, t, h, w, cache_t, padding, keep=0, seed=0, dtype=torch.bfloat16
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     def _t(*dims):
         # channels_last_3d strides from the start: that layout is the point

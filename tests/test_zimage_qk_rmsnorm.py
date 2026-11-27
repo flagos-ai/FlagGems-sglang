@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _TOLERANCES = {
     torch.float32: dict(atol=1e-4, rtol=1e-4),
@@ -52,7 +53,7 @@ _HEAD_DIM = 128
 
 
 def _case(b, s, heads, seed=0, from_qkv=False):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
     if from_qkv:
         qkv = torch.randn(
             b,

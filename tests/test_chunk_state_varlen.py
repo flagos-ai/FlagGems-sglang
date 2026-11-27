@@ -23,6 +23,7 @@ from flaggems_sglang.reference.chunk_cumsum import (
     reference as chunk_cumsum_reference,
 )
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 # ---------------------------------------------------------------------------
 # Tolerance helper (from kernel-comp-baseline/harness/correctness.py)
@@ -73,7 +74,7 @@ def _case(
     dtype=torch.bfloat16,
     seed=0,
 ):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
 
     # Tight-packed cu_seqlens, with `seq_lens` chosen (by the caller) so that
     # every running cumulative sum which ends a chunk lands exactly on a

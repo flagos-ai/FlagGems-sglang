@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -67,7 +68,7 @@ def _to_channels_last_3d(x):
 
 
 def _case(b, c, t, h, w, with_bias=False, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     x = _to_channels_last_3d(
         torch.randn(b, c, t, h, w, device=cfg.device, generator=g).to(
             torch.bfloat16

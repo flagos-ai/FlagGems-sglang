@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -62,7 +63,7 @@ _EPS = 1e-6
 
 
 def _case(b, length, c, seed=0, dtype=torch.bfloat16, affine=False):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     def _t(*shape):
         return torch.randn(

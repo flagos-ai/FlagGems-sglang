@@ -19,6 +19,7 @@ import os
 from datetime import datetime
 
 import pytest
+import torch  # noqa: F401  (needed: _UNSUPPORTED_DEVICE_CASTS uses torch dtypes)
 
 # TODO(Qiming): Try remove this line
 # import torch  # noqa: F401
@@ -54,6 +55,81 @@ device = flaggems_sglang.device
 
 TIMESTAMP = datetime.now().strftime("%Y%m%d_%H%M%S")
 REPORT_FILE = "accuracy_result.json"
+
+# Some vendor backends abort the whole process (SIGABRT via a C++ CHECK,
+# e.g. torch_gcu "gcu_utils.cpp:74 Check failed") when a tensor is cast
+# on-device to a dtype their aten_to copy op does not implement. The abort
+# kills pytest before it can record anything, so test modules that cast to
+# such dtypes on-device must skip up-front. Capability is per vendor AND
+# per dtype: each vendor maps to the set of dtypes it cannot cast to
+# on-device. Keep entries factual (verified by an isolated-subprocess
+# ``Tensor.to(dtype)`` probe) and extend as other vendors are tested.
+#
+#   enflame (torch_gcu 2.11, verified 2026-11-26):
+#     .to(float8_e4m3fn) / .to(float8_e5m2) -> "output data type is not
+#     supported" + SIGABRT; .to(uint64) (from any dtype) -> SIGABRT.
+#     fp8 tensor *allocation* and CPU-side .to(fp8) still work, so only
+#     the on-device cast is listed.
+_UNSUPPORTED_DEVICE_CASTS = {
+    "enflame": frozenset(
+        {
+            torch.float8_e4m3fn,
+            torch.float8_e5m2,
+            torch.uint64,
+        }
+    ),
+}
+
+
+def skip_if_unsupported_device_casts(*dtypes):
+    """Skip the whole module when a needed on-device cast would abort.
+
+    Call at test-module import time (module level, right after imports)
+    with every dtype the module's reference/case builders cast a device
+    tensor to, e.g.::
+
+        cfg.skip_if_unsupported_device_casts(torch.float8_e4m3fn)
+
+    The module is skipped only when the current vendor's backend is known
+    to abort on at least one of the given dtypes; on other vendors (or
+    for other dtypes) it is a no-op, so the same test file stays portable
+    across backends.
+    """
+    from flaggems_sglang import vendor_name as _vendor
+
+    unsupported = _UNSUPPORTED_DEVICE_CASTS.get(_vendor, frozenset())
+    bad = sorted({t for t in dtypes if t in unsupported}, key=str)
+    if bad:
+        names = ", ".join(str(t) for t in bad)
+        pytest.skip(
+            f"device-side cast to {names} aborts the process on "
+            f"{_vendor} (backend CHECK failure); module skipped",
+            allow_module_level=True,
+        )
+
+
+def cast_skip_mark(*dtypes):
+    """A ``pytestmark`` mark skipping every test needing crash-prone casts.
+
+    Same vendor x dtype table as :func:`skip_if_unsupported_device_casts`,
+    but returns a pytest mark so each test is recorded as ``skipped`` in
+    the json report (a collection-time ``pytest.skip`` leaves the report
+    empty, which the aggregator cannot distinguish from a missing run)::
+
+        pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn)
+    """
+    from flaggems_sglang import vendor_name as _vendor
+
+    unsupported = _UNSUPPORTED_DEVICE_CASTS.get(_vendor, frozenset())
+    bad = sorted({t for t in dtypes if t in unsupported}, key=str)
+    if bad:
+        names = ", ".join(str(t) for t in bad)
+        return pytest.mark.skip(
+            reason=f"device-side cast to {names} aborts the process on "
+            f"{_vendor} (backend CHECK failure)"
+        )
+    # No-op: an empty parametrize mark keeps pytestmark a valid list item.
+    return pytest.mark.skipif(False, reason="casts supported on this vendor")
 
 
 def pytest_addoption(parser):

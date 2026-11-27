@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -59,7 +60,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(b, t, h, kdim, chunk_size=64, seed=0, gk_scale=1.0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     q = torch.randn(
         b, t, h, kdim, dtype=torch.float32, device=cfg.device, generator=g
     ).to(torch.bfloat16)

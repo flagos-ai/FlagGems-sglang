@@ -19,8 +19,14 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
+
+# torch_gcu aborts the whole process when casting to these dtypes
+# on-device (backend CHECK failure); skip every test in this module.
+pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn)
+
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -60,7 +66,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _x(num_head, num_seq, head_size, dtype=torch.bfloat16, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     return (
         3
         * torch.randn(

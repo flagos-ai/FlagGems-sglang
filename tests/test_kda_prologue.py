@@ -18,6 +18,7 @@ import pytest
 import torch
 
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -66,7 +67,7 @@ def _case(seqlens, hv, kdim, scale=0.125, seed=0):
     The six outputs come from torch.empty_like, so rows a chunk masks off are
     never written; keeping every chunk full means every row is defined.
     """
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     t = sum(seqlens)
     q = torch.randn(
         t, hv, kdim, dtype=torch.float32, device=cfg.device, generator=g

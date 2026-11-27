@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -66,7 +67,7 @@ def _case(
     scaling=1.0,
     seed=0,
 ):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     n = num_tokens * topk
     down = torch.randn(n, hidden, device=cfg.device, generator=g).to(
         torch.bfloat16
@@ -81,9 +82,7 @@ def _case(
     )
     # torch_gcu randperm hangs on-device; generate on CPU then move.
     dst = (
-        torch.randperm(
-            n, generator=torch.Generator(device="cpu").manual_seed(seed)
-        )
+        torch.randperm(n, generator=create_generator("cpu", seed=seed))
         .reshape(num_tokens, topk)
         .to(cfg.device)
     )

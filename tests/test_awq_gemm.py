@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 _TOLERANCES = {
     torch.float32: dict(atol=1e-4, rtol=1e-4),
@@ -52,7 +53,7 @@ def _check(actual, expected):
 
 
 def _case(m, k, n, group_size, split_k, seed=0):
-    g = torch.Generator(device=flaggems_sglang.device).manual_seed(seed)
+    g = create_generator(flaggems_sglang.device, seed=seed)
     gs = k if group_size == -1 else group_size
     x = torch.rand(
         m, k, dtype=torch.float32, device=flaggems_sglang.device, generator=g

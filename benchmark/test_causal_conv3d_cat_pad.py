@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -30,7 +31,7 @@ _PADDING = (1, 1, 1, 1, 2, 0)
 
 def _input_fn(shape, cur_dtype, device):
     b, c, t, h, w, cache_t = shape
-    g = torch.Generator(device=device).manual_seed(9)
+    g = create_generator(device, seed=9)
 
     def _t(*s):
         return torch.randn(

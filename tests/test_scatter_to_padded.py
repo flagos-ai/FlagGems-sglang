@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -60,7 +61,7 @@ def assert_close(actual, expected, *, dtype=None, **overrides):
 
 
 def _case(batch, seqlen, heads, head_dim, seed=0, dtype=torch.bfloat16):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     # Ragged lengths: each sequence keeps a prefix, the rest is padding.
     lens = torch.randint(
         1,

@@ -19,6 +19,7 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
 
@@ -64,7 +65,7 @@ def _check(actual, expected):
 
 
 def _case(n_loc, num_slots=65536, nope_dim=512, rope_dim=64, seed=0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
     kv_buffer = torch.randn(
         num_slots, nope_dim + rope_dim, device=cfg.device, generator=g
     ).to(torch.bfloat16)
@@ -72,7 +73,7 @@ def _case(n_loc, num_slots=65536, nope_dim=512, rope_dim=64, seed=0):
     loc = (
         torch.randperm(
             num_slots,
-            generator=torch.Generator(device="cpu").manual_seed(seed),
+            generator=create_generator("cpu", seed=seed),
         )[:n_loc]
         .to(torch.int64)
         .to(cfg.device)

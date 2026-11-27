@@ -19,8 +19,14 @@ import torch
 
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.reference_candidate import get_candidate
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from . import conftest as cfg
+
+# torch_gcu aborts the whole process when casting to these dtypes
+# on-device (backend CHECK failure); skip every test in this module.
+pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn)
+
 
 # ---------------------------------------------------------------------------
 # Tolerance helper
@@ -63,7 +69,7 @@ _QUANT_BLOCK = 128
 
 
 def _case(t, topk, hidden, num_experts, seed=0, drop=0.0):
-    g = torch.Generator(device=cfg.device).manual_seed(seed)
+    g = create_generator(cfg.device, seed=seed)
 
     ids = torch.randint(
         0,

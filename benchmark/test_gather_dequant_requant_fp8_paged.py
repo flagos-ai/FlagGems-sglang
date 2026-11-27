@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -33,7 +34,7 @@ MORE_SHAPES = [(7,), (333,), (2048,)]
 
 def _input_fn(shape, cur_dtype, device):
     (num_tokens,) = shape
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     # Packed 656-byte rows: fp8 nope, fp32 group scales, bf16 rope.
     cache = torch.empty(
         (_TOTAL_CACHED, 1, _DIM),

@@ -19,6 +19,7 @@ import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
+from flaggems_sglang.utils.rng_utils import create_generator
 
 from .op_benchmark import OpBenchmark
 
@@ -32,7 +33,7 @@ def _input_fn(shape, cur_dtype, device):
     t, nkv = shape
     d = 128
     num_pages = max(2, t // _PAGE + 1)
-    g = torch.Generator(device=device).manual_seed(0)
+    g = create_generator(device, seed=0)
     k = torch.randn(
         t, nkv, d, dtype=torch.float32, device=device, generator=g
     ).to(cur_dtype)
