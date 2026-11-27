@@ -20,6 +20,8 @@ from pathlib import Path
 import pytest
 import torch
 
+from flaggems_sglang.utils.rng_utils import create_generator
+
 pytest_plugins = ["pytester"]
 
 

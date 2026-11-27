@@ -15,18 +15,17 @@
 """Correctness test for quantization/w8a8_block_fp8_matmul."""
 
 import pytest
-from . import conftest as cfg
 import torch
 
 import flaggems_sglang
 from flaggems_sglang.reference import get_reference
 from flaggems_sglang.utils.rng_utils import create_generator
 
+from . import conftest as cfg
+
 # torch_gcu aborts the whole process when casting to these dtypes
 # on-device (backend CHECK failure); skip every test in this module.
 pytestmark = cfg.cast_skip_mark(torch.float8_e4m3fn)
-
-
 
 
 _TOLERANCES = {
